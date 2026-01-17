@@ -1,0 +1,46 @@
+export type ISymbolInfo = {
+    current_contract: string;
+    description: string;
+    isin: string;
+    main_tickerid: string;
+    prefix: string;
+    root: string;
+    ticker: string;
+    tickerid: string;
+    type: string;
+    basecurrency: string;
+    country: string;
+    currency: string;
+    timezone: string;
+    employees: number;
+    industry: string;
+    sector: string;
+    shareholders: number;
+    shares_outstanding_float: number;
+    shares_outstanding_total: number;
+    expiration_date: number;
+    session: string;
+    volumetype: string;
+    mincontract: number;
+    minmove: number;
+    mintick: number;
+    pointvalue: number;
+    pricescale: number;
+    recommendations_buy: number;
+    recommendations_buy_strong: number;
+    recommendations_date: number;
+    recommendations_hold: number;
+    recommendations_sell: number;
+    recommendations_sell_strong: number;
+    recommendations_total: number;
+    target_price_average: number;
+    target_price_date: number;
+    target_price_estimates: number;
+    target_price_high: number;
+    target_price_low: number;
+    target_price_median: number;
+};
+export interface IProvider {
+    getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<any>;
+    getSymbolInfo(tickerId: string): Promise<ISymbolInfo>;
+}
