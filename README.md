@@ -263,6 +263,34 @@ plot(ta.sma(close, 10))
 
 ---
 
+## Test Coverage
+
+PineTS has comprehensive test coverage to ensure reliability:
+
+| Metric | Value |
+|--------|-------|
+| **Test Files** | 68 |
+| **Total Tests** | 678 |
+| **Passing Tests** | 628 (92.6%) |
+| **API Coverage** | 93% (796/860 functions) |
+
+### Namespace Coverage
+
+| Status | Namespaces |
+|--------|------------|
+| **100%** | array, barstate, builtin, chart, color, input, line, linefill, log, map, math, matrix, plots, polyline, request, session, str, syminfo, ta, ticker, timeframe |
+| **90%+** | label (95%), table (96%), types (92%) |
+| **80%+** | box (87%) |
+| **50%+** | strategy (58%) |
+
+Run tests locally:
+```bash
+npm test              # Run all tests
+npm run test:coverage # Run with coverage report
+```
+
+---
+
 ## API Coverage
 
 PineTS aims for complete Pine Script API compatibility. Current status:

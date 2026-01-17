@@ -1,14 +1,14 @@
-<svg width="123.23999999999998" height="24" viewBox="0 0 1027 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ticker: 0/9 (0%)">
-  <title>ticker: 0/9 (0%)</title>
+<svg width="140.04" height="24" viewBox="0 0 1167 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ticker: 9/9 (100%)">
+  <title>ticker: 9/9 (100%)</title>
   <g>
     <rect fill="#555" width="408" height="200"/>
-    <rect fill="#E43" x="408" width="619" height="200"/>
+    <rect fill="#3C1" x="408" width="759" height="200"/>
   </g>
   <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
     <text x="60" y="148" textLength="308" fill="#000" opacity="0.1">ticker</text>
     <text x="50" y="138" textLength="308">ticker</text>
-    <text x="463" y="148" textLength="519" fill="#000" opacity="0.1">0/9 (0%)</text>
-    <text x="453" y="138" textLength="519">0/9 (0%)</text>
+    <text x="463" y="148" textLength="659" fill="#000" opacity="0.1">9/9 (100%)</text>
+    <text x="453" y="138" textLength="659">9/9 (100%)</text>
   </g>
   
 </svg>

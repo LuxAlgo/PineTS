@@ -1,14 +1,14 @@
-<svg width="125.28" height="24" viewBox="0 0 1044 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="linefill: 0/6 (0%)">
-  <title>linefill: 0/6 (0%)</title>
+<svg width="142.07999999999998" height="24" viewBox="0 0 1184 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="linefill: 6/6 (100%)">
+  <title>linefill: 6/6 (100%)</title>
   <g>
     <rect fill="#555" width="425" height="200"/>
-    <rect fill="#E43" x="425" width="619" height="200"/>
+    <rect fill="#3C1" x="425" width="759" height="200"/>
   </g>
   <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
     <text x="60" y="148" textLength="325" fill="#000" opacity="0.1">linefill</text>
     <text x="50" y="138" textLength="325">linefill</text>
-    <text x="480" y="148" textLength="519" fill="#000" opacity="0.1">0/6 (0%)</text>
-    <text x="470" y="138" textLength="519">0/6 (0%)</text>
+    <text x="480" y="148" textLength="659" fill="#000" opacity="0.1">6/6 (100%)</text>
+    <text x="470" y="138" textLength="659">6/6 (100%)</text>
   </g>
   
 </svg>

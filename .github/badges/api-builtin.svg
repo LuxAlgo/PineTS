@@ -1,14 +1,14 @@
-<svg width="152.52" height="24" viewBox="0 0 1271 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="builtin: 26/63 (41%)">
-  <title>builtin: 26/63 (41%)</title>
+<svg width="160.92000000000002" height="24" viewBox="0 0 1341 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="builtin: 63/63 (100%)">
+  <title>builtin: 63/63 (100%)</title>
   <g>
     <rect fill="#555" width="442" height="200"/>
-    <rect fill="#DB1" x="442" width="829" height="200"/>
+    <rect fill="#3C1" x="442" width="899" height="200"/>
   </g>
   <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
     <text x="60" y="148" textLength="342" fill="#000" opacity="0.1">builtin</text>
     <text x="50" y="138" textLength="342">builtin</text>
-    <text x="497" y="148" textLength="729" fill="#000" opacity="0.1">26/63 (41%)</text>
-    <text x="487" y="138" textLength="729">26/63 (41%)</text>
+    <text x="497" y="148" textLength="799" fill="#000" opacity="0.1">63/63 (100%)</text>
+    <text x="487" y="138" textLength="799">63/63 (100%)</text>
   </g>
   
 </svg>
