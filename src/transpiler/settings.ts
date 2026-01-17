@@ -52,6 +52,7 @@ export const CONTEXT_PINE_VARS = [
 
     //market info
     'timeframe',
+    'ticker',
     'syminfo',
     'barstate',
 

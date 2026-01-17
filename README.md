@@ -272,16 +272,14 @@ PineTS has comprehensive test coverage to ensure reliability:
 | **Test Files** | 68 |
 | **Total Tests** | 678 |
 | **Passing Tests** | 628 (92.6%) |
-| **API Coverage** | 93% (796/860 functions) |
+| **API Coverage** | 96% (827/860 functions) |
 
 ### Namespace Coverage
 
 | Status | Namespaces |
 |--------|------------|
-| **100%** | array, barstate, builtin, chart, color, input, line, linefill, log, map, math, matrix, plots, polyline, request, session, str, syminfo, ta, ticker, timeframe |
-| **90%+** | label (95%), table (96%), types (92%) |
-| **80%+** | box (87%) |
-| **50%+** | strategy (58%) |
+| **100%** | array, barstate, box, builtin, chart, color, input, label, line, linefill, log, map, math, matrix, plots, polyline, request, session, str, syminfo, ta, table, ticker, timeframe, types |
+| **67%** | strategy (advanced features pending) |
 
 Run tests locally:
 ```bash

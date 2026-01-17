@@ -3,21 +3,21 @@
     "strategy.account_currency": false,
     "strategy.equity": true,
     "strategy.grossloss": true,
-    "strategy.grossloss_percent": false,
+    "strategy.grossloss_percent": true,
     "strategy.grossprofit": true,
-    "strategy.grossprofit_percent": false,
+    "strategy.grossprofit_percent": true,
     "strategy.initial_capital": true,
     "strategy.margin_liquidation_price": false,
     "strategy.netprofit": true,
-    "strategy.netprofit_percent": false
+    "strategy.netprofit_percent": true
   },
   "Trade Statistics": {
     "strategy.avg_losing_trade": true,
-    "strategy.avg_losing_trade_percent": false,
+    "strategy.avg_losing_trade_percent": true,
     "strategy.avg_trade": true,
-    "strategy.avg_trade_percent": false,
+    "strategy.avg_trade_percent": true,
     "strategy.avg_winning_trade": true,
-    "strategy.avg_winning_trade_percent": false,
+    "strategy.avg_winning_trade_percent": true,
     "strategy.closedtrades": true,
     "strategy.eventrades": true,
     "strategy.losstrades": true,
@@ -50,13 +50,13 @@
     "strategy.max_contracts_held_long": false,
     "strategy.max_contracts_held_short": false,
     "strategy.max_drawdown": true,
-    "strategy.max_drawdown_percent": false,
+    "strategy.max_drawdown_percent": true,
     "strategy.max_runup": true,
-    "strategy.max_runup_percent": false
+    "strategy.max_runup_percent": true
   },
   "Position Info": {
     "strategy.openprofit": true,
-    "strategy.openprofit_percent": false,
+    "strategy.openprofit_percent": true,
     "strategy.position_avg_price": true,
     "strategy.position_entry_name": false,
     "strategy.position_size": true

@@ -162,6 +162,15 @@ export class BoxObject {
         this._text_font_family = Series.from(family).get(0);
     }
 
+    set_text_formatting(formatting: string): void {
+        // Text formatting (bold, italic, none) - stored but rendering depends on chart implementation
+        (this as any)._text_formatting = Series.from(formatting).get(0);
+    }
+
+    set_xloc(xloc: string): void {
+        this._xloc = Series.from(xloc).get(0);
+    }
+
     /**
      * Returns a copy of this box object
      */

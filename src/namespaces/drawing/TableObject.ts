@@ -211,6 +211,17 @@ export class TableObject {
         }
     }
 
+    cell_set_text_formatting(column: number, row: number, formatting: string): void {
+        const key = this._getCellKey(
+            Series.from(column).get(0),
+            Series.from(row).get(0)
+        );
+        const cell = this._cells.get(key);
+        if (cell) {
+            (cell as any).text_formatting = Series.from(formatting).get(0);
+        }
+    }
+
     /**
      * Merges cells in a range.
      */

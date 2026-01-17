@@ -17,7 +17,7 @@
         "box.set_border_style()": true,
         "box.set_border_width()": true,
         "box.set_bottom()": true,
-        "box.set_bottom_right_point()": false,
+        "box.set_bottom_right_point()": true,
         "box.set_extend()": true,
         "box.set_left()": true,
         "box.set_lefttop()": true,
@@ -26,13 +26,13 @@
         "box.set_text()": true,
         "box.set_text_color()": true,
         "box.set_text_font_family()": true,
-        "box.set_text_formatting()": false,
+        "box.set_text_formatting()": true,
         "box.set_text_halign()": true,
         "box.set_text_size()": true,
         "box.set_text_valign()": true,
         "box.set_text_wrap()": true,
         "box.set_top()": true,
-        "box.set_top_left_point()": false,
-        "box.set_xloc()": false
+        "box.set_top_left_point()": true,
+        "box.set_xloc()": true
     }
 }

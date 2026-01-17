@@ -168,4 +168,14 @@ export class Label {
     set_text_font_family(id: LabelObject, family: string): void {
         id?.set_text_font_family(family);
     }
+
+    set_text_formatting(id: LabelObject, formatting: string): void {
+        id?.set_text_formatting(formatting);
+    }
+
+    set_point(id: LabelObject, point: any): void {
+        if (id && point) {
+            id.set_xy(point.index ?? point.time, point.price);
+        }
+    }
 }

@@ -1,19 +1,19 @@
 {
     "dividends": {
-        "dividends.future_amount": false,
-        "dividends.future_ex_date": false,
-        "dividends.future_pay_date": false,
-        "dividends.gross": false,
-        "dividends.net": false
+        "dividends.future_amount": true,
+        "dividends.future_ex_date": true,
+        "dividends.future_pay_date": true,
+        "dividends.gross": true,
+        "dividends.net": true
     },
     "earnings": {
-        "earnings.future_eps": false,
-        "earnings.future_period_end_time": false,
-        "earnings.future_revenue": false,
-        "earnings.future_time": false,
-        "earnings.actual": false,
-        "earnings.estimate": false,
-        "earnings.standardized": false
+        "earnings.future_eps": true,
+        "earnings.future_period_end_time": true,
+        "earnings.future_revenue": true,
+        "earnings.future_time": true,
+        "earnings.actual": true,
+        "earnings.estimate": true,
+        "earnings.standardized": true
     },
     "adjustment": {
         "adjustment.dividends": true,
@@ -214,9 +214,9 @@
         "text.align_left": true,
         "text.align_right": true,
         "text.align_top": true,
-        "text.format_bold": false,
-        "text.format_italic": false,
-        "text.format_none": false,
+        "text.format_bold": true,
+        "text.format_italic": true,
+        "text.format_none": true,
         "text.wrap_auto": true,
         "text.wrap_none": true
     },

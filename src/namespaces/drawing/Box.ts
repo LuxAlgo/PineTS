@@ -179,4 +179,24 @@ export class Box {
     set_text_font_family(id: BoxObject, family: string): void {
         id?.set_text_font_family(family);
     }
+
+    set_text_formatting(id: BoxObject, formatting: string): void {
+        id?.set_text_formatting(formatting);
+    }
+
+    set_xloc(id: BoxObject, xloc: string): void {
+        id?.set_xloc(xloc);
+    }
+
+    set_top_left_point(id: BoxObject, point: any): void {
+        if (id && point) {
+            id.set_lefttop(point.index ?? point.time, point.price);
+        }
+    }
+
+    set_bottom_right_point(id: BoxObject, point: any): void {
+        if (id && point) {
+            id.set_rightbottom(point.index ?? point.time, point.price);
+        }
+    }
 }

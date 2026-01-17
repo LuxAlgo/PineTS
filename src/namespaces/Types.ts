@@ -255,13 +255,38 @@ export const text = {
     align_top: 'top',
     align_bottom: 'bottom',
     // Text format
-    format_inherit: 'inherit',
-    format_mintick: 'mintick',
-    format_percent: 'percent',
-    format_volume: 'volume',
+    format_bold: 'bold',
+    format_italic: 'italic',
+    format_none: 'none',
     // Text wrap
     wrap_auto: 'auto',
     wrap_none: 'none',
+};
+
+// ============================================================
+// Dividends Field Types
+// ============================================================
+
+export const dividends = {
+    future_amount: 'future_amount',
+    future_ex_date: 'future_ex_date',
+    future_pay_date: 'future_pay_date',
+    gross: 'gross',
+    net: 'net',
+};
+
+// ============================================================
+// Earnings Field Types
+// ============================================================
+
+export const earnings = {
+    future_eps: 'future_eps',
+    future_period_end_time: 'future_period_end_time',
+    future_revenue: 'future_revenue',
+    future_time: 'future_time',
+    actual: 'actual',
+    estimate: 'estimate',
+    standardized: 'standardized',
 };
 
 // ============================================================
@@ -341,6 +366,8 @@ const types = {
     adjustment,
     alert,
     backadjustment,
+    dividends,
+    earnings,
     extend,
     font,
     position,

@@ -180,4 +180,13 @@ export class Table {
     set_border_width(id: TableObject, width: number): void {
         id?.set_border_width(width);
     }
+
+    cell_set_text_formatting(
+        id: TableObject,
+        column: number,
+        row: number,
+        formatting: string
+    ): void {
+        id?.cell_set_text_formatting(column, row, formatting);
+    }
 }
