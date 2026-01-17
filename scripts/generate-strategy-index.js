@@ -235,7 +235,7 @@ ${actionMethodTypes}
           factory(context),
         ])
       )
-    ) as OpentradesNamespace;
+    ) as unknown as OpentradesNamespace;
     this.opentrades = opentradesNs;
 
     // Create closedtrades sub-namespace (callable + has methods)
@@ -248,7 +248,7 @@ ${actionMethodTypes}
           factory(context),
         ])
       )
-    ) as ClosedtradesNamespace;
+    ) as unknown as ClosedtradesNamespace;
     this.closedtrades = closedtradesNs;
   }
 
