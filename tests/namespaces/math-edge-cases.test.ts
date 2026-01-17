@@ -248,11 +248,11 @@ describe('Math Edge Cases', () => {
 
             const code = `
                 const { math, plotchar } = context.pine;
-                
+
                 const round_up = math.round(3.6);
                 const round_down = math.round(3.4);
                 const round_neg = math.round(-3.6);
-                
+
                 plotchar(round_up, 'up');
                 plotchar(round_down, 'down');
                 plotchar(round_neg, 'neg');
@@ -262,6 +262,34 @@ describe('Math Edge Cases', () => {
             expect(plots['up'].data[0].value).toBe(4);
             expect(plots['down'].data[0].value).toBe(3);
             expect(plots['neg'].data[0].value).toBe(-4);
+        });
+
+        it('math.round with precision parameter should work correctly', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            const code = `
+                const { math, plotchar } = context.pine;
+
+                // Test various precision levels
+                const round_2dec = math.round(2.01234567890123456789, 2);
+                const round_5dec = math.round(2.01234567890123456789, 5);
+                const round_10dec = math.round(2.01234567890123456789, 10);
+                const round_0dec = math.round(2.56789, 0);
+                const round_neg_2dec = math.round(-3.14159, 2);
+
+                plotchar(round_2dec, 'dec2');
+                plotchar(round_5dec, 'dec5');
+                plotchar(round_10dec, 'dec10');
+                plotchar(round_0dec, 'dec0');
+                plotchar(round_neg_2dec, 'neg_dec2');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['dec2'].data[0].value).toBe(2.01);
+            expect(plots['dec5'].data[0].value).toBe(2.01235);
+            expect(plots['dec10'].data[0].value).toBe(2.0123456789);
+            expect(plots['dec0'].data[0].value).toBe(3);
+            expect(plots['neg_dec2'].data[0].value).toBe(-3.14);
         });
     });
 
