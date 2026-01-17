@@ -18,6 +18,7 @@ import { Str } from './namespaces/Str';
 import types, { display, shape } from './namespaces/Types';
 import { Timeframe } from './namespaces/Timeframe';
 import { Ticker } from './namespaces/Ticker';
+import { Syminfo } from './namespaces/Syminfo';
 import { FillHelper, HlineHelper, PlotHelper } from './namespaces/Plots';
 
 export class Context {
@@ -163,7 +164,7 @@ export class Context {
             matrix: new PineMatrix(this),
             strategy: new PineStrategy(this),
 
-            syminfo: null,
+            syminfo: new Syminfo(this),
             timeframe: new Timeframe(this),
             ticker: new Ticker(this),
             //FIXME : this is a temporary solution to get the barstate values,
