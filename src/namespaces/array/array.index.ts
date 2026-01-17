@@ -8,9 +8,15 @@ import { PineArrayObject } from './PineArrayObject';
 import { from } from './methods/from';
 import { new_fn } from './methods/new';
 import { new_bool } from './methods/new_bool';
+import { new_box } from './methods/new_box';
+import { new_color } from './methods/new_color';
 import { new_float } from './methods/new_float';
 import { new_int } from './methods/new_int';
+import { new_label } from './methods/new_label';
+import { new_line } from './methods/new_line';
+import { new_linefill } from './methods/new_linefill';
 import { new_string } from './methods/new_string';
+import { new_table } from './methods/new_table';
 import { param } from './methods/param';
 
 export class PineArray {
@@ -45,9 +51,15 @@ export class PineArray {
     this.mode = (id: PineArrayObject, ...args: any[]) => id.mode(...args);
     this.new = new_fn(context);
     this.new_bool = new_bool(context);
+    this.new_box = new_box(context);
+    this.new_color = new_color(context);
     this.new_float = new_float(context);
     this.new_int = new_int(context);
+    this.new_label = new_label(context);
+    this.new_line = new_line(context);
+    this.new_linefill = new_linefill(context);
     this.new_string = new_string(context);
+    this.new_table = new_table(context);
     this.param = param(context);
     this.percentile_linear_interpolation = (id: PineArrayObject, ...args: any[]) => id.percentile_linear_interpolation(...args);
     this.percentile_nearest_rank = (id: PineArrayObject, ...args: any[]) => id.percentile_nearest_rank(...args);
