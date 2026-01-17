@@ -1,38 +1,38 @@
 {
     "Styles": {
-        "line.style_arrow_both": false,
-        "line.style_arrow_left": false,
-        "line.style_arrow_right": false,
-        "line.style_dashed": false,
-        "line.style_dotted": false,
-        "line.style_solid": false
+        "line.style_arrow_both": true,
+        "line.style_arrow_left": true,
+        "line.style_arrow_right": true,
+        "line.style_dashed": true,
+        "line.style_dotted": true,
+        "line.style_solid": true
     },
     "Management": {
-        "line.all": false,
-        "line.copy()": false,
-        "line.delete()": false,
-        "line.new()": false
+        "line.all": true,
+        "line.copy()": true,
+        "line.delete()": true,
+        "line.new()": true
     },
     "Getters": {
-        "line.get_price()": false,
-        "line.get_x1()": false,
-        "line.get_x2()": false,
-        "line.get_y1()": false,
-        "line.get_y2()": false
+        "line.get_price()": true,
+        "line.get_x1()": true,
+        "line.get_x2()": true,
+        "line.get_y1()": true,
+        "line.get_y2()": true
     },
     "Setters": {
-        "line.set_color()": false,
-        "line.set_extend()": false,
-        "line.set_first_point()": false,
-        "line.set_second_point()": false,
-        "line.set_style()": false,
-        "line.set_width()": false,
-        "line.set_x1()": false,
-        "line.set_x2()": false,
-        "line.set_xloc()": false,
-        "line.set_xy1()": false,
-        "line.set_xy2()": false,
-        "line.set_y1()": false,
-        "line.set_y2()": false
+        "line.set_color()": true,
+        "line.set_extend()": true,
+        "line.set_first_point()": true,
+        "line.set_second_point()": true,
+        "line.set_style()": true,
+        "line.set_width()": true,
+        "line.set_x1()": true,
+        "line.set_x2()": true,
+        "line.set_xloc()": true,
+        "line.set_xy1()": true,
+        "line.set_xy2()": true,
+        "line.set_y1()": true,
+        "line.set_y2()": true
     }
 }

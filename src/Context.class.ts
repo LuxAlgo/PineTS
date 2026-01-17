@@ -19,6 +19,9 @@ import types, { display, shape } from './namespaces/Types';
 import { Timeframe } from './namespaces/Timeframe';
 import { Ticker } from './namespaces/Ticker';
 import { Syminfo } from './namespaces/Syminfo';
+import { Chart } from './namespaces/Chart';
+import { Session } from './namespaces/Session';
+import { Box, Label, Line, Linefill, Polyline, Table } from './namespaces/drawing';
 import { FillHelper, HlineHelper, PlotHelper } from './namespaces/Plots';
 
 export class Context {
@@ -150,6 +153,10 @@ export class Context {
             month: core.month.bind(core),
             year: core.year.bind(core),
             weekofyear: core.weekofyear.bind(core),
+            // Runtime and utility functions
+            runtime: core.runtime,
+            library: core.library.bind(core),
+            max_bars_back: core.max_bars_back.bind(core),
         };
 
         // Initialize everything directly in pine - the default way to access everything
@@ -167,6 +174,15 @@ export class Context {
             syminfo: new Syminfo(this),
             timeframe: new Timeframe(this),
             ticker: new Ticker(this),
+            chart: new Chart(this),
+            session: new Session(this),
+            // Drawing objects
+            box: new Box(this),
+            label: new Label(this),
+            line: new Line(this),
+            linefill: new Linefill(this),
+            polyline: new Polyline(this),
+            table: new Table(this),
             //FIXME : this is a temporary solution to get the barstate values,
             //we need to implement a better way to handle realtime states
             barstate: new Barstate(this),
@@ -184,6 +200,41 @@ export class Context {
             },
             get inputs() {
                 return _this.inputs;
+            },
+            // Market data variables
+            get open() {
+                return _this.data.open ? _this.data.open.get(0) : NaN;
+            },
+            get high() {
+                return _this.data.high ? _this.data.high.get(0) : NaN;
+            },
+            get low() {
+                return _this.data.low ? _this.data.low.get(0) : NaN;
+            },
+            get close() {
+                return _this.data.close ? _this.data.close.get(0) : NaN;
+            },
+            get volume() {
+                return _this.data.volume ? _this.data.volume.get(0) : NaN;
+            },
+            get hl2() {
+                return _this.data.hl2 ? _this.data.hl2.get(0) : NaN;
+            },
+            get hlc3() {
+                return _this.data.hlc3 ? _this.data.hlc3.get(0) : NaN;
+            },
+            get ohlc4() {
+                return _this.data.ohlc4 ? _this.data.ohlc4.get(0) : NaN;
+            },
+            get hlcc4() {
+                return _this.data.hlcc4 ? _this.data.hlcc4.get(0) : NaN;
+            },
+            // Bid/Ask - not typically available in historical data, return NaN
+            get ask() {
+                return _this.data.ask ? _this.data.ask.get(0) : NaN;
+            },
+            get bid() {
+                return _this.data.bid ? _this.data.bid.get(0) : NaN;
             },
             // Time variables - return current bar's time values
             get time() {

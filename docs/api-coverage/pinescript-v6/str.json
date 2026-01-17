@@ -9,7 +9,7 @@
     },
     "Formatting": {
         "str.format()": true,
-        "str.format_time()": false
+        "str.format_time()": true
     },
     "Transformation": {
         "str.lower()": true,
@@ -20,8 +20,8 @@
         "str.upper()": true
     },
     "Parsing": {
-        "str.split()": false,
-        "str.substring()": false
+        "str.split()": true,
+        "str.substring()": true
     },
     "Conversion": {
         "str.tonumber()": true,

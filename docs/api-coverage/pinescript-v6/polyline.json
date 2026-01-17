@@ -1,7 +1,7 @@
 {
   "Other": {
-    "polyline.all": false,
-    "polyline.delete()": false,
-    "polyline.new()": false
+    "polyline.all": true,
+    "polyline.delete()": true,
+    "polyline.new()": true
   }
 }

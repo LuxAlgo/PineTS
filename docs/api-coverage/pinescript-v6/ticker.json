@@ -1,13 +1,13 @@
 {
   "Ticker Functions": {
-    "ticker.heikinashi()": false,
-    "ticker.inherit()": false,
-    "ticker.kagi()": false,
-    "ticker.linebreak()": false,
-    "ticker.modify()": false,
-    "ticker.new()": false,
-    "ticker.pointfigure()": false,
-    "ticker.renko()": false,
-    "ticker.standard()": false
+    "ticker.heikinashi()": true,
+    "ticker.inherit()": true,
+    "ticker.kagi()": true,
+    "ticker.linebreak()": true,
+    "ticker.modify()": true,
+    "ticker.new()": true,
+    "ticker.pointfigure()": true,
+    "ticker.renko()": true,
+    "ticker.standard()": true
   }
 }

@@ -36,7 +36,7 @@
     },
     "Utilities": {
         "math.random()": true,
-        "math.todegrees()": false,
-        "math.toradians()": false
+        "math.todegrees()": true,
+        "math.toradians()": true
     }
 }
