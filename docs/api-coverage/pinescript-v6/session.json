@@ -1,15 +1,15 @@
 {
   "Session Flags": {
-    "session.isfirstbar": false,
-    "session.isfirstbar_regular": false,
-    "session.islastbar": false,
-    "session.islastbar_regular": false,
-    "session.ismarket": false,
-    "session.ispostmarket": false,
-    "session.ispremarket": false
+    "session.isfirstbar": true,
+    "session.isfirstbar_regular": true,
+    "session.islastbar": true,
+    "session.islastbar_regular": true,
+    "session.ismarket": true,
+    "session.ispostmarket": true,
+    "session.ispremarket": true
   },
   "Session Constants": {
-    "session.extended": false,
-    "session.regular": false
+    "session.extended": true,
+    "session.regular": true
   }
 }

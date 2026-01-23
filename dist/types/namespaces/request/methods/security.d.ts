@@ -1,0 +1,1 @@
+export declare function security(context: any): (symbol: any, timeframe: any, expression: any, gaps?: boolean | any[], lookahead?: boolean | any[], ignore_invalid_symbol?: boolean, currency?: any, calc_bars_count?: any) => Promise<any>;

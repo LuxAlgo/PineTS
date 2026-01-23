@@ -33,7 +33,7 @@ async function generateIndex() {
                 return name === 'new' ? { file: name, export: 'new_fn', classProp: 'new' } : { file: name, export: name, classProp: name };
             });
 
-        const staticMethods = ['new', 'new_bool', 'new_float', 'new_int', 'new_string', 'from', 'param'];
+        const staticMethods = ['new', 'new_bool', 'new_box', 'new_color', 'new_float', 'new_int', 'new_label', 'new_line', 'new_linefill', 'new_string', 'new_table', 'from', 'param'];
 
         // --- Generate PineArrayObject.ts ---
         const objectMethods = methods.filter((m) => !staticMethods.includes(m.classProp));

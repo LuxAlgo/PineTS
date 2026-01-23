@@ -1,14 +1,14 @@
-<svg width="146.16" height="24" viewBox="0 0 1218 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="math: 26/28 (93%)">
-  <title>math: 26/28 (93%)</title>
+<svg width="154.56" height="24" viewBox="0 0 1288 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="math: 28/28 (100%)">
+  <title>math: 28/28 (100%)</title>
   <g>
     <rect fill="#555" width="389" height="200"/>
-    <rect fill="#3C1" x="389" width="829" height="200"/>
+    <rect fill="#3C1" x="389" width="899" height="200"/>
   </g>
   <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
     <text x="60" y="148" textLength="289" fill="#000" opacity="0.1">math</text>
     <text x="50" y="138" textLength="289">math</text>
-    <text x="444" y="148" textLength="729" fill="#000" opacity="0.1">26/28 (93%)</text>
-    <text x="434" y="138" textLength="729">26/28 (93%)</text>
+    <text x="444" y="148" textLength="799" fill="#000" opacity="0.1">28/28 (100%)</text>
+    <text x="434" y="138" textLength="799">28/28 (100%)</text>
   </g>
   
 </svg>

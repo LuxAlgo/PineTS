@@ -143,6 +143,216 @@ export enum barmerge {
     lookahead_on = 'lookahead_on',
     lookahead_off = 'lookahead_off',
 }
+
+// ============================================================
+// Adjustment Types
+// ============================================================
+
+export enum adjustment {
+    dividends = 'dividends',
+    none = 'none',
+    splits = 'splits',
+}
+
+// ============================================================
+// Alert Frequency Types
+// ============================================================
+
+export const alert = {
+    freq: {
+        all: 'all',
+        once_per_bar: 'once_per_bar',
+        once_per_bar_close: 'once_per_bar_close',
+    },
+};
+
+// ============================================================
+// Back Adjustment Types
+// ============================================================
+
+export enum backadjustment {
+    inherit = 'inherit',
+    off = 'off',
+    on = 'on',
+}
+
+// ============================================================
+// Extend Types
+// ============================================================
+
+export enum extend {
+    both = 'both',
+    left = 'left',
+    none = 'none',
+    right = 'right',
+}
+
+// ============================================================
+// Font Family Types
+// ============================================================
+
+export const font = {
+    family: {
+        default: 'default',
+        monospace: 'monospace',
+    },
+};
+
+// ============================================================
+// Position Types (for tables)
+// ============================================================
+
+export enum position {
+    bottom_center = 'bottom_center',
+    bottom_left = 'bottom_left',
+    bottom_right = 'bottom_right',
+    middle_center = 'middle_center',
+    middle_left = 'middle_left',
+    middle_right = 'middle_right',
+    top_center = 'top_center',
+    top_left = 'top_left',
+    top_right = 'top_right',
+}
+
+// ============================================================
+// Scale Types
+// ============================================================
+
+export enum scale {
+    left = 'left',
+    none = 'none',
+    right = 'right',
+}
+
+// ============================================================
+// Settlement as Close Types
+// ============================================================
+
+export enum settlement_as_close {
+    inherit = 'inherit',
+    off = 'off',
+    on = 'on',
+}
+
+// ============================================================
+// Splits Types
+// ============================================================
+
+export enum splits {
+    denominator = 'denominator',
+    numerator = 'numerator',
+}
+
+// ============================================================
+// Text Types
+// ============================================================
+
+export const text = {
+    // Text alignment
+    align_center: 'center',
+    align_left: 'left',
+    align_right: 'right',
+    align_top: 'top',
+    align_bottom: 'bottom',
+    // Text format
+    format_bold: 'bold',
+    format_italic: 'italic',
+    format_none: 'none',
+    // Text wrap
+    wrap_auto: 'auto',
+    wrap_none: 'none',
+};
+
+// ============================================================
+// Dividends Field Types
+// ============================================================
+
+export const dividends = {
+    future_amount: 'future_amount',
+    future_ex_date: 'future_ex_date',
+    future_pay_date: 'future_pay_date',
+    gross: 'gross',
+    net: 'net',
+};
+
+// ============================================================
+// Earnings Field Types
+// ============================================================
+
+export const earnings = {
+    future_eps: 'future_eps',
+    future_period_end_time: 'future_period_end_time',
+    future_revenue: 'future_revenue',
+    future_time: 'future_time',
+    actual: 'actual',
+    estimate: 'estimate',
+    standardized: 'standardized',
+};
+
+// ============================================================
+// X Location Types (for drawings)
+// ============================================================
+
+export enum xloc {
+    bar_index = 'bar_index',
+    bar_time = 'bar_time',
+}
+
+// ============================================================
+// Y Location Types (for labels)
+// ============================================================
+
+export enum yloc {
+    abovebar = 'abovebar',
+    belowbar = 'belowbar',
+    price = 'price',
+}
+
+// ============================================================
+// Label Styles
+// ============================================================
+
+export const label = {
+    style_arrowdown: 'arrowdown',
+    style_arrowup: 'arrowup',
+    style_circle: 'circle',
+    style_cross: 'cross',
+    style_diamond: 'diamond',
+    style_flag: 'flag',
+    style_label_center: 'label_center',
+    style_label_down: 'label_down',
+    style_label_left: 'label_left',
+    style_label_lower_left: 'label_lower_left',
+    style_label_lower_right: 'label_lower_right',
+    style_label_right: 'label_right',
+    style_label_up: 'label_up',
+    style_label_upper_left: 'label_upper_left',
+    style_label_upper_right: 'label_upper_right',
+    style_none: 'none',
+    style_square: 'square',
+    style_text_outline: 'text_outline',
+    style_triangledown: 'triangledown',
+    style_triangleup: 'triangleup',
+    style_xcross: 'xcross',
+};
+
+// ============================================================
+// Line Styles
+// ============================================================
+
+export const line = {
+    style_arrow_both: 'arrow_both',
+    style_arrow_left: 'arrow_left',
+    style_arrow_right: 'arrow_right',
+    style_dashed: 'dashed',
+    style_dotted: 'dotted',
+    style_solid: 'solid',
+};
+
+// ============================================================
+// Exports
+// ============================================================
+
 const types = {
     order,
     currency,
@@ -153,6 +363,22 @@ const types = {
     size,
     format,
     barmerge,
+    adjustment,
+    alert,
+    backadjustment,
+    dividends,
+    earnings,
+    extend,
+    font,
+    position,
+    scale,
+    settlement_as_close,
+    splits,
+    text,
+    xloc,
+    yloc,
+    label,
+    line,
 };
 
 export default types;

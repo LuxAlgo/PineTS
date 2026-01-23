@@ -1,14 +1,14 @@
-<svg width="164.04" height="24" viewBox="0 0 1367 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="syminfo: 40/42 (95%)">
-  <title>syminfo: 40/42 (95%)</title>
+<svg width="172.44" height="24" viewBox="0 0 1437 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="syminfo: 42/42 (100%)">
+  <title>syminfo: 42/42 (100%)</title>
   <g>
     <rect fill="#555" width="538" height="200"/>
-    <rect fill="#3C1" x="538" width="829" height="200"/>
+    <rect fill="#3C1" x="538" width="899" height="200"/>
   </g>
   <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
     <text x="60" y="148" textLength="438" fill="#000" opacity="0.1">syminfo</text>
     <text x="50" y="138" textLength="438">syminfo</text>
-    <text x="593" y="148" textLength="729" fill="#000" opacity="0.1">40/42 (95%)</text>
-    <text x="583" y="138" textLength="729">40/42 (95%)</text>
+    <text x="593" y="148" textLength="799" fill="#000" opacity="0.1">42/42 (100%)</text>
+    <text x="583" y="138" textLength="799">42/42 (100%)</text>
   </g>
   
 </svg>

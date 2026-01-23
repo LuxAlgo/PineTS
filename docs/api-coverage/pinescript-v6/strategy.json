@@ -1,114 +1,114 @@
 {
   "Account Info": {
     "strategy.account_currency": false,
-    "strategy.equity": false,
-    "strategy.grossloss": false,
-    "strategy.grossloss_percent": false,
-    "strategy.grossprofit": false,
-    "strategy.grossprofit_percent": false,
-    "strategy.initial_capital": false,
+    "strategy.equity": true,
+    "strategy.grossloss": true,
+    "strategy.grossloss_percent": true,
+    "strategy.grossprofit": true,
+    "strategy.grossprofit_percent": true,
+    "strategy.initial_capital": true,
     "strategy.margin_liquidation_price": false,
-    "strategy.netprofit": false,
-    "strategy.netprofit_percent": false
+    "strategy.netprofit": true,
+    "strategy.netprofit_percent": true
   },
   "Trade Statistics": {
-    "strategy.avg_losing_trade": false,
-    "strategy.avg_losing_trade_percent": false,
-    "strategy.avg_trade": false,
-    "strategy.avg_trade_percent": false,
-    "strategy.avg_winning_trade": false,
-    "strategy.avg_winning_trade_percent": false,
-    "strategy.closedtrades": false,
-    "strategy.eventrades": false,
-    "strategy.losstrades": false,
-    "strategy.opentrades": false,
-    "strategy.wintrades": false
+    "strategy.avg_losing_trade": true,
+    "strategy.avg_losing_trade_percent": true,
+    "strategy.avg_trade": true,
+    "strategy.avg_trade_percent": true,
+    "strategy.avg_winning_trade": true,
+    "strategy.avg_winning_trade_percent": true,
+    "strategy.closedtrades": true,
+    "strategy.eventrades": true,
+    "strategy.losstrades": true,
+    "strategy.opentrades": true,
+    "strategy.wintrades": true
   },
   "Closed Trades": {
     "strategy.closedtrades.first_index": false,
-    "strategy.closedtrades.commission()": false,
-    "strategy.closedtrades.entry_bar_index()": false,
+    "strategy.closedtrades.commission()": true,
+    "strategy.closedtrades.entry_bar_index()": true,
     "strategy.closedtrades.entry_comment()": false,
     "strategy.closedtrades.entry_id()": false,
-    "strategy.closedtrades.entry_price()": false,
+    "strategy.closedtrades.entry_price()": true,
     "strategy.closedtrades.entry_time()": false,
-    "strategy.closedtrades.exit_bar_index()": false,
+    "strategy.closedtrades.exit_bar_index()": true,
     "strategy.closedtrades.exit_comment()": false,
     "strategy.closedtrades.exit_id()": false,
-    "strategy.closedtrades.exit_price()": false,
+    "strategy.closedtrades.exit_price()": true,
     "strategy.closedtrades.exit_time()": false,
-    "strategy.closedtrades.max_drawdown()": false,
+    "strategy.closedtrades.max_drawdown()": true,
     "strategy.closedtrades.max_drawdown_percent()": false,
-    "strategy.closedtrades.max_runup()": false,
+    "strategy.closedtrades.max_runup()": true,
     "strategy.closedtrades.max_runup_percent()": false,
-    "strategy.closedtrades.profit()": false,
+    "strategy.closedtrades.profit()": true,
     "strategy.closedtrades.profit_percent()": false,
-    "strategy.closedtrades.size()": false
+    "strategy.closedtrades.size()": true
   },
   "Drawdown & Runup": {
     "strategy.max_contracts_held_all": false,
     "strategy.max_contracts_held_long": false,
     "strategy.max_contracts_held_short": false,
-    "strategy.max_drawdown": false,
-    "strategy.max_drawdown_percent": false,
-    "strategy.max_runup": false,
-    "strategy.max_runup_percent": false
+    "strategy.max_drawdown": true,
+    "strategy.max_drawdown_percent": true,
+    "strategy.max_runup": true,
+    "strategy.max_runup_percent": true
   },
   "Position Info": {
-    "strategy.openprofit": false,
-    "strategy.openprofit_percent": false,
-    "strategy.position_avg_price": false,
+    "strategy.openprofit": true,
+    "strategy.openprofit_percent": true,
+    "strategy.position_avg_price": true,
     "strategy.position_entry_name": false,
-    "strategy.position_size": false
+    "strategy.position_size": true
   },
   "Open Trades": {
     "strategy.opentrades.capital_held": false,
     "strategy.opentrades.commission()": false,
-    "strategy.opentrades.entry_bar_index()": false,
+    "strategy.opentrades.entry_bar_index()": true,
     "strategy.opentrades.entry_comment()": false,
-    "strategy.opentrades.entry_id()": false,
-    "strategy.opentrades.entry_price()": false,
-    "strategy.opentrades.entry_time()": false,
+    "strategy.opentrades.entry_id()": true,
+    "strategy.opentrades.entry_price()": true,
+    "strategy.opentrades.entry_time()": true,
     "strategy.opentrades.max_drawdown()": false,
     "strategy.opentrades.max_drawdown_percent()": false,
     "strategy.opentrades.max_runup()": false,
     "strategy.opentrades.max_runup_percent()": false,
-    "strategy.opentrades.profit()": false,
+    "strategy.opentrades.profit()": true,
     "strategy.opentrades.profit_percent()": false,
-    "strategy.opentrades.size()": false
+    "strategy.opentrades.size()": true
   },
   "Constants": {
-    "strategy.cash": false,
-    "strategy.fixed": false,
-    "strategy.long": false,
-    "strategy.percent_of_equity": false,
-    "strategy.short": false
+    "strategy.cash": true,
+    "strategy.fixed": true,
+    "strategy.long": true,
+    "strategy.percent_of_equity": true,
+    "strategy.short": true
   },
   "Commission": {
-    "strategy.commission.cash_per_contract": false,
-    "strategy.commission.cash_per_order": false,
-    "strategy.commission.percent": false
+    "strategy.commission.cash_per_contract": true,
+    "strategy.commission.cash_per_order": true,
+    "strategy.commission.percent": true
   },
   "Direction": {
-    "strategy.direction.all": false,
-    "strategy.direction.long": false,
-    "strategy.direction.short": false
+    "strategy.direction.all": true,
+    "strategy.direction.long": true,
+    "strategy.direction.short": true
   },
   "OCA": {
-    "strategy.oca.cancel": false,
-    "strategy.oca.none": false,
-    "strategy.oca.reduce": false
+    "strategy.oca.cancel": true,
+    "strategy.oca.none": true,
+    "strategy.oca.reduce": true
   },
   "Order Management": {
-    "strategy.cancel()": false,
-    "strategy.cancel_all()": false
+    "strategy.cancel()": true,
+    "strategy.cancel_all()": true
   },
   "Position Management": {
-    "strategy.close()": false,
-    "strategy.close_all()": false,
-    "strategy.entry()": false,
-    "strategy.exit()": false,
-    "strategy.order()": false
+    "strategy.close()": true,
+    "strategy.close_all()": true,
+    "strategy.entry()": true,
+    "strategy.exit()": true,
+    "strategy.order()": true
   },
   "Conversion": {
     "strategy.convert_to_account()": false,
@@ -122,5 +122,10 @@
     "strategy.risk.max_intraday_filled_orders()": false,
     "strategy.risk.max_intraday_loss()": false,
     "strategy.risk.max_position_size()": false
+  },
+  "Performance Metrics": {
+    "strategy.profit_factor": true,
+    "strategy.sharpe_ratio": true,
+    "strategy.win_rate": true
   }
 }

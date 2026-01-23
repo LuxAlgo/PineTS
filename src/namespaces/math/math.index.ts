@@ -2,6 +2,7 @@
 // This file is auto-generated. Do not edit manually.
 // Run: npm run generate:math-index
 
+import { __eq } from './methods/__eq';
 import { abs } from './methods/abs';
 import { acos } from './methods/acos';
 import { asin } from './methods/asin';
@@ -30,9 +31,11 @@ import { sin } from './methods/sin';
 import { sqrt } from './methods/sqrt';
 import { sum } from './methods/sum';
 import { tan } from './methods/tan';
-import { __eq } from './methods/__eq';
+import { todegrees } from './methods/todegrees';
+import { toradians } from './methods/toradians';
 
 const methods = {
+  __eq,
   abs,
   acos,
   asin,
@@ -61,11 +64,13 @@ const methods = {
   sqrt,
   sum,
   tan,
-  __eq
+  todegrees,
+  toradians
 };
 
 export class PineMath {
   private _cache = {};
+  __eq: ReturnType<typeof methods.__eq>;
   abs: ReturnType<typeof methods.abs>;
   acos: ReturnType<typeof methods.acos>;
   asin: ReturnType<typeof methods.asin>;
@@ -94,7 +99,8 @@ export class PineMath {
   sqrt: ReturnType<typeof methods.sqrt>;
   sum: ReturnType<typeof methods.sum>;
   tan: ReturnType<typeof methods.tan>;
-  __eq: ReturnType<typeof methods.__eq>;
+  todegrees: ReturnType<typeof methods.todegrees>;
+  toradians: ReturnType<typeof methods.toradians>;
 
   constructor(private context: any) {
     // Install methods

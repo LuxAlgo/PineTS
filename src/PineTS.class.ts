@@ -571,7 +571,9 @@ export class PineTS {
             inputs,
         });
 
-        context.pine.syminfo = this._syminfo;
+        if (this._syminfo) {
+            context.pine.syminfo.setSymbolInfo(this._syminfo);
+        }
 
         context.pineTSCode = pineTSCode;
         context.isSecondaryContext = isSecondary; // Set secondary context flag

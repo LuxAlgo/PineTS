@@ -1,0 +1,31 @@
+import { Token } from './tokens';
+export declare class Lexer {
+    private source;
+    private pos;
+    private line;
+    private column;
+    private tokens;
+    private indentStack;
+    private atLineStart;
+    private parenDepth;
+    private bracketDepth;
+    private braceDepth;
+    constructor(source: string);
+    tokenize(): Token[];
+    handleNewline(): void;
+    handleIndentation(): void;
+    readComment(): void;
+    readString(): void;
+    readColorLiteral(): void;
+    readNumber(): void;
+    readIdentifier(): void;
+    readOperatorOrPunctuation(): boolean;
+    peek(offset?: number): string;
+    advance(): string;
+    skipWhitespaceInline(): void;
+    isDigit(ch: any): boolean;
+    isIdentifierStart(ch: any): boolean;
+    isIdentifierChar(ch: any): boolean;
+    getCurrentIndent(): number;
+    addToken(type: any, value: any, indent?: any): void;
+}

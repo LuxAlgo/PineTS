@@ -1,14 +1,14 @@
-<svg width="153.23999999999998" height="24" viewBox="0 0 1277 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="request: 2/10 (20%)">
-  <title>request: 2/10 (20%)</title>
+<svg width="170.04" height="24" viewBox="0 0 1417 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="request: 10/10 (100%)">
+  <title>request: 10/10 (100%)</title>
   <g>
     <rect fill="#555" width="518" height="200"/>
-    <rect fill="#F73" x="518" width="759" height="200"/>
+    <rect fill="#3C1" x="518" width="899" height="200"/>
   </g>
   <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
     <text x="60" y="148" textLength="418" fill="#000" opacity="0.1">request</text>
     <text x="50" y="138" textLength="418">request</text>
-    <text x="573" y="148" textLength="659" fill="#000" opacity="0.1">2/10 (20%)</text>
-    <text x="563" y="138" textLength="659">2/10 (20%)</text>
+    <text x="573" y="148" textLength="799" fill="#000" opacity="0.1">10/10 (100%)</text>
+    <text x="563" y="138" textLength="799">10/10 (100%)</text>
   </g>
   
 </svg>

@@ -5,6 +5,7 @@ import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { PineArray } from './namespaces/array/array.index';
 import { PineMap } from './namespaces/map/map.index';
 import { PineMatrix } from './namespaces/matrix/matrix.index';
+import { PineStrategy } from './namespaces/strategy/strategy.index';
 import { Barstate } from './namespaces/Barstate';
 import { Core } from './namespaces/Core';
 import { Input } from './namespaces/input/input.index';
@@ -16,6 +17,11 @@ import { Log } from './namespaces/Log';
 import { Str } from './namespaces/Str';
 import types, { display, shape } from './namespaces/Types';
 import { Timeframe } from './namespaces/Timeframe';
+import { Ticker } from './namespaces/Ticker';
+import { Syminfo } from './namespaces/Syminfo';
+import { Chart } from './namespaces/Chart';
+import { Session } from './namespaces/Session';
+import { Box, Label, Line, Linefill, Polyline, Table } from './namespaces/drawing';
 import { FillHelper, HlineHelper, PlotHelper } from './namespaces/Plots';
 
 export class Context {
@@ -132,8 +138,26 @@ export class Context {
             indicator: core.indicator.bind(core),
             fixnan: core.fixnan.bind(core),
             alertcondition: core.alertcondition.bind(core),
+            alert: core.alert.bind(core),
             //types
             bool: core.bool.bind(core),
+            int: core.int.bind(core),
+            float: core.float.bind(core),
+            string: core.string.bind(core),
+            // Time functions
+            timestamp: core.timestamp.bind(core),
+            dayofmonth: core.dayofmonth.bind(core),
+            dayofweek: core.dayofweek.bind(core),
+            hour: core.hour.bind(core),
+            minute: core.minute.bind(core),
+            second: core.second.bind(core),
+            month: core.month.bind(core),
+            year: core.year.bind(core),
+            weekofyear: core.weekofyear.bind(core),
+            // Runtime and utility functions
+            runtime: core.runtime,
+            library: core.library.bind(core),
+            max_bars_back: core.max_bars_back.bind(core),
         };
 
         // Initialize everything directly in pine - the default way to access everything
@@ -146,9 +170,20 @@ export class Context {
             array: new PineArray(this),
             map: new PineMap(this),
             matrix: new PineMatrix(this),
+            strategy: new PineStrategy(this),
 
-            syminfo: null,
+            syminfo: new Syminfo(this),
             timeframe: new Timeframe(this),
+            ticker: new Ticker(this),
+            chart: new Chart(this),
+            session: new Session(this),
+            // Drawing objects
+            box: new Box(this),
+            label: new Label(this),
+            line: new Line(this),
+            linefill: new Linefill(this),
+            polyline: new Polyline(this),
+            table: new Table(this),
             //FIXME : this is a temporary solution to get the barstate values,
             //we need to implement a better way to handle realtime states
             barstate: new Barstate(this),
@@ -167,11 +202,78 @@ export class Context {
             get inputs() {
                 return _this.inputs;
             },
+            // Market data variables
+            get open() {
+                return _this.data.open ? _this.data.open.get(0) : NaN;
+            },
+            get high() {
+                return _this.data.high ? _this.data.high.get(0) : NaN;
+            },
+            get low() {
+                return _this.data.low ? _this.data.low.get(0) : NaN;
+            },
+            get close() {
+                return _this.data.close ? _this.data.close.get(0) : NaN;
+            },
+            get volume() {
+                return _this.data.volume ? _this.data.volume.get(0) : NaN;
+            },
+            get hl2() {
+                return _this.data.hl2 ? _this.data.hl2.get(0) : NaN;
+            },
+            get hlc3() {
+                return _this.data.hlc3 ? _this.data.hlc3.get(0) : NaN;
+            },
+            get ohlc4() {
+                return _this.data.ohlc4 ? _this.data.ohlc4.get(0) : NaN;
+            },
+            get hlcc4() {
+                return _this.data.hlcc4 ? _this.data.hlcc4.get(0) : NaN;
+            },
+            // Bid/Ask - not typically available in historical data, return NaN
+            get ask() {
+                return _this.data.ask ? _this.data.ask.get(0) : NaN;
+            },
+            get bid() {
+                return _this.data.bid ? _this.data.bid.get(0) : NaN;
+            },
+            // Time variables - return current bar's time values
+            get time() {
+                return _this.data.openTime ? _this.data.openTime.get(0) : NaN;
+            },
+            get time_close() {
+                return _this.data.closeTime ? _this.data.closeTime.get(0) : NaN;
+            },
+            get time_tradingday() {
+                // Returns the start of the trading day for the current bar
+                const time = _this.data.openTime ? _this.data.openTime.get(0) : NaN;
+                if (isNaN(time)) return NaN;
+                const date = new Date(time);
+                date.setUTCHours(0, 0, 0, 0);
+                return date.getTime();
+            },
+            // Note: dayofmonth, dayofweek, hour, minute, second, month, year, weekofyear
+            // are functions from coreFunctions. When called without arguments, they use
+            // context.pine.time as the default. This matches Pine Script behavior where
+            // these can be used as both variables (dayofmonth) and functions (dayofmonth(time)).
             log: new Log(this),
             str: new Str(this),
-            ...coreFunctions,
+            // Spread types first, then coreFunctions so functions can overwrite type enums
             ...types,
+            ...coreFunctions,
         };
+
+        // Attach dayofweek enum constants to the dayofweek function for Pine Script compatibility
+        // This allows both `dayofweek(time)` and `dayofweek.sunday`, `dayofweek.monday` etc.
+        if (this.pine.dayofweek && typeof this.pine.dayofweek === 'function') {
+            (this.pine.dayofweek as any).sunday = 1;
+            (this.pine.dayofweek as any).monday = 2;
+            (this.pine.dayofweek as any).tuesday = 3;
+            (this.pine.dayofweek as any).wednesday = 4;
+            (this.pine.dayofweek as any).thursday = 5;
+            (this.pine.dayofweek as any).friday = 6;
+            (this.pine.dayofweek as any).saturday = 7;
+        }
 
         const plotHelper = new PlotHelper(this);
         const hlineHelper = new HlineHelper(this);

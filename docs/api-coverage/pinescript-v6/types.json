@@ -1,40 +1,40 @@
 {
     "dividends": {
-        "dividends.future_amount": false,
-        "dividends.future_ex_date": false,
-        "dividends.future_pay_date": false,
-        "dividends.gross": false,
-        "dividends.net": false
+        "dividends.future_amount": true,
+        "dividends.future_ex_date": true,
+        "dividends.future_pay_date": true,
+        "dividends.gross": true,
+        "dividends.net": true
     },
     "earnings": {
-        "earnings.future_eps": false,
-        "earnings.future_period_end_time": false,
-        "earnings.future_revenue": false,
-        "earnings.future_time": false,
-        "earnings.actual": false,
-        "earnings.estimate": false,
-        "earnings.standardized": false
+        "earnings.future_eps": true,
+        "earnings.future_period_end_time": true,
+        "earnings.future_revenue": true,
+        "earnings.future_time": true,
+        "earnings.actual": true,
+        "earnings.estimate": true,
+        "earnings.standardized": true
     },
     "adjustment": {
-        "adjustment.dividends": false,
-        "adjustment.none": false,
-        "adjustment.splits": false
+        "adjustment.dividends": true,
+        "adjustment.none": true,
+        "adjustment.splits": true
     },
     "alert": {
-        "alert.freq_all": false,
-        "alert.freq_once_per_bar": false,
-        "alert.freq_once_per_bar_close": false
+        "alert.freq_all": true,
+        "alert.freq_once_per_bar": true,
+        "alert.freq_once_per_bar_close": true
     },
     "backadjustment": {
-        "backadjustment.inherit": false,
-        "backadjustment.off": false,
-        "backadjustment.on": false
+        "backadjustment.inherit": true,
+        "backadjustment.off": true,
+        "backadjustment.on": true
     },
     "barmerge": {
-        "barmerge.gaps_off": false,
-        "barmerge.gaps_on": false,
-        "barmerge.lookahead_off": false,
-        "barmerge.lookahead_on": false
+        "barmerge.gaps_off": true,
+        "barmerge.gaps_on": true,
+        "barmerge.lookahead_off": true,
+        "barmerge.lookahead_on": true
     },
     "currency": {
         "currency.AED": true,
@@ -113,14 +113,14 @@
         "display.status_line": true
     },
     "extend": {
-        "extend.both": false,
-        "extend.left": false,
-        "extend.none": false,
-        "extend.right": false
+        "extend.both": true,
+        "extend.left": true,
+        "extend.none": true,
+        "extend.right": true
     },
     "font": {
-        "font.family_default": false,
-        "font.family_monospace": false
+        "font.family_default": true,
+        "font.family_monospace": true
     },
     "format": {
         "format.inherit": true,
@@ -162,25 +162,25 @@
         "plot.style_steplinebr": true
     },
     "position": {
-        "position.bottom_center": false,
-        "position.bottom_left": false,
-        "position.bottom_right": false,
-        "position.middle_center": false,
-        "position.middle_left": false,
-        "position.middle_right": false,
-        "position.top_center": false,
-        "position.top_left": false,
-        "position.top_right": false
+        "position.bottom_center": true,
+        "position.bottom_left": true,
+        "position.bottom_right": true,
+        "position.middle_center": true,
+        "position.middle_left": true,
+        "position.middle_right": true,
+        "position.top_center": true,
+        "position.top_left": true,
+        "position.top_right": true
     },
     "scale": {
-        "scale.left": false,
-        "scale.none": false,
-        "scale.right": false
+        "scale.left": true,
+        "scale.none": true,
+        "scale.right": true
     },
     "settlement_as_close": {
-        "settlement_as_close.inherit": false,
-        "settlement_as_close.off": false,
-        "settlement_as_close.on": false
+        "settlement_as_close.inherit": true,
+        "settlement_as_close.off": true,
+        "settlement_as_close.on": true
     },
     "shape": {
         "shape.arrowdown": true,
@@ -205,28 +205,28 @@
         "size.tiny": true
     },
     "splits": {
-        "splits.denominator": false,
-        "splits.numerator": false
+        "splits.denominator": true,
+        "splits.numerator": true
     },
     "text": {
-        "text.align_bottom": false,
-        "text.align_center": false,
-        "text.align_left": false,
-        "text.align_right": false,
-        "text.align_top": false,
-        "text.format_bold": false,
-        "text.format_italic": false,
-        "text.format_none": false,
-        "text.wrap_auto": false,
-        "text.wrap_none": false
+        "text.align_bottom": true,
+        "text.align_center": true,
+        "text.align_left": true,
+        "text.align_right": true,
+        "text.align_top": true,
+        "text.format_bold": true,
+        "text.format_italic": true,
+        "text.format_none": true,
+        "text.wrap_auto": true,
+        "text.wrap_none": true
     },
     "xloc": {
-        "xloc.bar_index": false,
-        "xloc.bar_time": false
+        "xloc.bar_index": true,
+        "xloc.bar_time": true
     },
     "yloc": {
-        "yloc.abovebar": false,
-        "yloc.belowbar": false,
-        "yloc.price": false
+        "yloc.abovebar": true,
+        "yloc.belowbar": true,
+        "yloc.price": true
     }
 }

@@ -248,11 +248,11 @@ describe('Math Edge Cases', () => {
 
             const code = `
                 const { math, plotchar } = context.pine;
-                
+
                 const round_up = math.round(3.6);
                 const round_down = math.round(3.4);
                 const round_neg = math.round(-3.6);
-                
+
                 plotchar(round_up, 'up');
                 plotchar(round_down, 'down');
                 plotchar(round_neg, 'neg');
@@ -262,6 +262,34 @@ describe('Math Edge Cases', () => {
             expect(plots['up'].data[0].value).toBe(4);
             expect(plots['down'].data[0].value).toBe(3);
             expect(plots['neg'].data[0].value).toBe(-4);
+        });
+
+        it('math.round with precision parameter should work correctly', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            const code = `
+                const { math, plotchar } = context.pine;
+
+                // Test various precision levels
+                const round_2dec = math.round(2.01234567890123456789, 2);
+                const round_5dec = math.round(2.01234567890123456789, 5);
+                const round_10dec = math.round(2.01234567890123456789, 10);
+                const round_0dec = math.round(2.56789, 0);
+                const round_neg_2dec = math.round(-3.14159, 2);
+
+                plotchar(round_2dec, 'dec2');
+                plotchar(round_5dec, 'dec5');
+                plotchar(round_10dec, 'dec10');
+                plotchar(round_0dec, 'dec0');
+                plotchar(round_neg_2dec, 'neg_dec2');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['dec2'].data[0].value).toBe(2.01);
+            expect(plots['dec5'].data[0].value).toBe(2.01235);
+            expect(plots['dec10'].data[0].value).toBe(2.0123456789);
+            expect(plots['dec0'].data[0].value).toBe(3);
+            expect(plots['neg_dec2'].data[0].value).toBe(-3.14);
         });
     });
 
@@ -369,16 +397,148 @@ describe('Math Edge Cases', () => {
 
             const code = `
                 const { math, plotchar } = context.pine;
-                
+
                 const very_small = 1e-200;
                 const underflow = very_small * 1e-200;
                 const is_zero = underflow === 0;
-                
+
                 plotchar(is_zero ? 1 : 0, 'zero');
             `;
 
             const { plots } = await pineTS.run(code);
             expect(plots['zero'].data[0].value).toBe(1);
+        });
+    });
+
+    describe('Degree/Radian Conversion Functions', () => {
+        it('math.todegrees should convert radians to degrees', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            const code = `
+                const { math, plotchar } = context.pine;
+
+                const deg_from_pi = math.todegrees(math.pi());
+                const deg_from_half_pi = math.todegrees(math.pi() / 2);
+                const deg_from_quarter_pi = math.todegrees(math.pi() / 4);
+                const deg_from_zero = math.todegrees(0);
+
+                plotchar(deg_from_pi, 'pi');
+                plotchar(deg_from_half_pi, 'half_pi');
+                plotchar(deg_from_quarter_pi, 'quarter_pi');
+                plotchar(deg_from_zero, 'zero');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['pi'].data[0].value).toBeCloseTo(180, 10);
+            expect(plots['half_pi'].data[0].value).toBeCloseTo(90, 10);
+            expect(plots['quarter_pi'].data[0].value).toBeCloseTo(45, 10);
+            expect(plots['zero'].data[0].value).toBe(0);
+        });
+
+        it('math.toradians should convert degrees to radians', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            const code = `
+                const { math, plotchar } = context.pine;
+
+                const rad_from_180 = math.toradians(180);
+                const rad_from_90 = math.toradians(90);
+                const rad_from_45 = math.toradians(45);
+                const rad_from_zero = math.toradians(0);
+
+                plotchar(rad_from_180, 'rad_180');
+                plotchar(rad_from_90, 'rad_90');
+                plotchar(rad_from_45, 'rad_45');
+                plotchar(rad_from_zero, 'rad_zero');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['rad_180'].data[0].value).toBeCloseTo(Math.PI, 10);
+            expect(plots['rad_90'].data[0].value).toBeCloseTo(Math.PI / 2, 10);
+            expect(plots['rad_45'].data[0].value).toBeCloseTo(Math.PI / 4, 10);
+            expect(plots['rad_zero'].data[0].value).toBe(0);
+        });
+
+        it('math.todegrees and math.toradians should be inverse operations', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            const code = `
+                const { math, plotchar } = context.pine;
+
+                const original_deg = 123.456;
+                const original_rad = 1.234;
+
+                const roundtrip_deg = math.todegrees(math.toradians(original_deg));
+                const roundtrip_rad = math.toradians(math.todegrees(original_rad));
+
+                plotchar(roundtrip_deg, 'roundtrip_deg');
+                plotchar(roundtrip_rad, 'roundtrip_rad');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['roundtrip_deg'].data[0].value).toBeCloseTo(123.456, 10);
+            expect(plots['roundtrip_rad'].data[0].value).toBeCloseTo(1.234, 10);
+        });
+
+        it('math.todegrees should handle negative values', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            const code = `
+                const { math, plotchar } = context.pine;
+
+                const neg_deg = math.todegrees(-math.pi());
+                const neg_rad = math.toradians(-180);
+
+                plotchar(neg_deg, 'neg_deg');
+                plotchar(neg_rad, 'neg_rad');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['neg_deg'].data[0].value).toBeCloseTo(-180, 10);
+            expect(plots['neg_rad'].data[0].value).toBeCloseTo(-Math.PI, 10);
+        });
+
+        it('math.todegrees and math.toradians should handle NaN', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            const code = `
+                const { math, plotchar, na } = context.pine;
+
+                const nan_val = 0 / 0;
+                const deg_nan = math.todegrees(nan_val);
+                const rad_nan = math.toradians(nan_val);
+
+                plotchar(na(deg_nan) ? 1 : 0, 'deg_is_nan');
+                plotchar(na(rad_nan) ? 1 : 0, 'rad_is_nan');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['deg_is_nan'].data[0].value).toBe(1);
+            expect(plots['rad_is_nan'].data[0].value).toBe(1);
+        });
+
+        it('math.todegrees and math.toradians should handle Infinity', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            const code = `
+                const { math, plotchar } = context.pine;
+
+                const deg_inf = math.todegrees(Infinity);
+                const rad_inf = math.toradians(Infinity);
+                const deg_neg_inf = math.todegrees(-Infinity);
+                const rad_neg_inf = math.toradians(-Infinity);
+
+                plotchar(deg_inf, 'deg_inf');
+                plotchar(rad_inf, 'rad_inf');
+                plotchar(deg_neg_inf, 'deg_neg_inf');
+                plotchar(rad_neg_inf, 'rad_neg_inf');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['deg_inf'].data[0].value).toBe(Infinity);
+            expect(plots['rad_inf'].data[0].value).toBe(Infinity);
+            expect(plots['deg_neg_inf'].data[0].value).toBe(-Infinity);
+            expect(plots['rad_neg_inf'].data[0].value).toBe(-Infinity);
         });
     });
 });
