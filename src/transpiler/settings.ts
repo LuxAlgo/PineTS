@@ -1,5 +1,5 @@
 // Known Pine Script namespaces that might be used as functions or objects
-export const KNOWN_NAMESPACES = ['ta', 'math', 'request', 'array', 'input'];
+export const KNOWN_NAMESPACES = ['ta', 'math', 'request', 'array', 'input', 'strategy'];
 
 // This is used to transform ns() calls to ns.any() calls
 export const NAMESPACES_LIKE = ['hline', 'plot', 'fill'];
@@ -28,7 +28,6 @@ export const CONTEXT_PINE_VARS = [
 
     //declarations
     'indicator',
-    'strategy',
     'library',
 
     //
@@ -45,7 +44,6 @@ export const CONTEXT_PINE_VARS = [
     'map',
     'matrix',
     'log',
-    'map',
     //types
     'Type', //UDT
     'bool',

@@ -5,6 +5,7 @@ import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { Context } from './Context.class';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
+import { processStrategyOrders } from './namespaces/strategy/utils';
 
 /**
  * This class is a wrapper for the Pine Script language, it allows to run Pine Script code in a JavaScript environment
@@ -620,6 +621,11 @@ export class PineTS {
             context.data.hlcc4.data.push(this.hlcc4[i]);
             context.data.openTime.data.push(this.openTime[i]);
             context.data.closeTime.data.push(this.closeTime[i]);
+
+            // Process strategy orders at the START of the bar (filling at Open)
+            if (context.strategy) {
+                processStrategyOrders(context);
+            }
 
             const result = await transpiledFn(context);
 

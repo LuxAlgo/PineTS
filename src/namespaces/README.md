@@ -293,9 +293,27 @@ hline.style_dotted; // Style constant
 
 This follows the same pattern as Case #2, ensuring consistent behavior across both use cases.
 
+### Case #4: Namespace exposing variables/constants
+
+**Problem:** Some namespaces expose both methods and constants. For example, `math` exposes both functions and constants like `math.pi`.
+
+**Solution:** In this case we implement the constants as methods without params, because the transpiler converts namespace constants to function calls internally.
+
+For example:
+in order to handle the pine script `math.pi` we implement a method in the math namespace methods folder called pi
+and the implementation is as follows:
+
+```typescript
+export function pi(context: any) {
+    return () => {
+        return Math.PI;
+    };
+}
+```
+
 ---
 
-### Case #4: Tuple Returns (Multiple Values)
+### Case #5: Tuple Returns (Multiple Values)
 
 **Problem:** Pine Script allows functions to return multiple values as tuples, which must be destructured by the caller.
 
@@ -324,7 +342,7 @@ Only a few TA functions return tuples:
 
 ---
 
-### Case #5: NaN and Floating-Point Equality
+### Case #6: NaN and Floating-Point Equality
 
 **Problem:** Pine Script treats NaN comparisons specially and uses epsilon-based equality for floating-point numbers.
 
