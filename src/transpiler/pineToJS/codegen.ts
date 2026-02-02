@@ -1289,8 +1289,14 @@ export class CodeGenerator {
         this.write('}');
     }
 
-    // Generate SwitchExpression (convert to IIFE with switch statement)
+    // Generate SwitchExpression (convert to IIFE with switch statement or if/else if)
     generateSwitchExpression(node) {
+        // If discriminant is null, it's a switch without expression - convert to if/else if
+        if (node.discriminant === null) {
+            this.generateSwitchAsIfElse(node);
+            return;
+        }
+        
         this.write('(() => {\n');
         this.indent++;
         this.write(this.indentStr.repeat(this.indent));
@@ -1313,10 +1319,33 @@ export class CodeGenerator {
             }
             
             this.indent++;
-            this.write(this.indentStr.repeat(this.indent));
-            this.write('return ');
-            this.generateExpression(c.consequent);
-            this.write(';\n');
+            
+            // If case has multiple statements, generate all of them
+            if (c.statements && c.statements.length > 1) {
+                // Generate all statements except the last one
+                for (let i = 0; i < c.statements.length - 1; i++) {
+                    this.write(this.indentStr.repeat(this.indent));
+                    this.generateStatement(c.statements[i]);
+                }
+                // Generate return with the last statement's value
+                this.write(this.indentStr.repeat(this.indent));
+                this.write('return ');
+                // If last statement is an ExpressionStatement, use its expression
+                const lastStmt = c.statements[c.statements.length - 1];
+                if (lastStmt.type === 'ExpressionStatement') {
+                    this.generateExpression(lastStmt.expression);
+                } else {
+                    this.generateExpression(c.consequent);
+                }
+                this.write(';\n');
+            } else {
+                // Single expression case
+                this.write(this.indentStr.repeat(this.indent));
+                this.write('return ');
+                this.generateExpression(c.consequent);
+                this.write(';\n');
+            }
+            
             this.indent--;
         }
         
@@ -1327,6 +1356,58 @@ export class CodeGenerator {
         this.indent--;
         this.write(this.indentStr.repeat(this.indent));
         this.write('})()');
+    }
+
+    // Generate switch without discriminant as if/else if/else chain
+    generateSwitchAsIfElse(node) {
+        for (let i = 0; i < node.cases.length; i++) {
+            const c = node.cases[i];
+            
+            if (c.test) {
+                // Regular case with a condition
+                if (i === 0) {
+                    this.write('if (');
+                } else {
+                    this.write(' else if (');
+                }
+                this.generateExpression(c.test);
+                this.write(') {\n');
+            } else {
+                // Default case (no test)
+                if (i > 0) {
+                    this.write(' else {\n');
+                } else {
+                    // If default is the first (and only) case, just execute the statements
+                    this.write('{\n');
+                }
+            }
+            
+            this.indent++;
+            
+            // Generate all statements in the case
+            if (c.statements && c.statements.length > 0) {
+                for (const stmt of c.statements) {
+                    this.write(this.indentStr.repeat(this.indent));
+                    this.generateStatement(stmt);
+                }
+            } else {
+                // Single expression
+                this.write(this.indentStr.repeat(this.indent));
+                this.generateExpression(c.consequent);
+                this.write(';\n');
+            }
+            
+            this.indent--;
+            this.write(this.indentStr.repeat(this.indent));
+            this.write('}');
+            
+            // Add newline after closing brace, except for the last case
+            if (i < node.cases.length - 1) {
+                // No newline here, the next iteration will add 'else'
+            } else {
+                this.write('\n');
+            }
+        }
     }
 
     // Generate SequenceExpression

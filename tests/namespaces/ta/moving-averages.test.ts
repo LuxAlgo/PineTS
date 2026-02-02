@@ -112,14 +112,23 @@ describe('Technical Analysis - Moving Averages', () => {
         const sourceCode = (context) => {
             const { close, volume } = context.data;
             const { ta, plotchar } = context.pine;
+            let source = close;
 
-            const res = ta.linreg(close, 9, 3);
+            const res = ta.linreg(source, 9, 3);
             plotchar(res, 'plot');
 
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const pineCode = `
+//@version=6
+indicator("LINREG - Linear Regression with actual data", "", true)
+source = close
+res = ta.linreg(source, 9, 3)
+plot(res, "plot")
+`;
+
+        const { result, plots } = await pineTS.run(pineCode);
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();

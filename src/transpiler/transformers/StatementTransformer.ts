@@ -214,14 +214,8 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
             return;
         }
 
-        if (isArrowFunction) {
-            // Register arrow function parameters as context-bound
-            decl.init.params.forEach((param: any) => {
-                if (param.type === 'Identifier') {
-                    scopeManager.addContextBoundVar(param.name);
-                }
-            });
-        }
+        // Note: Arrow function parameters are already registered in AnalysisPass
+        // No need to register them again here
 
         // Transform non-context variables to use the context object
         const newName = scopeManager.addVariable(decl.id.name, varNode.kind);
@@ -277,6 +271,12 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                                     arg.parent = node;
                                 }
                             });
+
+                            // If the callee is an IIFE (ArrowFunctionExpression or FunctionExpression), traverse it
+                            if (node.callee.type === 'ArrowFunctionExpression' || node.callee.type === 'FunctionExpression') {
+                                c(node.callee, { parent: node });
+                            }
+
                             transformCallExpression(node, scopeManager);
 
                             if (node.type !== 'CallExpression') return;
@@ -327,6 +327,74 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                                     // Replace the AwaitExpression with just the identifier
                                     Object.assign(node, node.argument);
                                 }
+                            }
+                        },
+                        ArrowFunctionExpression(node: any, state: any, c: any) {
+                            // For IIFE arrow functions, manage hoisting like BlockStatement does
+                            // This prevents hoisted statements from escaping to the outer scope
+                            if (node.body) {
+                                if (node.body.type === 'BlockStatement') {
+                                    // Process each statement with its own hoisting scope
+                                    const newBody: any[] = [];
+                                    node.body.body.forEach((stmt: any) => {
+                                        scopeManager.enterHoistingScope();
+                                        c(stmt, { parent: node.body });
+                                        const hoistedStmts = scopeManager.exitHoistingScope();
+                                        newBody.push(...hoistedStmts);
+                                        newBody.push(stmt);
+                                    });
+                                    node.body.body = newBody;
+                                } else {
+                                    // For expression body, traverse the expression
+                                    c(node.body, { parent: node });
+                                }
+                            }
+                        },
+                        FunctionExpression(node: any, state: any, c: any) {
+                            // For IIFE function expressions, manage hoisting like BlockStatement does
+                            if (node.body && node.body.type === 'BlockStatement') {
+                                const newBody: any[] = [];
+                                node.body.body.forEach((stmt: any) => {
+                                    scopeManager.enterHoistingScope();
+                                    c(stmt, { parent: node.body });
+                                    const hoistedStmts = scopeManager.exitHoistingScope();
+                                    newBody.push(...hoistedStmts);
+                                    newBody.push(stmt);
+                                });
+                                node.body.body = newBody;
+                            }
+                        },
+                        SwitchStatement(node: any, state: any, c: any) {
+                            // Traverse discriminant and all cases
+                            if (node.discriminant) {
+                                node.discriminant.parent = node;
+                                c(node.discriminant, { parent: node });
+                            }
+                            if (node.cases) {
+                                node.cases.forEach((caseNode: any) => {
+                                    caseNode.parent = node;
+                                    c(caseNode, { parent: node });
+                                });
+                            }
+                        },
+                        SwitchCase(node: any, state: any, c: any) {
+                            // Traverse test (the case value)
+                            if (node.test) {
+                                node.test.parent = node;
+                                c(node.test, { parent: node });
+                            }
+                            // Traverse all consequent statements with hoisting management
+                            if (node.consequent) {
+                                const newConsequent: any[] = [];
+                                node.consequent.forEach((stmt: any) => {
+                                    scopeManager.enterHoistingScope();
+                                    stmt.parent = node;
+                                    c(stmt, { parent: node });
+                                    const hoistedStmts = scopeManager.exitHoistingScope();
+                                    newConsequent.push(...hoistedStmts);
+                                    newConsequent.push(stmt);
+                                });
+                                node.consequent = newConsequent;
                             }
                         },
                     }
@@ -769,6 +837,38 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                         c(node.left, state);
                         c(node.right, state);
                     },
+                    ArrowFunctionExpression(node: any, state: any, c: any) {
+                        // For IIFE arrow functions, manage hoisting like BlockStatement does
+                        if (node.body) {
+                            if (node.body.type === 'BlockStatement') {
+                                const newBody: any[] = [];
+                                node.body.body.forEach((stmt: any) => {
+                                    scopeManager.enterHoistingScope();
+                                    c(stmt, state);
+                                    const hoistedStmts = scopeManager.exitHoistingScope();
+                                    newBody.push(...hoistedStmts);
+                                    newBody.push(stmt);
+                                });
+                                node.body.body = newBody;
+                            } else {
+                                c(node.body, state);
+                            }
+                        }
+                    },
+                    FunctionExpression(node: any, state: any, c: any) {
+                        // For IIFE function expressions, manage hoisting like BlockStatement does
+                        if (node.body && node.body.type === 'BlockStatement') {
+                            const newBody: any[] = [];
+                            node.body.body.forEach((stmt: any) => {
+                                scopeManager.enterHoistingScope();
+                                c(stmt, state);
+                                const hoistedStmts = scopeManager.exitHoistingScope();
+                                newBody.push(...hoistedStmts);
+                                newBody.push(stmt);
+                            });
+                            node.body.body = newBody;
+                        }
+                    },
                     SwitchStatement(node: any, state: ScopeManager, c: any) {
                         node.discriminant.parent = node;
                         c(node.discriminant, state);
@@ -777,16 +877,16 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                             c(caseNode, state);
                         });
                     },
-                    SwitchCase(node: any, state: ScopeManager, c: any) {
+                    SwitchCase(node: any, state: any, c: any) {
                         if (node.test) {
                             node.test.parent = node;
                             c(node.test, state);
                         }
                         const newConsequent: any[] = [];
                         node.consequent.forEach((stmt: any) => {
-                            state.enterHoistingScope();
+                            scopeManager.enterHoistingScope();
                             c(stmt, state);
-                            const hoistedStmts = state.exitHoistingScope();
+                            const hoistedStmts = scopeManager.exitHoistingScope();
                             newConsequent.push(...hoistedStmts);
                             newConsequent.push(stmt);
                         });
@@ -840,8 +940,25 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
         node.body.body.unshift(callIdDecl);
 
         scopeManager.pushScope('fn');
+        
+        // Register function parameters in the function scope
+        // They should be context-bound within this scope only
+        node.params.forEach((param: any) => {
+            if (param.type === 'Identifier') {
+                scopeManager.addContextBoundVar(param.name, false);
+            }
+        });
+        
         // Just delegate to the callback to continue the recursion
         c(node.body, scopeManager);
+        
+        // Clean up: remove parameters from context-bound after exiting function scope
+        node.params.forEach((param: any) => {
+            if (param.type === 'Identifier') {
+                scopeManager.removeContextBoundVar(param.name);
+            }
+        });
+        
         scopeManager.popScope();
     }
 }

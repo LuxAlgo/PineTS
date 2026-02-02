@@ -1325,7 +1325,14 @@ export class Parser {
 
     parseSwitchExpression() {
         this.expect(TokenType.KEYWORD, 'switch');
-        const discriminant = this.parseExpression();
+        
+        // Check if switch has no discriminant (switch without expression)
+        // In this case, the next token will be NEWLINE or INDENT
+        let discriminant = null;
+        if (!this.match(TokenType.NEWLINE) && !this.match(TokenType.INDENT)) {
+            discriminant = this.parseExpression();
+        }
+        
         this.skipNewlines();
         this.expect(TokenType.INDENT);
 
@@ -1357,9 +1364,10 @@ export class Parser {
                 consequentStmts.push(new ExpressionStatement(this.parseExpression()));
             }
 
-            // Extract the value expression from statements
+            // Extract the value expression from statements (for backwards compatibility)
             const consequent = this.getBlockValue(consequentStmts);
-            cases.push(new SwitchCase(test, consequent));
+            // Pass both the final value AND all statements to SwitchCase
+            cases.push(new SwitchCase(test, consequent, consequentStmts));
             this.skipNewlines();
         }
 

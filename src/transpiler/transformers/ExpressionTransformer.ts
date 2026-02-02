@@ -296,12 +296,15 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
         // Check if this member expression is NOT already the callee of a CallExpression
         const isAlreadyBeingCalled = memberNode.parent && memberNode.parent.type === 'CallExpression' && memberNode.parent.callee === memberNode;
 
-        // Also check if this is part of a destructuring or variable declaration
+        // Check if this is part of a destructuring pattern (array or object destructuring)
+        // We want to skip only for actual destructuring, not simple assignments
         const isInDestructuring =
             memberNode.parent &&
-            (memberNode.parent.type === 'VariableDeclarator' ||
-                memberNode.parent.type === 'Property' ||
-                memberNode.parent.type === 'AssignmentExpression');
+            ((memberNode.parent.type === 'VariableDeclarator' &&
+                (memberNode.parent.id.type === 'ArrayPattern' || memberNode.parent.id.type === 'ObjectPattern')) ||
+                (memberNode.parent.type === 'AssignmentExpression' &&
+                    (memberNode.parent.left.type === 'ArrayPattern' || memberNode.parent.left.type === 'ObjectPattern')) ||
+                memberNode.parent.type === 'Property');
 
         if (!isAlreadyBeingCalled && !isInDestructuring) {
             // Convert namespace.method to namespace.method()
@@ -953,10 +956,7 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
                 let leftOperand;
                 if (localCtxName) {
                     // $$.id
-                    leftOperand = ASTFactory.createMemberExpression(
-                        ASTFactory.createLocalContextIdentifier(),
-                        ASTFactory.createIdentifier('id')
-                    );
+                    leftOperand = ASTFactory.createMemberExpression(ASTFactory.createLocalContextIdentifier(), ASTFactory.createIdentifier('id'));
                 } else {
                     // Fallback to empty string if not found (should not happen in valid PineTS)
                     leftOperand = ASTFactory.createLiteral('');

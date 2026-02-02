@@ -199,7 +199,9 @@ export class SwitchExpression extends ASTNode {
 }
 
 export class SwitchCase extends ASTNode {
-    constructor(public test: any, public consequent: any) {
+    constructor(public test: any, public consequent: any, public statements?: any[]) {
         super('SwitchCase');
+        // If statements are provided, store them; otherwise consequent is a single expression
+        this.statements = statements;
     }
 }
