@@ -693,6 +693,63 @@ plot(result, "Mode")
         });
     });
 
+    describe('Bug Fix: Identifiers in Pine2JS-generated IIFEs', () => {
+        it('should transform switch discriminant inside standalone IIFEs', async () => {
+            const indicatorCode = `
+//@version=6
+indicator("Test")
+
+scenario = input.string("market", "Mode", options=["market", "limit"])
+fastMA = ta.sma(close, 9)
+slowMA = ta.sma(close, 21)
+
+switch scenario
+    "market" => plot(fastMA, "Fast")
+    "limit" => plot(slowMA, "Slow")
+`;
+
+            const transpiledFn = transpile(indicatorCode, { debug: false });
+            const code = transpiledFn.toString();
+
+            // Verify that scenario is transformed in the switch discriminant
+            expect(code).toContain('switch ($.get($.let.glb1_scenario, 0))');
+            
+            // Should NOT have untransformed identifier
+            expect(code).not.toMatch(/switch \(scenario\)/);
+        });
+
+        it('should work correctly at runtime with transformed identifiers in IIFE', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            const indicatorCode = `
+//@version=6
+indicator("Test")
+
+scenario = input.string("trend", "Mode", options=["trend", "range"])
+longSignal = ta.crossover(ta.sma(close, 9), ta.sma(close, 21))
+shortSignal = ta.crossunder(ta.sma(close, 9), ta.sma(close, 21))
+
+var signal = 0
+
+switch scenario
+    "trend" =>
+        if longSignal
+            signal := 1
+        else if shortSignal
+            signal := -1
+    "range" =>
+        signal := 0
+
+plot(signal, "Signal")
+`;
+
+            const { plots } = await pineTS.run(indicatorCode);
+
+            expect(plots['Signal']).toBeDefined();
+            expect(plots['Signal'].data.length).toBeGreaterThan(0);
+        });
+    });
+
     describe('Edge cases', () => {
         it('should handle multiple switch statements in same scope', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());

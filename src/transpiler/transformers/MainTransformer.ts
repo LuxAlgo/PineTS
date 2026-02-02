@@ -109,8 +109,26 @@ export function runTransformationPass(
         Identifier(node: any, state: ScopeManager) {
             transformIdentifier(node, state);
         },
-        CallExpression(node: any, state: ScopeManager) {
+        CallExpression(node: any, state: ScopeManager, c: any) {
+            // For IIFE patterns (() => { ... })(), we need to traverse the arrow function body
+            if (node.callee && (node.callee.type === 'ArrowFunctionExpression' || node.callee.type === 'FunctionExpression')) {
+                // Traverse the IIFE callee (the function itself)
+                c(node.callee, state);
+            }
+            // Transform the call expression (this handles argument wrapping)
             transformCallExpression(node, state);
+        },
+        ArrowFunctionExpression(node: any, state: ScopeManager, c: any) {
+            // Traverse the body of arrow functions
+            if (node.body) {
+                c(node.body, state);
+            }
+        },
+        FunctionExpression(node: any, state: ScopeManager, c: any) {
+            // Traverse the body of function expressions
+            if (node.body) {
+                c(node.body, state);
+            }
         },
         MemberExpression(node: any, state: ScopeManager) {
             transformMemberExpression(node, originalParamName, state);
