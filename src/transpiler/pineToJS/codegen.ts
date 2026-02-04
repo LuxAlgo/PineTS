@@ -797,7 +797,7 @@ export class CodeGenerator {
         if (op === 'not') op = '!';
 
         this.write(op);
-        
+
         const argPrecedence = this.getPrecedence(node.argument);
         // Unary is 15. If arg < 15, wrap.
         if (argPrecedence < 15) {
@@ -1296,20 +1296,20 @@ export class CodeGenerator {
             this.generateSwitchAsIfElse(node);
             return;
         }
-        
+
         this.write('(() => {\n');
         this.indent++;
         this.write(this.indentStr.repeat(this.indent));
-        
+
         this.write('switch (');
         this.generateExpression(node.discriminant);
         this.write(') {\n');
-        
+
         this.indent++;
-        
+
         for (const c of node.cases) {
             this.write(this.indentStr.repeat(this.indent));
-            
+
             if (c.test) {
                 this.write('case ');
                 this.generateExpression(c.test);
@@ -1317,27 +1317,41 @@ export class CodeGenerator {
             } else {
                 this.write('default:\n');
             }
-            
+
             this.indent++;
-            
+
             // If case has multiple statements, generate all of them
-            if (c.statements && c.statements.length > 1) {
-                // Generate all statements except the last one
-                for (let i = 0; i < c.statements.length - 1; i++) {
-                    this.write(this.indentStr.repeat(this.indent));
-                    this.generateStatement(c.statements[i]);
-                }
-                // Generate return with the last statement's value
-                this.write(this.indentStr.repeat(this.indent));
-                this.write('return ');
-                // If last statement is an ExpressionStatement, use its expression
+            if (c.statements && c.statements.length > 0) {
+                // Check if last statement is actually a value-producing statement
                 const lastStmt = c.statements[c.statements.length - 1];
-                if (lastStmt.type === 'ExpressionStatement') {
-                    this.generateExpression(lastStmt.expression);
+                const hasReturnValue = lastStmt.type === 'ExpressionStatement' || lastStmt.type === 'VariableDeclaration';
+
+                if (hasReturnValue) {
+                    // Generate all statements except the last one
+                    for (let i = 0; i < c.statements.length - 1; i++) {
+                        this.write(this.indentStr.repeat(this.indent));
+                        this.generateStatement(c.statements[i]);
+                    }
+                    // Generate return with the last statement's value
+                    this.write(this.indentStr.repeat(this.indent));
+                    this.write('return ');
+                    // If last statement is an ExpressionStatement, use its expression
+                    if (lastStmt.type === 'ExpressionStatement') {
+                        this.generateExpression(lastStmt.expression);
+                    } else {
+                        this.generateExpression(c.consequent);
+                    }
+                    this.write(';\n');
                 } else {
-                    this.generateExpression(c.consequent);
+                    // All statements are side-effect only (like IfStatement), generate all of them
+                    for (let i = 0; i < c.statements.length; i++) {
+                        this.write(this.indentStr.repeat(this.indent));
+                        this.generateStatement(c.statements[i]);
+                    }
+                    // Add explicit return null
+                    this.write(this.indentStr.repeat(this.indent));
+                    this.write('return null;\n');
                 }
-                this.write(';\n');
             } else {
                 // Single expression case
                 this.write(this.indentStr.repeat(this.indent));
@@ -1345,10 +1359,10 @@ export class CodeGenerator {
                 this.generateExpression(c.consequent);
                 this.write(';\n');
             }
-            
+
             this.indent--;
         }
-        
+
         this.indent--;
         this.write(this.indentStr.repeat(this.indent));
         this.write('}\n'); // end switch
@@ -1362,7 +1376,7 @@ export class CodeGenerator {
     generateSwitchAsIfElse(node) {
         for (let i = 0; i < node.cases.length; i++) {
             const c = node.cases[i];
-            
+
             if (c.test) {
                 // Regular case with a condition
                 if (i === 0) {
@@ -1381,9 +1395,9 @@ export class CodeGenerator {
                     this.write('{\n');
                 }
             }
-            
+
             this.indent++;
-            
+
             // Generate all statements in the case
             if (c.statements && c.statements.length > 0) {
                 for (const stmt of c.statements) {
@@ -1396,11 +1410,11 @@ export class CodeGenerator {
                 this.generateExpression(c.consequent);
                 this.write(';\n');
             }
-            
+
             this.indent--;
             this.write(this.indentStr.repeat(this.indent));
             this.write('}');
-            
+
             // Add newline after closing brace, except for the last case
             if (i < node.cases.length - 1) {
                 // No newline here, the next iteration will add 'else'

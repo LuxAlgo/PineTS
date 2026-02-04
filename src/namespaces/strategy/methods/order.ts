@@ -35,6 +35,8 @@ export function order(context: any) {
         const extractValue = (val: any) => {
             if (val === undefined || val === null) return val;
             if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') return val;
+            // If it's a function, call it to get the actual value (transpiler may wrap values in functions)
+            if (typeof val === 'function') return val();
             if (val instanceof Series) return val.get(0);
             if (Array.isArray(val)) return val[val.length - 1];
             // If it's an object, try to get its current value

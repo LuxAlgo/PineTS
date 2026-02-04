@@ -13,12 +13,12 @@ export function parseStrategyOptions(args: any[]): any {
     // If first arg is a string, it's the title
     if (typeof args[0] === 'string') {
         const options: any = { title: args[0] };
-        
+
         // If second arg is object, merge it
         if (args.length > 1 && typeof args[1] === 'object') {
             return { ...options, ...args[1] };
         }
-        
+
         return options;
     }
 
@@ -35,16 +35,16 @@ export function parseStrategyOptions(args: any[]): any {
  */
 export function calculateOrderQty(context: any, specifiedQty: number | undefined, direction: number, fillPrice: number): number {
     const strategy: StrategyState = context.strategy;
-    
+
     // Get qty type and value, calling functions if needed
     let qtyType = strategy.config.default_qty_type || 'fixed';
     let qtyValue = strategy.config.default_qty_value || 1;
-    
+
     // If qtyType is a function, call it to get the actual string value
     if (typeof qtyType === 'function') {
         qtyType = (qtyType as Function)();
     }
-    
+
     // If qtyValue is a function, call it to get the actual numeric value
     if (typeof qtyValue === 'function') {
         qtyValue = (qtyValue as Function)();
@@ -57,18 +57,18 @@ export function calculateOrderQty(context: any, specifiedQty: number | undefined
     switch (qtyType) {
         case 'fixed':
             return qtyValue;
-        
+
         case 'cash':
             // Calculate how many units we can buy with the cash amount
             return qtyValue / fillPrice;
-        
+
         case 'percent_of_equity':
             // Calculate quantity based on percentage of equity
             // qty_value=10 means 10% of equity
             const positionValue = (strategy.equity * qtyValue) / 100;
             const equityQty = positionValue / fillPrice;
             return equityQty;
-        
+
         default:
             return qtyValue;
     }
@@ -106,7 +106,9 @@ export function processStrategyOrders(context: any): void {
         let shouldFill = false;
         let fillPrice = openPrice;
 
-        console.log(`[DEBUG ProcessOrders] Checking order ${order.id} (type=${order.type}) at bar ${context.idx}. Open=${openPrice}, High=${highPrice}, Low=${lowPrice}`);
+        console.log(
+            `[DEBUG ProcessOrders] Checking order ${order.id} (type=${order.type}) at bar ${context.idx}. Open=${openPrice}, High=${highPrice}, Low=${lowPrice}`
+        );
 
         // Determine if order should be filled based on type
         switch (order.type) {
@@ -160,7 +162,7 @@ export function processStrategyOrders(context: any): void {
     }
 
     // Remove filled and cancelled orders
-    strategy.pendingOrders = pendingOrders.filter(o => o.status === 'pending');
+    strategy.pendingOrders = pendingOrders.filter((o) => o.status === 'pending');
 
     // Update strategy metrics using CLOSE price (for script access)
     updateUnrealizedPnL(context, closePrice);
@@ -199,8 +201,8 @@ export function openTrade(context: any, entryId: string, direction: number, qty:
 
     // Update position
     const oldSize = strategy.position.size;
-    const newSize = oldSize + (direction * qty);
-    
+    const newSize = oldSize + direction * qty;
+
     if (oldSize === 0) {
         // Opening fresh position
         strategy.position = {
@@ -211,7 +213,7 @@ export function openTrade(context: any, entryId: string, direction: number, qty:
         };
     } else if (Math.sign(oldSize) === Math.sign(newSize)) {
         // Adding to existing position - calculate new average price
-        const totalCost = (Math.abs(oldSize) * strategy.position.avgPrice) + (qty * price);
+        const totalCost = Math.abs(oldSize) * strategy.position.avgPrice + qty * price;
         const totalQty = Math.abs(newSize);
         strategy.position.avgPrice = totalCost / totalQty;
         strategy.position.size = newSize;
@@ -237,11 +239,11 @@ function executeOrder(context: any, order: Order, fillPrice: number, fillTime: n
         // First, use the order to close existing trades
         const qtyToClose = Math.min(Math.abs(oldPosition), order.qty);
         closePartialPosition(context, qtyToClose, fillPrice, fillTime);
-        
+
         // If there is remaining quantity (reversal), open a new trade
         const remainingQty = order.qty - qtyToClose;
         if (remainingQty > 0) {
-             openTrade(context, order.id, direction, remainingQty, fillPrice, fillTime);
+            openTrade(context, order.id, direction, remainingQty, fillPrice, fillTime);
         }
     } else {
         // We are increasing position or opening fresh
@@ -249,47 +251,44 @@ function executeOrder(context: any, order: Order, fillPrice: number, fillTime: n
     }
 }
 
-
 /**
  * Close partial or full position
  */
 export function closePartialPosition(context: any, qtyToClose: number, exitPrice: number, exitTime: number): void {
     const strategy: StrategyState = context.strategy;
     let remainingQty = qtyToClose;
-    
+
     // Close trades from oldest to newest (FIFO)
     const tradesToClose = [...strategy.openTrades];
     strategy.openTrades = [];
-    
+
     for (const trade of tradesToClose) {
         if (remainingQty <= 0) {
             // Keep this trade open
             strategy.openTrades.push(trade);
             continue;
         }
-        
+
         const qtyClosing = Math.min(trade.qty, remainingQty);
-        
+
         if (qtyClosing >= trade.qty) {
             // Fully close this trade
             trade.status = 'closed';
             trade.exitPrice = exitPrice;
             trade.exitBar = context.idx;
             trade.exitTime = exitTime;
-            
+
             // Calculate profit
-            const priceChange = trade.direction === 1 
-                ? (exitPrice - trade.entryPrice) 
-                : (trade.entryPrice - exitPrice);
+            const priceChange = trade.direction === 1 ? exitPrice - trade.entryPrice : trade.entryPrice - exitPrice;
             trade.profit = priceChange * trade.qty;
-            
+
             // Update gross profit/loss
             if (trade.profit > 0) {
                 strategy.grossProfit += trade.profit;
             } else {
                 strategy.grossLoss += Math.abs(trade.profit);
             }
-            
+
             strategy.closedTrades.push(trade);
             remainingQty -= qtyClosing;
         } else {
@@ -303,30 +302,28 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
                 exitBar: context.idx,
                 exitTime,
             };
-            
+
             // Calculate profit for closed portion
-            const priceChange = trade.direction === 1 
-                ? (exitPrice - trade.entryPrice) 
-                : (trade.entryPrice - exitPrice);
+            const priceChange = trade.direction === 1 ? exitPrice - trade.entryPrice : trade.entryPrice - exitPrice;
             closedPortion.profit = priceChange * qtyClosing;
-            
+
             // Update gross profit/loss
             if (closedPortion.profit > 0) {
                 strategy.grossProfit += closedPortion.profit;
             } else {
                 strategy.grossLoss += Math.abs(closedPortion.profit);
             }
-            
+
             strategy.trades.push(closedPortion);
             strategy.closedTrades.push(closedPortion);
-            
+
             // Keep the remaining portion open
             trade.qty -= qtyClosing;
             strategy.openTrades.push(trade);
             remainingQty = 0;
         }
     }
-    
+
     // Update net profit
     strategy.netProfit = strategy.grossProfit - strategy.grossLoss;
 
@@ -334,9 +331,9 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
     const currentSize = strategy.position.size;
     const sizeReduction = Math.sign(currentSize) * qtyToClose; // Reduce magnitude
     const newSize = currentSize - sizeReduction;
-    
+
     strategy.position.size = newSize;
-    
+
     if (newSize === 0) {
         strategy.position.avgPrice = 0;
         strategy.position.direction = 0;
@@ -361,12 +358,10 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
  */
 function updateUnrealizedPnL(context: any, currentPrice: number): void {
     const strategy: StrategyState = context.strategy;
-    
+
     let unrealizedPnL = 0;
     for (const trade of strategy.openTrades) {
-        const priceChange = trade.direction === 1 
-            ? (currentPrice - trade.entryPrice) 
-            : (trade.entryPrice - currentPrice);
+        const priceChange = trade.direction === 1 ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice;
         unrealizedPnL += priceChange * trade.qty;
     }
 
@@ -381,10 +376,10 @@ function updateUnrealizedPnL(context: any, currentPrice: number): void {
  */
 function updateStrategyMetrics(context: any): void {
     const strategy: StrategyState = context.strategy;
-    
+
     // Net profit is already calculated when trades close
     // Equity is updated with unrealized P&L
-    
+
     // Additional metrics can be calculated here
     // (win rate, max drawdown, etc.)
 }
