@@ -769,6 +769,9 @@ export class Parser {
         const consequent = this.parseBlock();
         let alternate = null;
 
+        // Skip newlines/comments between block end and potential 'else'
+        this.skipNewlines();
+
         if (this.match(TokenType.KEYWORD, 'else')) {
             this.advance();
             this.skipNewlines();

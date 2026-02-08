@@ -762,6 +762,47 @@ plot(close)
 });
 
 describe('Pine Script Transpilation - Bug Fixes', () => {
+    describe('Inline Comments', () => {
+        it('should handle inline comments', () => {
+            const code = `
+//@version=5
+indicator("Inline comment in type field repro")
+type T
+    int x // inline comment after a field
+var array<T> xs = array.new<T>()
+`;
+            const result = transpile(code);
+            const jsCode = result.toString();
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('Type(');
+        });
+    });
+
+    describe('If / Else with Comments', () => {
+        it('should allow comments between if block and else', () => {
+            const code = `
+//@version=6
+indicator("else if comment")
+
+x = 1
+var float y = na
+
+if x == 1
+    y := 10
+// comment between if and else
+else if x == 2
+    y := 20
+else
+    y := 30
+
+plot(y)
+`;
+            const result = transpile(code);
+            const jsCode = result.toString();
+            expect(jsCode).toBeDefined();
+        });
+    });
+
     describe('Generic Type Syntax', () => {
         it('should parse and transpile simple generic types (array<float>)', () => {
             const code = `
