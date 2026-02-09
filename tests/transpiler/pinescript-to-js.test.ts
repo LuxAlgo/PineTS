@@ -762,6 +762,22 @@ plot(close)
 });
 
 describe('Pine Script Transpilation - Bug Fixes', () => {
+    describe('Inline Comments', () => {
+        it('should handle inline comments', () => {
+            const code = `
+//@version=5
+indicator("Inline comment in type field repro")
+type T
+    int x // inline comment after a field
+var array<T> xs = array.new<T>()
+`;
+            const result = transpile(code);
+            const jsCode = result.toString();
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('Type(');
+        });
+    });
+
     describe('Generic Type Syntax', () => {
         it('should parse and transpile simple generic types (array<float>)', () => {
             const code = `

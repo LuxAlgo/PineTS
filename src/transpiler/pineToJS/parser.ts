@@ -106,7 +106,8 @@ export class Parser {
     }
 
     skipNewlines(allowIndent = false) {
-        while (this.match(TokenType.NEWLINE)) {
+        // while (this.match(TokenType.NEWLINE)) {
+        while (this.match(TokenType.NEWLINE) || this.match(TokenType.COMMENT)) {
             this.advance();
         }
         if (allowIndent && this.match(TokenType.INDENT)) {
