@@ -1125,7 +1125,7 @@ switch mode
     describe('Typed Array Variable Declarations', () => {
         it('should transpile float[] array shorthand syntax', () => {
             const code = `
-//@version=6
+//@version=5
 indicator("Array Shorthand")
 
 float[] prices = na
@@ -1161,7 +1161,7 @@ plot(close)
 
         it('should transpile var float[] with array shorthand', () => {
             const code = `
-//@version=6
+//@version=5
 indicator("Var Array Shorthand")
 
 var float[] prices = na
