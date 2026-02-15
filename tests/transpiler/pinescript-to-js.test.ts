@@ -1122,6 +1122,157 @@ switch mode
         });
     });
 
+    describe('Typed Array Variable Declarations', () => {
+        it('should transpile float[] array shorthand syntax', () => {
+            const code = `
+//@version=6
+indicator("Array Shorthand")
+
+float[] prices = na
+
+plot(close)
+            `;
+
+            const result = transpile(code);
+            const jsCode = result.toString();
+
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('$.let.glb1_prices = $.init($.let.glb1_prices, NaN)');
+        });
+
+        it('should transpile array<float> generic syntax', () => {
+            const code = `
+//@version=6
+indicator("Array Generic")
+
+array<float> prices = na
+
+plot(close)
+            `;
+
+            const result = transpile(code);
+            const jsCode = result.toString();
+
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('$.let.glb1_prices = $.init($.let.glb1_prices, NaN)');
+            // Should NOT produce standalone 'array;' expression
+            expect(jsCode).not.toMatch(/^\s*array\s*;/m);
+        });
+
+        it('should transpile var float[] with array shorthand', () => {
+            const code = `
+//@version=6
+indicator("Var Array Shorthand")
+
+var float[] prices = na
+
+plot(close)
+            `;
+
+            const result = transpile(code);
+            const jsCode = result.toString();
+
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('$.var.glb1_prices');
+            expect(jsCode).toContain('$.initVar(');
+        });
+
+        it('should transpile var array<float> with generic syntax', () => {
+            const code = `
+//@version=6
+indicator("Var Array Generic")
+
+var array<float> prices = na
+
+plot(close)
+            `;
+
+            const result = transpile(code);
+            const jsCode = result.toString();
+
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('$.var.glb1_prices');
+            expect(jsCode).toContain('$.initVar(');
+        });
+
+        it('should handle both array syntaxes together', () => {
+            const code = `
+//@version=6
+indicator("Both Array Syntaxes")
+
+var float[] prices1 = na
+float[] prices2 = na
+array<float> prices3 = na
+var array<float> prices4 = na
+
+plot(close)
+            `;
+
+            const result = transpile(code);
+            const jsCode = result.toString();
+
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('$.var.glb1_prices1');
+            expect(jsCode).toContain('$.let.glb1_prices2');
+            expect(jsCode).toContain('$.let.glb1_prices3');
+            expect(jsCode).toContain('$.var.glb1_prices4');
+        });
+
+        it('should transpile int[] array shorthand', () => {
+            const code = `
+//@version=6
+indicator("Int Array")
+
+int[] counts = na
+
+plot(close)
+            `;
+
+            const result = transpile(code);
+            const jsCode = result.toString();
+
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('$.let.glb1_counts = $.init($.let.glb1_counts, NaN)');
+        });
+
+        it('should transpile map<string, float> generic syntax', () => {
+            const code = `
+//@version=6
+indicator("Map Generic")
+
+map<string, float> lookup = na
+
+plot(close)
+            `;
+
+            const result = transpile(code);
+            const jsCode = result.toString();
+
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('$.let.glb1_lookup = $.init($.let.glb1_lookup, NaN)');
+        });
+
+        it('should transpile typed array declarations inside function bodies', () => {
+            const code = `
+//@version=6
+indicator("Array In Function")
+
+myFunc() =>
+    float[] local_prices = na
+    local_prices
+
+plot(close)
+            `;
+
+            const result = transpile(code);
+            const jsCode = result.toString();
+
+            expect(jsCode).toBeDefined();
+            expect(jsCode).toContain('fn');
+            expect(jsCode).toContain('local_prices');
+        });
+    });
+
     describe('Combined Bug Fixes', () => {
         it('should handle generic types with dot-prefix numbers', () => {
             const code = `
