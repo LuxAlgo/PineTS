@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { type PlotCharOptions, type IndicatorOptions } from '../types/PineTypes';
 import { Series } from '../Series';
 import { PineTypeObject } from './PineTypeObject';
 import { parseArgsForPineParams } from './utils';
@@ -80,22 +79,22 @@ export class Core {
                 const hex = color.slice(1);
                 return a
                     ? `#${hex}${Math.round((255 / 100) * (100 - a))
-                        .toString(16)
-                        .padStart(2, '0')
-                        .toUpperCase()}`
+                          .toString(16)
+                          .padStart(2, '0')
+                          .toUpperCase()}`
                     : `#${hex}`;
             } else {
                 const hex = COLOR_CONSTANTS[color];
                 return hex
                     ? a
                         ? `#${hex}${Math.round((255 / 100) * (100 - a))
-                            .toString(16)
-                            .padStart(2, '0')
-                            .toUpperCase()}`
+                              .toString(16)
+                              .padStart(2, '0')
+                              .toUpperCase()}`
                         : `#${hex}`
                     : a
-                        ? `rgba(${color}, ${(100 - a) / 100})`
-                        : color; // Handle existing RGB format
+                      ? `rgba(${color}, ${(100 - a) / 100})`
+                      : color; // Handle existing RGB format
             }
         },
         aqua: COLOR_CONSTANTS['aqua'],
@@ -116,7 +115,7 @@ export class Core {
         white: COLOR_CONSTANTS['white'],
         yellow: COLOR_CONSTANTS['yellow'],
     };
-    constructor(private context: any) { }
+    constructor(private context: any) {}
     private extractPlotOptions(options: PlotCharOptions) {
         const _options: any = {};
         for (let key in options) {
@@ -186,7 +185,7 @@ export class Core {
         const val = Series.from(series).get(0);
         if (typeof val !== 'number')
             throw new Error(
-                `Cannot call "int" with argument "x"="${val}". An argument of "literal string" type was used but a "simple int" is expected.`
+                `Cannot call "int" with argument "x"="${val}". An argument of "literal string" type was used but a "simple int" is expected.`,
             );
         return Math.floor(val);
     }
@@ -194,7 +193,7 @@ export class Core {
         const val = Series.from(series).get(0);
         if (typeof val !== 'number')
             throw new Error(
-                `Cannot call "float" with argument "x"="${val}". An argument of "literal string" type was used but a "const float" is expected.`
+                `Cannot call "float" with argument "x"="${val}". An argument of "literal string" type was used but a "const float" is expected.`,
             );
         return val;
     }
