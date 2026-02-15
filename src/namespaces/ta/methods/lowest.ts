@@ -4,6 +4,14 @@ import { Series } from '../../../Series';
 
 export function lowest(context: any) {
     return (source: any, _length: any, _callId?: string) => {
+        // if the _length is of type string, this is probably the _callId 
+        // ==> this is a weak approach to determine syntaxes : ta.low(length) vs ta.low(source, length)
+        if (typeof _length === 'string' && _callId === undefined) {
+            _callId = _length
+            _length = source
+            source = context.data.low;
+        }
+
         const length = Series.from(_length).get(0);
 
         // Rolling minimum

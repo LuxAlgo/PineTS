@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { type PlotCharOptions, type IndicatorOptions } from '../types/PineTypes';
 import { Series } from '../Series';
 import { PineTypeObject } from './PineTypeObject';
 import { parseArgsForPineParams } from './utils';
@@ -79,49 +80,43 @@ export class Core {
                 const hex = color.slice(1);
                 return a
                     ? `#${hex}${Math.round((255 / 100) * (100 - a))
-                          .toString(16)
-                          .padStart(2, '0')
-                          .toUpperCase()}`
+                        .toString(16)
+                        .padStart(2, '0')
+                        .toUpperCase()}`
                     : `#${hex}`;
             } else {
                 const hex = COLOR_CONSTANTS[color];
                 return hex
                     ? a
                         ? `#${hex}${Math.round((255 / 100) * (100 - a))
-                              .toString(16)
-                              .padStart(2, '0')
-                              .toUpperCase()}`
+                            .toString(16)
+                            .padStart(2, '0')
+                            .toUpperCase()}`
                         : `#${hex}`
                     : a
-                    ? `rgba(${color}, ${(100 - a) / 100})`
-                    : color; // Handle existing RGB format
+                        ? `rgba(${color}, ${(100 - a) / 100})`
+                        : color; // Handle existing RGB format
             }
         },
-        white: COLOR_CONSTANTS['white'],
-        lime: COLOR_CONSTANTS['lime'],
-        green: COLOR_CONSTANTS['green'],
-        red: COLOR_CONSTANTS['red'],
-        maroon: COLOR_CONSTANTS['maroon'],
+        aqua: COLOR_CONSTANTS['aqua'],
         black: COLOR_CONSTANTS['black'],
-        gray: COLOR_CONSTANTS['gray'],
         blue: COLOR_CONSTANTS['blue'],
-        yellow: COLOR_CONSTANTS['yellow'],
+        fuchsia: COLOR_CONSTANTS['fuchsia'],
+        gray: COLOR_CONSTANTS['gray'],
+        green: COLOR_CONSTANTS['green'],
+        lime: COLOR_CONSTANTS['lime'],
+        maroon: COLOR_CONSTANTS['maroon'],
+        navy: COLOR_CONSTANTS['navy'],
+        olive: COLOR_CONSTANTS['olive'],
         orange: COLOR_CONSTANTS['orange'],
         purple: COLOR_CONSTANTS['purple'],
-        pink: COLOR_CONSTANTS['pink'],
-        brown: COLOR_CONSTANTS['brown'],
-        teal: COLOR_CONSTANTS['teal'],
-        cyan: COLOR_CONSTANTS['cyan'],
-        navy: COLOR_CONSTANTS['navy'],
-        indigo: COLOR_CONSTANTS['indigo'],
-        violet: COLOR_CONSTANTS['violet'],
-        magenta: COLOR_CONSTANTS['magenta'],
-        rose: COLOR_CONSTANTS['rose'],
-        gold: COLOR_CONSTANTS['gold'],
+        red: COLOR_CONSTANTS['red'],
         silver: COLOR_CONSTANTS['silver'],
-        bronze: COLOR_CONSTANTS['bronze'],
+        teal: COLOR_CONSTANTS['teal'],
+        white: COLOR_CONSTANTS['white'],
+        yellow: COLOR_CONSTANTS['yellow'],
     };
-    constructor(private context: any) {}
+    constructor(private context: any) { }
     private extractPlotOptions(options: PlotCharOptions) {
         const _options: any = {};
         for (let key in options) {

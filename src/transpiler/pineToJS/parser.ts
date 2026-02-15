@@ -193,16 +193,10 @@ export class Parser {
         // Check for typed variable declaration (type identifier = ...)
         // Pattern: IDENTIFIER IDENTIFIER OPERATOR(=)
         // Also handles: IDENTIFIER IDENTIFIER IDENTIFIER OPERATOR(=) for multi-qualifier types
-        else if (this.peek().type === TokenType.IDENTIFIER && this.peek(1).type === TokenType.IDENTIFIER) {
-            // Check if this is a typed variable declaration
-            let offset = 2;
-            // Skip additional type qualifiers (series float x, simple int y, etc.)
-            while (this.peek(offset).type === TokenType.IDENTIFIER) {
-                offset++;
-            }
-            if (this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '=') {
-                stmt = this.parseTypedVarDeclaration();
-            }
+        // Also handles: IDENTIFIER[] IDENTIFIER OPERATOR(=) for array shorthand (float[] x = ...)
+        // Also handles: IDENTIFIER<...> IDENTIFIER OPERATOR(=) for generic types (array<float> x = ...)
+        else if (this.peek().type === TokenType.IDENTIFIER && this.isTypedVarDeclaration()) {
+            stmt = this.parseTypedVarDeclaration();
         }
 
         if (!stmt) {
@@ -453,13 +447,90 @@ export class Parser {
         return new VariableDeclaration([new VariableDeclarator(id, init, varType)], kind);
     }
 
+    // Lookahead to detect typed variable declaration patterns:
+    //   IDENTIFIER IDENTIFIER ... IDENTIFIER = (simple: int x =, series float x =)
+    //   IDENTIFIER [] IDENTIFIER = (array shorthand: float[] x =)
+    //   IDENTIFIER <...> IDENTIFIER = (generic: array<float> x =)
+    isTypedVarDeclaration() {
+        let offset = 0;
+
+        // First token must be IDENTIFIER (already checked by caller)
+        if (this.peek(offset).type !== TokenType.IDENTIFIER) return false;
+        offset++;
+
+        // Check for array shorthand: type[] name =
+        if (this.peek(offset).type === TokenType.LBRACKET && this.peek(offset + 1).type === TokenType.RBRACKET) {
+            offset += 2; // skip []
+            // Now expect IDENTIFIER (name) then = 
+            if (this.peek(offset).type !== TokenType.IDENTIFIER) return false;
+            offset++;
+            return this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '=';
+        }
+
+        // Check for generic type: type<...> name =
+        if (this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '<') {
+            offset++; // skip <
+            let depth = 1;
+            // Skip until matching >
+            while (depth > 0 && this.peek(offset).type !== TokenType.EOF) {
+                if (this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '<') depth++;
+                else if (this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '>') depth--;
+                offset++;
+            }
+            // Now expect IDENTIFIER (name) then =
+            if (this.peek(offset).type !== TokenType.IDENTIFIER) return false;
+            offset++;
+            return this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '=';
+        }
+
+        // Check for simple typed declaration: type name = or type qualifier name =
+        if (this.peek(offset).type !== TokenType.IDENTIFIER) return false;
+        offset++;
+        // Skip additional type qualifiers (series float x, simple int y, etc.)
+        while (this.peek(offset).type === TokenType.IDENTIFIER) {
+            offset++;
+        }
+        return this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '=';
+    }
+
     // Parse typed variable declaration (int x = ... or series float x = ...)
+    // Also handles: type[] name = ... and type<generic> name = ...
     parseTypedVarDeclaration() {
         let varType = this.advance().value;
 
+        // Handle array shorthand: type[] name = ...
+        if (this.match(TokenType.LBRACKET) && this.peek(1).type === TokenType.RBRACKET) {
+            this.advance(); // consume [
+            this.advance(); // consume ]
+            varType += '[]';
+        }
+        // Handle generic type: type<...> name = ...
+        else if (this.match(TokenType.OPERATOR, '<')) {
+            this.advance(); // consume <
+            varType += '<';
+
+            // Read generic type parameter(s)
+            while (!this.match(TokenType.OPERATOR, '>')) {
+                if (this.match(TokenType.IDENTIFIER)) {
+                    varType += this.advance().value;
+                } else if (this.match(TokenType.COMMA)) {
+                    varType += this.advance().value;
+                    this.skipNewlines();
+                } else {
+                    break;
+                }
+            }
+
+            if (this.match(TokenType.OPERATOR, '>')) {
+                varType += '>';
+                this.advance();
+            }
+        }
         // Handle multi-qualifier types (series float, simple int, etc.)
-        while (this.peek().type === TokenType.IDENTIFIER && this.peek(1).type === TokenType.IDENTIFIER) {
-            varType += ' ' + this.advance().value;
+        else {
+            while (this.peek().type === TokenType.IDENTIFIER && this.peek(1).type === TokenType.IDENTIFIER) {
+                varType += ' ' + this.advance().value;
+            }
         }
 
         let name = this.expect(TokenType.IDENTIFIER).value;
@@ -679,14 +750,9 @@ export class Parser {
         }
 
         // Check for typed variable declaration (series float x = ...)
-        if (this.peek().type === TokenType.IDENTIFIER && this.peek(1).type === TokenType.IDENTIFIER) {
-            let offset = 2;
-            while (this.peek(offset).type === TokenType.IDENTIFIER) {
-                offset++;
-            }
-            if (this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '=') {
-                return this.parseTypedVarDeclaration();
-            }
+        // Also handles: type[] name = ... and type<generic> name = ...
+        if (this.peek().type === TokenType.IDENTIFIER && this.isTypedVarDeclaration()) {
+            return this.parseTypedVarDeclaration();
         }
 
         // Try to parse as sequence (assignment, assignment, ..., expression)
