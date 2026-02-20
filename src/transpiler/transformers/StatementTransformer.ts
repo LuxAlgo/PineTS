@@ -587,6 +587,16 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
                     transformMemberExpression(node, '', scopeManager);
                     scopeManager.popScope();
                 },
+                CallExpression(node: any, state: ScopeManager, c: any) {
+                    // Set parent on callee so transformMemberExpression knows it's already being called
+                    // (prevents auto-call conversion: e.g. array.size -> array.size())
+                    node.callee.parent = node;
+                    c(node.callee, state);
+                    // Traverse arguments so identifiers get transformed
+                    for (const arg of node.arguments) {
+                        c(arg, state);
+                    }
+                },
             });
         }
     }
@@ -609,6 +619,16 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
                 scopeManager.pushScope('for');
                 transformMemberExpression(node, '', scopeManager);
                 scopeManager.popScope();
+            },
+            CallExpression(node: any, state: ScopeManager, c: any) {
+                // Set parent on callee so transformMemberExpression knows it's already being called
+                // (prevents auto-call conversion: e.g. array.size -> array.size())
+                node.callee.parent = node;
+                c(node.callee, state);
+                // Traverse arguments so identifiers get $.get() wrapping
+                for (const arg of node.arguments) {
+                    c(arg, state);
+                }
             },
         });
     }
