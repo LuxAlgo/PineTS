@@ -175,7 +175,7 @@ export class BinanceProvider implements IProvider {
                     timeframe,
                     1000, // Max allowed by Binance
                     currentStart,
-                    chunkEnd
+                    chunkEnd,
                 );
 
                 if (data.length === 0) break;
@@ -208,15 +208,9 @@ export class BinanceProvider implements IProvider {
         while (remaining > 0 && iterations < maxIterations) {
             iterations++;
             const fetchSize = Math.min(remaining, 1000);
-            
+
             // Fetch batch
-            const data = await this.getMarketData(
-                tickerId, 
-                timeframe, 
-                fetchSize, 
-                undefined, 
-                currentEndTime
-            );
+            const data = await this.getMarketData(tickerId, timeframe, fetchSize, undefined, currentEndTime);
 
             if (data.length === 0) break;
 
@@ -237,7 +231,7 @@ export class BinanceProvider implements IProvider {
         return allData;
     }
 
-    async getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<any> {        
+    async getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<any> {
         try {
             // Check cache first
             // Skip cache if eDate is undefined (live request) to ensure we get fresh data
@@ -273,7 +267,7 @@ export class BinanceProvider implements IProvider {
                 } else if (limit && limit > 1000) {
                     // Backward pagination: Fetch 'limit' candles backwards from eDate (or now)
                     const result = await this.getMarketDataBackwards(tickerId, timeframe, limit, eDate);
-                    
+
                     // Cache the results
                     this.cacheManager.set(cacheParams, result);
                     return result;
@@ -495,5 +489,9 @@ export class BinanceProvider implements IProvider {
             console.error('Error in binance.exchangeInfo:', error);
             return null;
         }
+    }
+
+    configure(config: any): void {
+        // Nothing to configure in BinanceProvider
     }
 }

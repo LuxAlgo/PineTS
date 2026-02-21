@@ -1,26 +1,31 @@
 {
   "Chart Properties": {
-    "chart.bg_color": false,
-    "chart.fg_color": false
+    "chart.bg_color": true,
+    "chart.fg_color": true
   },
   "Chart Type Detection": {
-    "chart.is_heikinashi": false,
-    "chart.is_kagi": false,
-    "chart.is_linebreak": false,
-    "chart.is_pnf": false,
-    "chart.is_range": false,
-    "chart.is_renko": false,
-    "chart.is_standard": false
+    "chart.is_heikinashi": true,
+    "chart.is_kagi": true,
+    "chart.is_linebreak": true,
+    "chart.is_pnf": true,
+    "chart.is_range": true,
+    "chart.is_renko": true,
+    "chart.is_standard": true
   },
   "Visible Range": {
     "chart.left_visible_bar_time": false,
     "chart.right_visible_bar_time": false
   },
-  "Other": {
-    "chart.point.copy()": false,
-    "chart.point.from_index()": false,
-    "chart.point.from_time()": false,
-    "chart.point.new()": false,
-    "chart.point.now()": false
+  "Chart Point": {
+    "chart.point.copy()": true,
+    "chart.point.from_index()": true,
+    "chart.point.from_time()": true,
+    "chart.point.new()": true,
+    "chart.point.now()": true
+  },
+  "Chart Point Fields": {
+    "chart.point.index": true,
+    "chart.point.price": true,
+    "chart.point.time": true
   }
 }

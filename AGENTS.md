@@ -287,10 +287,12 @@ src/
 ├── PineTS.class.ts           # Main execution engine
 ├── Context.class.ts          # Runtime context ($.data, $.pine, $.let, etc.)
 ├── Series.ts                 # Series wrapper for reverse indexing
+├── Indicator.ts              # Indicator wrapper class (runtime inputs)
 ├── transpiler/
 │   ├── index.ts              # Main transpiler entry point
 │   ├── settings.ts           # Configuration and known namespaces
 │   ├── pineToJS/             # Pine Script → PineTS converter
+│   │   ├── pineToJS.index.ts # Pipeline entry point
 │   │   ├── lexer.ts          # Tokenization with indentation tracking
 │   │   ├── parser.ts         # AST generation from tokens
 │   │   ├── codegen.ts        # JavaScript code generation
@@ -314,25 +316,38 @@ src/
 │   ├── Log.ts                # Logging functions
 │   ├── Str.ts                # String utilities
 │   ├── Timeframe.ts          # Timeframe utilities
+│   ├── Types.ts              # Type utilities and enums
 │   ├── Plots.ts              # Plotting functions
+│   ├── utils.ts              # Argument parsing utilities
 │   ├── ta/                   # Technical Analysis
+│   │   ├── ta.index.ts       # Auto-generated barrel file
 │   │   └── methods/          # Individual TA functions
 │   ├── math/                 # Mathematical operations
+│   │   ├── math.index.ts     # Auto-generated barrel file
 │   │   └── methods/
 │   ├── array/                # Array operations
+│   │   ├── array.index.ts    # Auto-generated barrel file
+│   │   ├── PineArrayObject.ts
 │   │   └── methods/
 │   ├── map/                  # Map collection type
+│   │   ├── map.index.ts      # Auto-generated barrel file
+│   │   └── PineMapObject.ts
 │   ├── matrix/               # Matrix collection type
+│   │   ├── matrix.index.ts   # Auto-generated barrel file
+│   │   └── PineMatrixObject.ts
 │   ├── input/                # User inputs
+│   │   ├── input.index.ts    # Auto-generated barrel file
 │   │   └── methods/
 │   └── request/              # Multi-timeframe (request.security)
+│       ├── request.index.ts  # Auto-generated barrel file
 │       └── methods/
 ├── marketData/               # Data providers
 │   ├── IProvider.ts          # Provider interface
-│   ├── Provider.class.ts     # Base provider
+│   ├── Provider.class.ts     # Base provider and registry
 │   ├── Binance/              # Binance exchange provider
 │   └── Mock/                 # Mock provider for testing
-└── utils/                    # Utility functions
+└── types/
+    └── PineTypes.ts          # Type definitions (plot options, etc.)
 
 tests/
 ├── compatibility/            # Main test suite
@@ -343,6 +358,7 @@ tests/
 │   └── misc/indicators/      # Miscellaneous indicator tests
 ├── namespaces/               # Additional namespace tests
 │   └── ta/                   # TA-specific tests
+├── indicators/               # Real-world indicator tests
 ├── transpiler/               # Transpiler tests
 ├── core/                     # Core functionality tests
 └── _local/                   # Local development tests (gitignored)
@@ -582,7 +598,7 @@ const userCode = ($) => {
 };
 
 const transpiledFn = transpile(userCode, { debug: true });
-console.log(transpiledFn.toString());
+// debug: true prints the transpiled code to console during transpilation
 ```
 
 ### Check Context State

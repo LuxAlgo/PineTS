@@ -17,6 +17,8 @@ import { Str } from './namespaces/Str';
 import types, { display, shape } from './namespaces/Types';
 import { Timeframe } from './namespaces/Timeframe';
 import { FillHelper, HlineHelper, PlotHelper } from './namespaces/Plots';
+import { ChartHelper } from './namespaces/chart/ChartHelper';
+import { LabelHelper } from './namespaces/label/LabelHelper';
 
 export class Context {
     public data: any = {
@@ -202,6 +204,78 @@ export class Context {
 
         this.bindContextObject(hlineHelper, ['any', 'style_dashed', 'style_solid', 'style_dotted', 'param'], 'hline');
         this.bindContextObject(fillHelper, ['any', 'param'], 'fill');
+
+        // chart namespace (with nested chart.point sub-namespace)
+        const chartHelper = new ChartHelper(this);
+        this.pine['chart'] = {
+            param: chartHelper.param.bind(chartHelper),
+            bg_color: chartHelper.bg_color.bind(chartHelper),
+            fg_color: chartHelper.fg_color.bind(chartHelper),
+            is_standard: chartHelper.is_standard.bind(chartHelper),
+            is_heikinashi: chartHelper.is_heikinashi.bind(chartHelper),
+            is_kagi: chartHelper.is_kagi.bind(chartHelper),
+            is_linebreak: chartHelper.is_linebreak.bind(chartHelper),
+            is_pnf: chartHelper.is_pnf.bind(chartHelper),
+            is_range: chartHelper.is_range.bind(chartHelper),
+            is_renko: chartHelper.is_renko.bind(chartHelper),
+            point: chartHelper.point,
+        };
+
+        // label namespace
+        const labelHelper = new LabelHelper(this);
+        this.bindContextObject(
+            labelHelper,
+            [
+                'any',
+                'new',
+                'param',
+                'set_x',
+                'set_y',
+                'set_xy',
+                'set_text',
+                'set_color',
+                'set_textcolor',
+                'set_size',
+                'set_style',
+                'set_textalign',
+                'set_tooltip',
+                'set_point',
+                'set_xloc',
+                'set_yloc',
+                'get_x',
+                'get_y',
+                'get_text',
+                'copy',
+                'delete',
+                // style constants
+                'style_label_down',
+                'style_label_up',
+                'style_label_left',
+                'style_label_right',
+                'style_label_lower_left',
+                'style_label_lower_right',
+                'style_label_upper_left',
+                'style_label_upper_right',
+                'style_label_center',
+                'style_circle',
+                'style_square',
+                'style_diamond',
+                'style_flag',
+                'style_arrowup',
+                'style_arrowdown',
+                'style_cross',
+                'style_xcross',
+                'style_triangleup',
+                'style_triangledown',
+                'style_none',
+                'style_text_outline',
+            ],
+            'label'
+        );
+        Object.defineProperty(this.pine['label'], 'all', {
+            get: () => labelHelper.all,
+        });
+
     }
 
     private bindContextObject(instance: any, entries: string[], root: string = '') {

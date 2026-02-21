@@ -31,12 +31,12 @@ $.let.glb1_sma = $.init($.let.glb1_sma, temp_1);
 
 **Key Transformations:**
 
--   Implicit imports injected (`close`, `ta`)
--   Arguments wrapped in `ta.param()` with unique IDs (`p0`, `p1`)
--   Function call receives unique call ID (`_ta0`)
--   Nested call hoisted to temporary variable (`temp_1`)
--   Variable renamed with scope prefix (`glb1_sma`)
--   Assignment wrapped in `$.init()`
+- Implicit imports injected (`close`, `ta`)
+- Arguments wrapped in `ta.param()` with unique IDs (`p0`, `p1`)
+- Function call receives unique call ID (`_ta0`)
+- Nested call hoisted to temporary variable (`temp_1`)
+- Variable renamed with scope prefix (`glb1_sma`)
+- Assignment wrapped in `$.init()`
 
 ## Example 2: Array Access and Assignment
 
@@ -57,9 +57,9 @@ $.set($.let.glb1_cc, $.get(close, 2));
 
 **Key Transformations:**
 
--   `close[1]` → `$.get(close, 1)` (Pine Script semantics)
--   `cc = close[2]` → `$.set($.let.glb1_cc, $.get(close, 2))`
--   Series access translated to context methods
+- `close[1]` → `$.get(close, 1)` (Pine Script semantics)
+- `cc = close[2]` → `$.set($.let.glb1_cc, $.get(close, 2))`
+- Series access translated to context methods
 
 ## Example 3: Binary Operations
 
@@ -80,9 +80,9 @@ $.const.glb1_bull_bias = $.init($.const.glb1_bull_bias, $.get($.const.glb1_ema9,
 
 **Key Transformations:**
 
--   Binary operations preserve structure
--   Series values extracted with `$.get(series, 0)`
--   User variables accessed through context (`$.const.glb1_ema9`)
+- Binary operations preserve structure
+- Series values extracted with `$.get(series, 0)`
+- User variables accessed through context (`$.const.glb1_ema9`)
 
 ## Example 4: Nested Function Calls (Expression Hoisting)
 
@@ -98,7 +98,7 @@ let d = ta.ema(math.abs(ap - 99), 10);
 const ta = $.ta;
 const math = $.math;
 const p0 = math.param($.get($.let.glb1_ap, 0) - 99, undefined, 'p0');
-const temp_1 = math.abs(p0, '_math0');
+const temp_1 = math.abs(p0);
 const p1 = ta.param(temp_1, undefined, 'p1');
 const p2 = ta.param(10, undefined, 'p2');
 const temp_2 = ta.ema(p1, p2, '_ta0');
@@ -108,10 +108,10 @@ $.let.glb1_d = $.init($.let.glb1_d, temp_2);
 
 **Key Transformations:**
 
--   Nested `math.abs(ap - 99)` hoisted to `temp_1`
--   Each function call isolated with unique IDs
--   Inner function executed first, result passed to outer function
--   Ensures proper execution order for stateful functions
+- Nested `math.abs(ap - 99)` hoisted to `temp_1`
+- Each function call isolated with unique IDs
+- Inner function executed first, result passed to outer function
+- Ensures proper execution order for stateful functions
 
 ## Example 5: Scoped Variables (If Statement)
 
@@ -137,10 +137,10 @@ if ($.get($.const.glb1__cc, 0) > 1) {
 
 **Key Transformations:**
 
--   Global variable: `glb1_aa`
--   If-scoped variable: `if2_bb` (different prefix)
--   Assignment to existing variable uses `$.set()`
--   New variable declaration uses `$.init()`
+- Global variable: `glb1_aa`
+- If-scoped variable: `if2_bb` (different prefix)
+- Assignment to existing variable uses `$.set()`
+- New variable declaration uses `$.init()`
 
 ## Example 6: Equality Checks (NaN Handling)
 
@@ -162,9 +162,9 @@ if ($.math.__eq($.get(avg_len, 0), 0)) {
 
 **Key Transformations:**
 
--   `===` → `$.math.__eq()` (handles `NaN == NaN` correctly)
--   Variables accessed with `$.get()`
--   Assignment uses `$.set()`
+- `===` → `$.math.__eq()` (handles `NaN == NaN` correctly)
+- Variables accessed with `$.get()`
+- Assignment uses `$.set()`
 
 ## Example 7: Array Pattern Destructuring
 
@@ -188,10 +188,10 @@ let b = $.init($.let.glb1_b, $.get($.const.glb1_temp_1, 0)[1]);
 
 **Key Transformations:**
 
--   Function call hoisted to `temp_1`
--   Destructuring split into individual assignments
--   Each element accessed via `$.get(temp, 0)[index]`
--   Tuple convention: `[[a, b]]` returned by function, destructured here
+- Function call hoisted to `temp_1`
+- Destructuring split into individual assignments
+- Each element accessed via `$.get(temp, 0)[index]`
+- Tuple convention: `[[a, b]]` returned by function, destructured here
 
 ## Example 8: Array Expression in request.security
 
@@ -229,9 +229,9 @@ const temp_1 = await request.security('BTCUSDC', '240', p2, false, false);
 
 **Key Transformations:**
 
--   User variables in arrays: `[o, c]` → `[$.get(o, 0), $.get(c, 0)]`
--   Direct Series: `[open, close]` → passed through unchanged
--   `request.param()` handles tuple detection internally
+- User variables in arrays: `[o, c]` → `[$.get(o, 0), $.get(c, 0)]`
+- Direct Series: `[open, close]` → passed through unchanged
+- `request.param()` handles tuple detection internally
 
 ## Example 9: For Loop with Scope
 
@@ -256,10 +256,10 @@ for (let i = 0; i < 10; i++) {
 
 **Key Transformations:**
 
--   Loop variable `i` remains unchanged (not a time-series)
--   `sum` transformed to `$.let.glb1_sum`
--   Compound assignment `+=` becomes explicit get/set
--   `values[i]` uses standard array access (not Pine Script semantics)
+- Loop variable `i` remains unchanged (not a time-series)
+- `sum` transformed to `$.let.glb1_sum`
+- Compound assignment `+=` becomes explicit get/set
+- `values[i]` uses standard array access (not Pine Script semantics)
 
 ## Data Flow Visualization
 

@@ -9,7 +9,7 @@ permalink: /getting-started/
 
 PineTS is a JavaScript/TypeScript runtime that enables execution of Pine Script indicators in JavaScript environments. It supports two input formats:
 
-1. **Native Pine Script v5/v6** _(experimental)_ - Run original Pine Script code directly
+1. **Native Pine Script v5/v6** - Run original Pine Script code directly
 2. **PineTS Syntax** - A JavaScript/TypeScript syntax that closely mirrors Pine Script
 
 It preserves the original functionality and behavior while providing robust handling of time-series data processing, technical analysis calculations, and Pine Script's distinctive scoping mechanisms.
@@ -22,7 +22,7 @@ npm install pinets
 
 ## Usage Examples
 
-### Option 1: Run Native Pine Script Directly _(Experimental)_
+### Option 1: Run Native Pine Script Directly
 
 Starting with v0.7.0, you can run original Pine Script code directly without conversion:
 
@@ -73,7 +73,7 @@ plot(ta.sma(src, len))
 
 // Override default input values
 const indicator = new Indicator(code, {
-    "Length": 50,    // Use 50 instead of 14
+    Length: 50, // Use 50 instead of 14
 });
 
 const { result } = await pineTS.run(indicator);
@@ -173,7 +173,7 @@ const evt = pineTS.stream(
         pageSize: 50, // Process in chunks of 50
         live: true, // Continue with live data
         interval: 2000, // Poll every 2 seconds
-    }
+    },
 );
 
 // Listen for updates
@@ -190,10 +190,10 @@ evt.on('error', (err) => console.error(err));
 
 **Benefits:**
 
--   Memory efficient for large datasets
--   Event-based interface is easier to integrate
--   Automatically streams live market data
--   Perfect for real-time trading bots and dashboards
+- Memory efficient for large datasets
+- Event-based interface is easier to integrate
+- Automatically streams live market data
+- Perfect for real-time trading bots and dashboards
 
 📖 **For complete pagination and streaming documentation, see [Pagination & Live Streaming](../pagination/).**
 
@@ -216,31 +216,31 @@ When using **Native Pine Script** (Option 1), write code exactly as you would in
 
 The main class that handles:
 
--   Market data management
--   Series calculations
--   Built-in variables (open, high, low, close, volume, etc.)
--   Runtime execution context
+- Market data management
+- Series calculations
+- Built-in variables (open, high, low, close, volume, etc.)
+- Runtime execution context
 
 ### Namespaces
 
--   **Core**: Essential Pine Script functionality and base operations
--   **TechnicalAnalysis**: Comprehensive set of technical indicators and analysis functions
--   **PineMath**: Mathematical operations and precision handling
--   **Input**: Parameter and input management system
--   **Syminfo**: Symbol information and market data helpers
+- **Core**: Essential Pine Script functionality and base operations
+- **TechnicalAnalysis**: Comprehensive set of technical indicators and analysis functions
+- **PineMath**: Mathematical operations and precision handling
+- **Input**: Parameter and input management system
+- **Syminfo**: Symbol information and market data helpers
 
 ## Project Status
 
 For the current implementation status:
 
--   See [Language Coverage](../lang-coverage/) for language features
--   See [API Coverage](../api-coverage/) for API functions and methods
+- See [Language Coverage](../lang-coverage/) for language features
+- See [API Coverage](../api-coverage/) for API functions and methods
 
 ## Next Steps
 
 After getting started, try exploring our demo indicators:
 
--   [WillVixFix Indicator](../indicators/willvixfix/index.html)
--   [Squeeze Momentum Indicator](../indicators/sqzmom/index.html)
+- [WillVixFix Indicator](../indicators/willvixfix/index.html)
+- [Squeeze Momentum Indicator](../indicators/sqzmom/index.html)
 
 Or contribute to the project on [GitHub](https://github.com/alaa-eddine/PineTS)!

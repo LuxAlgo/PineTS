@@ -1,5 +1,16 @@
 # Change Log
 
+## [0.8.10] - 2026-02-21 - Chart & Label Namespaces, For-Loop Fix
+
+### Added
+
+- **Chart and Label Namespaces**: Added support for `chart.*` and `label.*` namespaces (pull request #116).
+- **Data Providers**: Added `configure` method to data providers for runtime configuration.
+
+### Fixed
+
+- **For-Loop Transpiler**: Fixed call expressions not being properly handled in for-loop contexts.
+
 ## [0.8.9] - 2026-02-15 - Pine Script Parser & Compatibility Fixes
 
 ### Fixed

@@ -143,7 +143,8 @@ _experiments
 *.tst.*
 .cursor
 config.json
-bfg.jar
 .scratchpad
 tests/_local
 plans/*
+
+.external

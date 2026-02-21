@@ -75,8 +75,8 @@ state.prevEma = ema;
 
 ### Benefits
 
--   **Performance**: O(1) calculation per bar for most indicators.
--   **Memory Efficiency**: Only necessary state (e.g., previous value, running sum) is stored, not full history arrays for intermediate steps.
+- **Performance**: O(1) calculation per bar for most indicators.
+- **Memory Efficiency**: Only necessary state (e.g., previous value, running sum) is stored, not full history arrays for intermediate steps.
 
 ## Implementation Specifics
 
@@ -92,8 +92,8 @@ When a Pine Script function returns a tuple (multiple values), PineTS requires a
 return [[macdLine, signalLine, histLine]];
 ```
 
--   **Inner Array**: The actual tuple values `[a, b, c]`.
--   **Outer Array**: Wraps the tuple so the Series initialization logic (`$.init()`) treats the inner array as a single value for the current bar.
+- **Inner Array**: The actual tuple values `[a, b, c]`.
+- **Outer Array**: Wraps the tuple so the Series initialization logic (`$.init()`) treats the inner array as a single value for the current bar.
 
 ### 2. Precision
 
@@ -107,8 +107,8 @@ return context.precision(result);
 
 Functions must gracefully handle `NaN` inputs and initialization phases.
 
--   **Input**: Check for `NaN` before updating state to avoid corruption (e.g., `initSum += NaN` results in permanent `NaN`).
--   **Output**: Return `NaN` during the initialization phase (warm-up period) before enough data is available.
+- **Input**: Check for `NaN` before updating state to avoid corruption (e.g., `initSum += NaN` results in permanent `NaN`).
+- **Output**: Return `NaN` during the initialization phase (warm-up period) before enough data is available.
 
 ### 4. Unique Call IDs
 
@@ -168,7 +168,7 @@ export function tr(context: any) {
     return (handle_na?: any) => {
         // Default to true for backward compatibility
         const handleNa = handle_na !== undefined ? Series.from(handle_na).get(0) : true;
-        
+
         const high0 = context.get(context.data.high, 0);
         const low0 = context.get(context.data.low, 0);
         const close1 = context.get(context.data.close, 1);
@@ -186,20 +186,19 @@ export function tr(context: any) {
 
 ```javascript
 // All these work correctly:
-const tr1 = ta.tr;          // Auto-converted to ta.tr()
-const tr2 = ta.tr();        // Explicit call with default
-const tr3 = ta.tr(true);    // Explicit parameter
-const tr4 = ta.tr(false);   // Different behavior
+const tr1 = ta.tr; // Auto-converted to ta.tr()
+const tr2 = ta.tr(); // Explicit call with default
+const tr3 = ta.tr(true); // Explicit parameter
+const tr4 = ta.tr(false); // Different behavior
 ```
 
 ### Implementation Guidelines
 
 When implementing getter-like methods:
 
-1. **Always implement as a method** in `methods/` directory (not `getters/`)
+1. **Always implement as a method** in `methods/` directory
 2. **Use optional parameters** with sensible defaults
 3. **Document the default behavior** in comments
-4. **Maintain backward compatibility** when converting from getters
 
 The transpiler automatically handles the conversion from property access to method calls for all known namespaces (`ta`, `math`, `request`, `array`, `input`).
 
@@ -215,8 +214,8 @@ npm run generate:ta-index
 
 This script automatically:
 
-1.  Scans the `methods/` and `getters/` directories.
+1.  Scans the `methods/` directory.
 2.  Generates imports for all detected files.
 3.  Updates `ta.index.ts` to register the new functions in the `TechnicalAnalysis` class.
 
-**Note**: The `getters/` directory is maintained for backward compatibility but new getter-like functions should be implemented as methods with optional parameters.
+**Note**: getter-like functions should be implemented as methods with no parameter.

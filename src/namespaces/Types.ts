@@ -143,6 +143,31 @@ export enum barmerge {
     lookahead_on = 'lookahead_on',
     lookahead_off = 'lookahead_off',
 }
+
+export enum xloc {
+    bar_index = 'bar_index',
+    bar_time = 'bar_time',
+}
+
+export enum yloc {
+    price = 'price',
+    abovebar = 'abovebar',
+    belowbar = 'belowbar',
+}
+
+export enum text {
+    align_left = 'align_left',
+    align_center = 'align_center',
+    align_right = 'align_right',
+    wrap_auto = 'wrap_auto',
+    wrap_none = 'wrap_none',
+}
+
+export enum font {
+    family_default = 'family_default',
+    family_monospace = 'family_monospace',
+}
+
 const types = {
     order,
     currency,
@@ -153,6 +178,10 @@ const types = {
     size,
     format,
     barmerge,
+    xloc,
+    yloc,
+    text,
+    font,
 };
 
 export default types;

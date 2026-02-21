@@ -23,21 +23,20 @@ Starting with v0.8.0, `input` functions automatically resolve values from `conte
 
 ## The `param()` Method
 
-The `input.param()` method returns the value wrapped in a **single-element array**: `[val]`.
-
-```typescript
-return [val];
-```
+The `input.param()` method returns the value using Series.from(source).get(index)
 
 ### Purpose
+
 This wrapping might be a historical artifact or used to distinguish input values from standard scalar values in the `Context.init()` logic, similar to how tuple returns are wrapped in double brackets.
 
 ## Implementation Specifics
 
 ### 1. Constant Nature
+
 In Pine Script, `input` values are constant throughout the script execution (except for `input.source` or `input.price` which might vary if mapped to changing data).
 
 ### 2. Types
+
 Functions like `input.int`, `input.float`, `input.bool` perform validation or casting to ensure the provided value matches the expected type.
 
 ## Generating the Barrel File
@@ -47,4 +46,3 @@ To regenerate the `input.index.ts` file:
 ```bash
 npm run generate:input-index
 ```
-

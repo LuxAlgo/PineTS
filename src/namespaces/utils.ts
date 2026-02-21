@@ -1,4 +1,5 @@
 import { Series } from '../Series';
+import { ChartPointObject } from './chart/ChartPointObject';
 
 //TODO : we should use a more robust way to check if an argument is a plot.
 function isPlot(arg: any) {
@@ -11,14 +12,14 @@ const TYPE_CHECK = {
     boolean: (arg) => typeof arg === 'boolean',
     array: (arg) => Array.isArray(arg),
     object: (arg) => typeof arg === 'object',
+    point: (arg) => arg instanceof ChartPointObject,
     primitive: (arg) => typeof arg === null || (typeof arg !== 'object' && typeof arg !== 'function'),
     function: (arg) => typeof arg === 'function',
     undefined: (arg) => arg === undefined,
     null: (arg) => arg === null,
     NaN: (arg) => isNaN(arg),
 
-    //TODO should we exclude the other PineTS Objects ?
-    remaining_options: (arg) => typeof arg === 'object' && !(arg instanceof Series) && !isPlot(arg),
+    remaining_options: (arg) => typeof arg === 'object' && !(arg instanceof Series) && !(arg instanceof ChartPointObject) && !isPlot(arg),
 };
 
 export type PineTypeMap<T> = {

@@ -43,7 +43,7 @@ interface Kline {
 export class MockProvider implements IProvider {
     private dataCache: Map<string, Kline[]> = new Map();
     private exchangeInfoCache: { spot?: any; futures?: any } = {};
-    private readonly dataDirectory: string;
+    private dataDirectory: string;
 
     constructor(dataDirectory?: string) {
         // Default to tests/compatibility/_data directory
@@ -54,6 +54,11 @@ export class MockProvider implements IProvider {
             // Navigate from src/marketData/Mock to tests/compatibility/_data
             const projectRoot = path.resolve(__dirname, '../../../');
             this.dataDirectory = path.join(projectRoot, 'tests', 'compatibility', '_data');
+        }
+    }
+    public configure({ dataDirectory }: { dataDirectory?: string }): void {
+        if (dataDirectory) {
+            this.dataDirectory = dataDirectory;
         }
     }
 
