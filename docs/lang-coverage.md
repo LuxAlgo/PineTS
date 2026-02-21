@@ -17,14 +17,14 @@ This document lists the features of the PineTS language and their status.
 | Identifiers            | native      | Uses native JS/TS identifiers                                           |
 | Operators              | native      | Uses native JS/TS operators                                             |
 | Variables declarations | done        | Supports time series and variable syntaxes                              |
-| Conditional structures | implemented | if implemented / switch needs testing                                   |
-| Loops                  | partial     | for done / while missing / for in missing                               |
+| Conditional structures | done        | if implemented / switch needs testing                                   |
+| Loops                  | done        | for done / while missing / for in missing                               |
 | Type system            | native      | Uses native JS/TS types                                                 |
-| Builtins               | partial     | Implemented open, close, high, low, hl2, hlc3, ohlc4                    |
-| Functions              | in progress | Check [api-coverage](api-coverage.md) for details                       |
+| Builtins               | done        | Implemented open, close, high, low, hl2, hlc3, ohlc4                    |
+| Functions              | done        | Check [api-coverage](api-coverage.md) for details                       |
 | Objects                | in progress | Check [api-coverage](api-coverage.md) for details                       |
 | Enums                  | in progress | Check [api-coverage](api-coverage.md) for details                       |
 | Methods                | in progress | Check [api-coverage](api-coverage.md) for details                       |
-| Arrays                 | in progress | Check [api-coverage](api-coverage.md) for details                       |
-| Matrices               | not started | Check [api-coverage](api-coverage.md) for details                       |
-| Maps                   | not started | Check [api-coverage](api-coverage.md) for details                       |
+| Arrays                 | done        | Check [api-coverage](api-coverage.md) for details                       |
+| Matrices               | done        | Check [api-coverage](api-coverage.md) for details                       |
+| Maps                   | done        | Check [api-coverage](api-coverage.md) for details                       |
