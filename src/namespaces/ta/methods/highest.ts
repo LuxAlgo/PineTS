@@ -45,18 +45,24 @@ export function highest(context: any) {
 
         window.unshift(currentValue);
 
-        if (window.length < length) {
-            // Update tentative state
-            state.currentWindow = window;
-            return NaN;
+        while (window.length > length) {
+            window.pop();
         }
 
-        if (window.length > length) {
-            window.pop();
+        // Backfill from source if window is undersized (dynamic length recovery)
+        if (window.length < length && context.idx >= length - 1) {
+            const series = Series.from(source);
+            while (window.length < length) {
+                window.push(series.get(window.length));
+            }
         }
 
         // Update tentative state
         state.currentWindow = window;
+
+        if (window.length < length) {
+            return NaN;
+        }
 
         const validValues = window.filter((v) => !isNaN(v) && v !== undefined);
         if (validValues.length === 0) {

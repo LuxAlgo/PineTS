@@ -1,6 +1,6 @@
 # Change Log
 
-## [0.8.11] - 2026-02-21 - Time Functions & Log Timezone
+## [0.8.11] - 2026-02-21 - Time Functions, Log Timezone, Transpiler & TA Window Fixes
 
 ### Added
 
@@ -12,6 +12,12 @@
 
 - **Constant-Like Functions**: Refactored transpiler handling of functions that behave like constants (e.g. `time`, `time()`, `na`, `na()`). Previously only `na` was supported and hardcoded; the solution is now generalized for such built-ins.
 - **Documentation**: Documentation updates.
+
+### Fixed
+
+- **Transpiler Array Access in Function Arguments**: Fixed a bug where inline array access inside function arguments (e.g., `nz(a[b], a)`) produced wrong results. The transpiler was passing the index as a Series reference instead of unwrapping it to a scalar value via `$.get()`. This caused `$.param()` to receive a Series object as the index, leading to incorrect offset calculations.
+- **TA Rolling Window with Dynamic Lengths**: Fixed all window-based TA functions (`ta.lowest`, `ta.highest`, `ta.sma`, `ta.ema`, `ta.stdev`, `ta.bb`, `ta.bbw`, `ta.cci`, `ta.dev`, `ta.wma`, `ta.vwma`, `ta.alma`, `ta.swma`, `ta.hma`, `ta.linreg`, `ta.median`, `ta.variance`, `ta.change`, `ta.roc`) to correctly handle dynamic window lengths. Previously, the window trimming used `if` (single pop) instead of `while` (trim to target), leaving stale values when the length decreased by more than one between bars.
+- **TA Rolling Window Recovery**: Added source-series backfill to all window-based TA functions. When a dynamic length shrinks then grows, the window now recovers missing historical values from the source series instead of returning NaN. Functions that intentionally exclude NaN from their windows (`ta.stdev`, `ta.bb`, `ta.bbw`, `ta.cci`) correctly stop backfilling at NaN boundaries.
 
 ## [0.8.10] - 2026-02-21 - Chart & Label Namespaces, For-Loop Fix
 

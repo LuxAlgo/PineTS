@@ -42,8 +42,18 @@ export function sma(context: any) {
         window.unshift(currentValue);
 
         // Manage window size
-        if (window.length > period) {
+        while (window.length > period) {
             window.pop();
+        }
+
+        // Backfill from source if window is undersized (dynamic length recovery)
+        let didBackfill = false;
+        if (window.length < period && context.idx >= period - 1) {
+            const series = Series.from(source);
+            while (window.length < period) {
+                window.push(series.get(window.length));
+            }
+            didBackfill = true;
         }
 
         let sum;
@@ -71,7 +81,7 @@ export function sma(context: any) {
         
         // Let's try the robust O(N) fallback only when necessary.
         
-        let useFastPath = !isPrevSumInvalid && !isCurrentInvalid;
+        let useFastPath = !isPrevSumInvalid && !isCurrentInvalid && !didBackfill;
         
         // If fast path seems possible, we still need to be sure we didn't just pop a NaN (which would make result NaN -> Number, requiring recalc of prevSum didn't allow recovery)
         // Actually, if prevSum was Number, then the window *should* have contained only Numbers. 

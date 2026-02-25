@@ -70,22 +70,32 @@ export function cci(context: any) {
         window.unshift(currentValue);
         sum += currentValue;
 
-        // Not enough data yet
-        if (window.length < length) {
-            state.currentWindow = window;
-            state.currentSum = sum;
-            return NaN;
-        }
-
         // Remove oldest value if window exceeds length
-        if (window.length > length) {
+        while (window.length > length) {
             const oldValue = window.pop();
             sum -= oldValue;
+        }
+
+        // Backfill from source if window is undersized (dynamic length recovery)
+        // Break on NaN since this function intentionally excludes NaN from the window
+        if (window.length < length && context.idx >= length - 1) {
+            const series = Series.from(source);
+            while (window.length < length) {
+                const val = series.get(window.length);
+                if (isNaN(val)) break;
+                window.push(val);
+                sum += val;
+            }
         }
 
         // Update tentative state
         state.currentWindow = window;
         state.currentSum = sum;
+
+        // Not enough data yet
+        if (window.length < length) {
+            return NaN;
+        }
 
         // Calculate SMA (mean)
         const sma = sum / length;

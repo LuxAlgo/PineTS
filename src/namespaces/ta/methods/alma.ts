@@ -76,9 +76,16 @@ export function alma(context: any) {
         // Add current value to window (most recent at front)
         window.unshift(currentValue);
 
-        if (window.length > period) {
-            // Remove oldest value
+        while (window.length > period) {
             window.pop();
+        }
+
+        // Backfill from source if window is undersized (dynamic length recovery)
+        if (window.length < period && context.idx >= period - 1) {
+            const series = Series.from(source);
+            while (window.length < period) {
+                window.push(series.get(window.length));
+            }
         }
 
         // Update tentative state

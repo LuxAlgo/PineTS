@@ -41,9 +41,19 @@ export function dev(context: any) {
         window.unshift(currentValue);
         sum += currentValue;
 
-        if (window.length > length) {
+        while (window.length > length) {
             const oldValue = window.pop();
             sum -= oldValue;
+        }
+
+        // Backfill from source if window is undersized (dynamic length recovery)
+        if (window.length < length && context.idx >= length - 1) {
+            const series = Series.from(source);
+            while (window.length < length) {
+                const val = series.get(window.length);
+                window.push(val);
+                sum += val;
+            }
         }
 
         state.currentWindow = window;

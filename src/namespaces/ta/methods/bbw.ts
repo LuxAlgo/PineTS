@@ -55,9 +55,21 @@ export function bbw(context: any) {
         window.unshift(currentValue);
         sum += currentValue;
 
-        if (window.length > length) {
+        while (window.length > length) {
             const removed = window.pop();
             sum -= removed;
+        }
+
+        // Backfill from source if window is undersized (dynamic length recovery)
+        // Break on NaN since this function intentionally excludes NaN from the window
+        if (window.length < length && context.idx >= length - 1) {
+            const series = Series.from(source);
+            while (window.length < length) {
+                const val = series.get(window.length);
+                if (isNaN(val)) break;
+                window.push(val);
+                sum += val;
+            }
         }
 
         state.currentWindow = window;

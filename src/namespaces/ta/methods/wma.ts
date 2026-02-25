@@ -37,17 +37,24 @@ export function wma(context: any) {
 
         window.unshift(currentValue);
 
-        if (window.length < period) {
-            state.currentWindow = window;
-            return NaN;
+        while (window.length > period) {
+            window.pop();
         }
 
-        if (window.length > period) {
-            window.pop();
+        // Backfill from source if window is undersized (dynamic length recovery)
+        if (window.length < period && context.idx >= period - 1) {
+            const series = Series.from(source);
+            while (window.length < period) {
+                window.push(series.get(window.length));
+            }
         }
 
         // Update tentative state
         state.currentWindow = window;
+
+        if (window.length < period) {
+            return NaN;
+        }
 
         let numerator = 0;
         let denominator = 0;

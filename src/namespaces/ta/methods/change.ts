@@ -44,17 +44,24 @@ export function change(context: any) {
 
         window.unshift(currentValue);
 
-        if (window.length <= length) {
-            state.currentWindow = window;
-            return NaN;
+        while (window.length > length + 1) {
+            window.pop();
         }
 
-        if (window.length > length + 1) {
-            window.pop();
+        // Backfill from source if window is undersized (dynamic length recovery)
+        if (window.length < length + 1 && context.idx >= length) {
+            const series = Series.from(source);
+            while (window.length < length + 1) {
+                window.push(series.get(window.length));
+            }
         }
 
         // Update tentative state
         state.currentWindow = window;
+
+        if (window.length <= length) {
+            return NaN;
+        }
 
         const change = currentValue - window[length];
         return context.precision(change);

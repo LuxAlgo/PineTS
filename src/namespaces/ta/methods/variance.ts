@@ -35,8 +35,16 @@ export function variance(context: any) {
         const window = [...state.prevWindow];
         window.unshift(currentValue);
 
-        if (window.length > length) {
+        while (window.length > length) {
             window.pop();
+        }
+
+        // Backfill from source if window is undersized (dynamic length recovery)
+        if (window.length < length && context.idx >= length - 1) {
+            const series = Series.from(source);
+            while (window.length < length) {
+                window.push(series.get(window.length));
+            }
         }
 
         state.currentWindow = window;

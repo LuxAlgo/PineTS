@@ -42,9 +42,19 @@ export function vwma(context: any) {
         window.unshift(currentValue);
         volumeWindow.unshift(currentVolume);
 
-        if (window.length > period) {
+        while (window.length > period) {
             window.pop();
             volumeWindow.pop();
+        }
+
+        // Backfill from source if window is undersized (dynamic length recovery)
+        if (window.length < period && context.idx >= period - 1) {
+            const series = Series.from(source);
+            const volSeries = Series.from(context.data.volume);
+            while (window.length < period) {
+                window.push(series.get(window.length));
+                volumeWindow.push(volSeries.get(volumeWindow.length));
+            }
         }
 
         state.currentWindow = window;

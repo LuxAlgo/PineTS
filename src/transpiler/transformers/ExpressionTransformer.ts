@@ -835,10 +835,10 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                 ? arg.object
                 : transformIdentifierForParam(arg.object, scopeManager);
 
-        // Transform the index if it's an identifier
+        // Transform the index if it's an identifier, and unwrap to scalar via $.get(..., 0)
         const transformedProperty =
             arg.property.type === 'Identifier' && !scopeManager.isContextBound(arg.property.name) && !scopeManager.isLoopVariable(arg.property.name)
-                ? transformIdentifierForParam(arg.property, scopeManager)
+                ? ASTFactory.createGetCall(transformIdentifierForParam(arg.property, scopeManager), 0)
                 : arg.property;
 
         const memberExpr = ASTFactory.createMemberExpression(ASTFactory.createIdentifier(namespace), ASTFactory.createIdentifier('param'));

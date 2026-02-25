@@ -90,7 +90,7 @@ export function hma(context: any) {
             return NaN;
         }
 
-        if (window.length > sqrtPeriod) {
+        while (window.length > sqrtPeriod) {
             window.pop();
         }
 
