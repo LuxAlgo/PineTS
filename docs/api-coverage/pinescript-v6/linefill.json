@@ -1,10 +1,14 @@
 {
-  "Other": {
-    "linefill.all": false,
-    "linefill.delete()": false,
-    "linefill.get_line1()": false,
-    "linefill.get_line2()": false,
-    "linefill.new()": false,
-    "linefill.set_color()": false
-  }
+    "Management": {
+        "linefill.all": true,
+        "linefill.delete()": true,
+        "linefill.new()": true
+    },
+    "Getters": {
+        "linefill.get_line1()": true,
+        "linefill.get_line2()": true
+    },
+    "Setters": {
+        "linefill.set_color()": true
+    }
 }

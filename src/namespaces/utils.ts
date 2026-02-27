@@ -37,6 +37,20 @@ export type PineTypeMap<T> = {
 };
 
 /**
+ * Extract a transpiler-injected callsite ID from the end of an arguments array.
+ * The transpiler appends { __callsiteId: "_pN" } as the last argument for
+ * plot/hline/fill calls to uniquely identify each call-site.
+ * Returns the ID string and removes the sentinel object from the array.
+ */
+export function extractCallsiteId(args: any[]): string | undefined {
+    const last = args[args.length - 1];
+    if (last && typeof last === 'object' && '__callsiteId' in last) {
+        return args.pop().__callsiteId;
+    }
+    return undefined;
+}
+
+/**
  * This function is used to parse the arguments for a Pine params.
  * @param args - The arguments to parse.
  * @param signatures - The signatures to parse, each signature is an array of argument names.

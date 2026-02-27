@@ -471,7 +471,9 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const p4 = plot.param({
     color: p3
   }, undefined, 'p4');
-  const temp_2 = plot.any(p0, p4);
+  const temp_2 = plot.any(p0, p4, {
+    __callsiteId: "#0"
+  });
   temp_2;
 }`;
 
@@ -636,21 +638,27 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const p2 = plot.param({
     color: "white"
   }, undefined, 'p2');
-  const temp_1 = plot.any(p0, p1, p2);
+  const temp_1 = plot.any(p0, p1, p2, {
+    __callsiteId: "#0"
+  });
   temp_1;
   const p3 = plot.param($.get(close, 0) && $.get(open, 0), undefined, 'p3');
   const p4 = plot.param("plot2", undefined, 'p4');
   const p5 = plot.param({
     color: "white"
   }, undefined, 'p5');
-  const temp_2 = plot.any(p3, p4, p5);
+  const temp_2 = plot.any(p3, p4, p5, {
+    __callsiteId: "#1"
+  });
   temp_2;
   const p6 = plot.param(-$.get($.const.glb1_res, 0), undefined, 'p6');
   const p7 = plot.param("plot3", undefined, 'p7');
   const p8 = plot.param({
     color: "white"
   }, undefined, 'p8');
-  const temp_3 = plot.any(p6, p7, p8);
+  const temp_3 = plot.any(p6, p7, p8, {
+    __callsiteId: "#2"
+  });
   temp_3;
 }`;
 

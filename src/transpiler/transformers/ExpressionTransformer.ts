@@ -1043,6 +1043,23 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         });
         node.arguments = newArgs;
 
+        // Inject unique callsite ID for plot/hline/fill to support duplicate titles
+        const PLOT_ID_NAMESPACES = ['plot', 'hline', 'fill'];
+        if (PLOT_ID_NAMESPACES.includes(namespace)) {
+            const callsiteId = scopeManager.getNextPlotCallId();
+            node.arguments.push({
+                type: 'ObjectExpression',
+                properties: [{
+                    type: 'Property',
+                    key: { type: 'Identifier', name: '__callsiteId' },
+                    value: callsiteId,
+                    kind: 'init',
+                    computed: false,
+                    shorthand: false,
+                }],
+            });
+        }
+
         // Inject unique call ID for TA functions to enable proper state management
         if (namespace === 'ta') {
             if (scopeManager.getCurrentScopeType() === 'fn') {

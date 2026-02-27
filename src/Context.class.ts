@@ -21,6 +21,7 @@ import { FillHelper, HlineHelper, PlotHelper } from './namespaces/Plots';
 import { ChartHelper } from './namespaces/chart/ChartHelper';
 import { LabelHelper } from './namespaces/label/LabelHelper';
 import { LineHelper } from './namespaces/line/LineHelper';
+import { LinefillHelper } from './namespaces/linefill/LinefillHelper';
 
 export class Context {
     public data: any = {
@@ -194,11 +195,7 @@ export class Context {
             },
             log: new Log(this),
             str: new Str(this),
-            // Stub for linefill namespace (not yet fully implemented)
-            linefill: {
-                param: (source: any, _index?: any, _name?: string) => source,
-                new: (..._args: any[]) => { /* linefill.new stub - no-op */ },
-            },
+            // linefill namespace will be bound below via bindContextObject
             ...coreFunctions,
             ...types,
         };
@@ -351,6 +348,25 @@ export class Context {
         );
         Object.defineProperty(this.pine['line'], 'all', {
             get: () => lineHelper.all,
+        });
+
+        // linefill namespace
+        const linefillHelper = new LinefillHelper(this);
+        this.bindContextObject(
+            linefillHelper,
+            [
+                'any',
+                'new',
+                'param',
+                'set_color',
+                'get_line1',
+                'get_line2',
+                'delete',
+            ],
+            'linefill',
+        );
+        Object.defineProperty(this.pine['linefill'], 'all', {
+            get: () => linefillHelper.all,
         });
     }
 
