@@ -864,6 +864,47 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
     }
 
     if (isPropertyAccess) {
+        // Auto-call known namespace member accesses (e.g., ta.obv -> ta.obv())
+        // These are built-in variables (like ta.obv, ta.tr) that PineTS implements as
+        // functions. They must run on every bar (even inside conditional blocks) because
+        // they are cumulative/stateful. We hoist the call to the outermost scope.
+        if (
+            arg.object.type === 'Identifier' &&
+            KNOWN_NAMESPACES.includes(arg.object.name) &&
+            scopeManager.isContextBound(arg.object.name) &&
+            !arg.computed
+        ) {
+            const nsName = arg.object.name;
+
+            // Build the call expression: e.g. ta.obv()
+            const callExpr: any = {
+                type: 'CallExpression',
+                callee: {
+                    type: 'MemberExpression',
+                    object: { type: 'Identifier', name: nsName },
+                    property: { type: 'Identifier', name: arg.property.name },
+                    computed: false,
+                },
+                arguments: [],
+                _transformed: true,
+            };
+
+            // Inject TA call ID for state management (same as transformCallExpression does)
+            if (nsName === 'ta') {
+                callExpr.arguments.push(scopeManager.getNextTACallId());
+            }
+
+            // Hoist to outermost scope so it runs every bar
+            const tempVarName = scopeManager.generateTempVar();
+            scopeManager.addLocalSeriesVar(tempVarName);
+            const variableDecl = ASTFactory.createVariableDeclaration(tempVarName, callExpr);
+            scopeManager.addOuterHoistedStatement(variableDecl);
+
+            // Replace the argument with a reference to the hoisted variable
+            Object.assign(arg, ASTFactory.createIdentifier(tempVarName));
+            return arg;
+        }
+
         // Handle property access like trade.entry
         // Transform the object identifier if it's a user variable
         if (arg.object.type === 'Identifier') {

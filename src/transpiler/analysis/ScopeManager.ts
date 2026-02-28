@@ -256,6 +256,23 @@ export class ScopeManager {
         }
     }
 
+    /**
+     * Hoist a statement to the script body scope (inside the async IIFE).
+     * Used for TA built-in variable auto-calls (e.g. ta.obv) that must run
+     * every bar, even when referenced inside conditional blocks.
+     *
+     * hoistingStack layout for PineTS:
+     *   [0] = Program level (outside IIFE — variables not in scope)
+     *   [1] = IIFE body level (script's top-level — correct target)
+     *   [2+] = inner scopes (if-blocks, loops, etc.)
+     */
+    addOuterHoistedStatement(stmt: any): void {
+        if (this.hoistingStack.length > 0 && !this.suppressHoisting) {
+            const targetIndex = Math.min(1, this.hoistingStack.length - 1);
+            this.hoistingStack[targetIndex].push(stmt);
+        }
+    }
+
     getCurrentHoistingScope(): any[] | null {
         if (this.hoistingStack.length === 0) return null;
         return this.hoistingStack[this.hoistingStack.length - 1];
