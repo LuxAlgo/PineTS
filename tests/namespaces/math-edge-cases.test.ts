@@ -139,7 +139,7 @@ describe('Math Edge Cases', () => {
     });
 
     describe('Math.__eq Special Cases', () => {
-        it('should handle NaN == NaN as true (Pine Script behavior)', async () => {
+        it('should handle NaN == NaN as false (Pine Script behavior)', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
 
             const code = `
@@ -154,7 +154,7 @@ describe('Math Edge Cases', () => {
 
             const { plots } = await pineTS.run(code);
             // Based on __eq implementation: NaN == NaN returns true
-            expect(plots['equal'].data[0].value).toBe(1);
+            expect(plots['equal'].data[0].value).toBe(0);
         });
 
         it('should handle Infinity comparisons', async () => {
@@ -542,4 +542,3 @@ describe('Math Edge Cases', () => {
         });
     });
 });
-

@@ -15,8 +15,10 @@ export function wma(context: any) {
                 lastIdx: -1,
                 // Committed state
                 prevWindow: [],
+                prevCallCount: 0,
                 // Tentative state
                 currentWindow: [],
+                currentCallCount: 0,
             };
         }
 
@@ -26,6 +28,7 @@ export function wma(context: any) {
         if (context.idx > state.lastIdx) {
             if (state.lastIdx >= 0) {
                 state.prevWindow = [...state.currentWindow];
+                state.prevCallCount = state.currentCallCount;
             }
             state.lastIdx = context.idx;
         }
@@ -41,8 +44,9 @@ export function wma(context: any) {
             window.pop();
         }
 
-        // Backfill from source if window is undersized (dynamic length recovery)
-        if (window.length < period && context.idx >= period - 1) {
+        // Track actual call count for callsite-correct backfill
+        const callCount = state.prevCallCount + 1;
+        if (window.length < period && callCount >= period) {
             const series = Series.from(source);
             while (window.length < period) {
                 window.push(series.get(window.length));
@@ -51,6 +55,7 @@ export function wma(context: any) {
 
         // Update tentative state
         state.currentWindow = window;
+        state.currentCallCount = callCount;
 
         if (window.length < period) {
             return NaN;

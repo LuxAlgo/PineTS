@@ -23,8 +23,10 @@ export function lowest(context: any) {
                 lastIdx: -1,
                 // Committed state
                 prevWindow: [],
+                prevCallCount: 0,
                 // Tentative state
                 currentWindow: [],
+                currentCallCount: 0,
             };
         }
 
@@ -34,6 +36,7 @@ export function lowest(context: any) {
         if (context.idx > state.lastIdx) {
             if (state.lastIdx >= 0) {
                 state.prevWindow = [...state.currentWindow];
+                state.prevCallCount = state.currentCallCount;
             }
             state.lastIdx = context.idx;
         }
@@ -49,8 +52,9 @@ export function lowest(context: any) {
             window.pop();
         }
 
-        // Backfill from source if window is undersized (dynamic length recovery)
-        if (window.length < length && context.idx >= length - 1) {
+        // Track actual call count for callsite-correct backfill
+        const callCount = state.prevCallCount + 1;
+        if (window.length < length && callCount >= length) {
             const series = Series.from(source);
             while (window.length < length) {
                 window.push(series.get(window.length));
@@ -59,6 +63,7 @@ export function lowest(context: any) {
 
         // Update tentative state
         state.currentWindow = window;
+        state.currentCallCount = callCount;
 
         if (window.length < length) {
             return NaN;
