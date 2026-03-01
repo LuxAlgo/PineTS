@@ -24,7 +24,7 @@ describe('LINE Namespace', () => {
         expect(result.ln_y1[0]).toBe(50000);
         expect(result.ln_x2[0]).toBe(10);
         expect(result.ln_y2[0]).toBe(60000);
-        expect(result.ln_xloc[0]).toBe('bar_index');
+        expect(result.ln_xloc[0]).toBe('bi');
         expect(result.ln_extend[0]).toBe('none');
         expect(result.ln_style[0]).toBe('style_solid');
         expect(result.ln_width[0]).toBe(1);
@@ -48,7 +48,7 @@ describe('LINE Namespace', () => {
             return { ln_xloc, ln_extend, ln_style, ln_width };
         });
 
-        expect(result.ln_xloc[0]).toBe('bar_index');
+        expect(result.ln_xloc[0]).toBe('bi');
         expect(result.ln_extend[0]).toBe('both');
         expect(result.ln_style[0]).toBe('style_dashed');
         expect(result.ln_width[0]).toBe(3);
@@ -73,7 +73,7 @@ describe('LINE Namespace', () => {
         expect(result.ln_y1[0]).toBe(45000);
         expect(result.ln_x2[0]).toBe(15);
         expect(result.ln_y2[0]).toBe(55000);
-        expect(result.ln_xloc[0]).toBe('bar_index');
+        expect(result.ln_xloc[0]).toBe('bi');
     });
 
     it('line.set_x1(), set_y1(), set_x2(), set_y2() update coordinates', async () => {
@@ -166,7 +166,7 @@ describe('LINE Namespace', () => {
 
         expect(result.x1[0]).toBe(1000000);
         expect(result.x2[0]).toBe(2000000);
-        expect(result.ln_xloc[0]).toBe('bar_time');
+        expect(result.ln_xloc[0]).toBe('bt');
     });
 
     it('line.set_first_point() and set_second_point() with chart.point', async () => {

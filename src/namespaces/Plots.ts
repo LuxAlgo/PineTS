@@ -286,8 +286,8 @@ export class PlotHelper {
                           textcolor: undefined,
                           color: value > 0 ? options.colorup : options.colordown,
                           offset: options.offset,
-                          shape: value > 0 ? 'arrowup' : 'arrowdown',
-                          location: value > 0 ? 'belowbar' : 'abovebar',
+                          shape: value > 0 ? 'shape_arrow_up' : 'shape_arrow_down',
+                          location: value > 0 ? 'BelowBar' : 'AboveBar',
                           height: options.maxheight,
                       }
                     : undefined,

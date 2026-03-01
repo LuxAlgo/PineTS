@@ -223,8 +223,8 @@ parent: API Coverage
 
 | Function             | Status | Description       |
 | -------------------- | ------ | ----------------- |
-| `splits.denominator` |        | Split denominator |
-| `splits.numerator`   |        | Split numerator   |
+| `splits.denominator` | ✅     | Split denominator |
+| `splits.numerator`   | ✅     | Split numerator   |
 
 ### Text
 
@@ -260,31 +260,31 @@ parent: API Coverage
 
 | Function                    | Status | Description            |
 | --------------------------- | ------ | ---------------------- |
-| `dividends.future_amount`   |        | Future dividend amount |
-| `dividends.future_ex_date`  |        | Future ex-date         |
-| `dividends.future_pay_date` |        | Future pay date        |
-| `dividends.gross`           |        | Gross dividend         |
-| `dividends.net`             |        | Net dividend           |
+| `dividends.future_amount`   | ✅     | Future dividend amount |
+| `dividends.future_ex_date`  | ✅     | Future ex-date         |
+| `dividends.future_pay_date` | ✅     | Future pay date        |
+| `dividends.gross`           | ✅     | Gross dividend         |
+| `dividends.net`             | ✅     | Net dividend           |
 
 ### Earnings
 
 | Function                          | Status | Description            |
 | --------------------------------- | ------ | ---------------------- |
-| `earnings.future_eps`             |        | Future EPS             |
-| `earnings.future_period_end_time` |        | Future period end time |
-| `earnings.future_revenue`         |        | Future revenue         |
-| `earnings.future_time`            |        | Future time            |
-| `earnings.actual`                 |        | Actual earnings        |
-| `earnings.estimate`               |        | Estimated earnings     |
-| `earnings.standardized`           |        | Standardized earnings  |
+| `earnings.future_eps`             | ✅     | Future EPS             |
+| `earnings.future_period_end_time` | ✅     | Future period end time |
+| `earnings.future_revenue`         | ✅     | Future revenue         |
+| `earnings.future_time`            | ✅     | Future time            |
+| `earnings.actual`                 | ✅     | Actual earnings        |
+| `earnings.estimate`               | ✅     | Estimated earnings     |
+| `earnings.standardized`           | ✅     | Standardized earnings  |
 
 ### Adjustment
 
 | Function               | Status | Description          |
 | ---------------------- | ------ | -------------------- |
-| `adjustment.dividends` |        | Dividends adjustment |
-| `adjustment.none`      |        | No adjustment        |
-| `adjustment.splits`    |        | Splits adjustment    |
+| `adjustment.dividends` | ✅     | Dividends adjustment |
+| `adjustment.none`      | ✅     | No adjustment        |
+| `adjustment.splits`    | ✅     | Splits adjustment    |
 
 ### Alert
 
@@ -298,9 +298,9 @@ parent: API Coverage
 
 | Function                 | Status | Description            |
 | ------------------------ | ------ | ---------------------- |
-| `backadjustment.inherit` |        | Inherit backadjustment |
-| `backadjustment.off`     |        | Backadjustment off     |
-| `backadjustment.on`      |        | Backadjustment on      |
+| `backadjustment.inherit` | ✅     | Inherit backadjustment |
+| `backadjustment.off`     | ✅     | Backadjustment off     |
+| `backadjustment.on`      | ✅     | Backadjustment on      |
 
 ### Barmerge
 

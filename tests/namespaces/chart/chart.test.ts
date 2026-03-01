@@ -147,7 +147,7 @@ describe('CHART Namespace', () => {
 
             expect(result.lblX[0]).toBe(55);
             expect(result.lblY[0]).toBe(90000);
-            expect(result.lblXloc[0]).toBe('bar_index');
+            expect(result.lblXloc[0]).toBe('bi');
         });
 
         it('label.set_point() with time-based point sets xloc to bar_time', async () => {
@@ -163,7 +163,7 @@ describe('CHART Namespace', () => {
             });
 
             expect(result.lblX[0]).toBe(1700000000000);
-            expect(result.lblXloc[0]).toBe('bar_time');
+            expect(result.lblXloc[0]).toBe('bt');
         });
     });
 });

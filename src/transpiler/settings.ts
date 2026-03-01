@@ -14,7 +14,7 @@ export const ASYNC_METHODS = ['request.security', 'request.security_lower_tf'];
 export const FACTORY_METHODS = ['line.new', 'line.copy', 'label.new', 'label.copy'];
 
 // All known data variables in the context
-export const CONTEXT_DATA_VARS = ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'openTime', 'closeTime'];
+export const CONTEXT_DATA_VARS = ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'openTime', 'closeTime'];
 
 // All known Pine variables in the context
 export const CONTEXT_PINE_VARS = [
@@ -98,6 +98,15 @@ export const CONTEXT_PINE_VARS = [
     'yloc',
     'text',
     'font',
+
+    // Adjustment constants
+    'adjustment',
+    'backadjustment',
+
+    // Financial data constants
+    'earnings',
+    'dividends',
+    'splits',
 ];
 
 // All known core variables in the context

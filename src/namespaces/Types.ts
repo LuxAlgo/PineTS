@@ -82,26 +82,26 @@ export enum display {
 }
 
 export enum shape {
-    flag = 'flag',
-    arrowdown = 'arrowdown',
-    arrowup = 'arrowup',
-    circle = 'circle',
-    cross = 'cross',
-    diamond = 'diamond',
-    labeldown = 'labeldown',
-    labelup = 'labelup',
-    square = 'square',
-    triangledown = 'triangledown',
-    triangleup = 'triangleup',
-    xcross = 'xcross',
+    flag = 'shape_flag',
+    arrowdown = 'shape_arrow_down',
+    arrowup = 'shape_arrow_up',
+    circle = 'shape_circle',
+    cross = 'shape_cross',
+    diamond = 'shape_diamond',
+    labeldown = 'shape_label_down',
+    labelup = 'shape_label_up',
+    square = 'shape_square',
+    triangledown = 'shape_triangle_down',
+    triangleup = 'shape_triangle_up',
+    xcross = 'shape_xcross',
 }
 
 export enum location {
-    abovebar = 'abovebar',
-    belowbar = 'belowbar',
-    absolute = 'absolute',
-    bottom = 'bottom',
-    top = 'top',
+    abovebar = 'AboveBar',
+    belowbar = 'BelowBar',
+    absolute = 'Absolute',
+    bottom = 'Bottom',
+    top = 'Top',
 }
 
 export enum size {
@@ -145,27 +145,62 @@ export enum barmerge {
 }
 
 export enum xloc {
-    bar_index = 'bar_index',
-    bar_time = 'bar_time',
+    bar_index = 'bi',
+    bar_time = 'bt',
 }
 
 export enum yloc {
-    price = 'price',
-    abovebar = 'abovebar',
-    belowbar = 'belowbar',
+    price = 'pr',
+    abovebar = 'ab',
+    belowbar = 'bl',
 }
 
 export enum text {
-    align_left = 'align_left',
-    align_center = 'align_center',
-    align_right = 'align_right',
-    wrap_auto = 'wrap_auto',
-    wrap_none = 'wrap_none',
+    align_left = 'left',
+    align_center = 'center',
+    align_right = 'right',
+    wrap_auto = 'auto',
+    wrap_none = 'none',
 }
 
 export enum font {
-    family_default = 'family_default',
-    family_monospace = 'family_monospace',
+    family_default = 'default',
+    family_monospace = 'monospace',
+}
+
+export enum adjustment {
+    none = 'none',
+    splits = 'splits',
+    dividends = 'dividends',
+}
+
+export enum backadjustment {
+    inherit = 'inherit',
+    off = 'off',
+    on = 'on',
+}
+
+export enum earnings {
+    actual = 'earnings_actual',
+    estimate = 'earnings_estimate',
+    standardized = 'earnings_standardized',
+    future_eps = 'earnings_future_eps',
+    future_period_end_time = 'earnings_future_period_end_time',
+    future_revenue = 'earnings_future_revenue',
+    future_time = 'earnings_future_time',
+}
+
+export enum dividends {
+    gross = 'dividends_gross',
+    net = 'dividends_net',
+    future_amount = 'dividends_future_amount',
+    future_ex_date = 'dividends_future_ex_date',
+    future_pay_date = 'dividends_future_pay_date',
+}
+
+export enum splits {
+    denominator = 'splits_denominator',
+    numerator = 'splits_numerator',
 }
 
 const types = {
@@ -182,6 +217,11 @@ const types = {
     yloc,
     text,
     font,
+    adjustment,
+    backadjustment,
+    earnings,
+    dividends,
+    splits,
 };
 
 export default types;

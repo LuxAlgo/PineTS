@@ -54,11 +54,11 @@ export class LineHelper {
 
     private _resolvePoint(point: ChartPointObject): { x: number; xloc: string } {
         if (point.index !== undefined) {
-            return { x: point.index, xloc: 'bar_index' };
+            return { x: point.index, xloc: 'bi' };
         } else if (point.time !== undefined) {
-            return { x: point.time, xloc: 'bar_time' };
+            return { x: point.time, xloc: 'bt' };
         }
-        return { x: 0, xloc: 'bar_index' };
+        return { x: 0, xloc: 'bi' };
     }
 
     /**
@@ -85,7 +85,7 @@ export class LineHelper {
         y1: number,
         x2: number,
         y2: number,
-        xloc: string = 'bar_index',
+        xloc: string = 'bi',
         extend: string = 'none',
         color: string = '',
         style: string = 'style_solid',
@@ -248,7 +248,7 @@ export class LineHelper {
     // line.get_price(id, x) — returns price at bar index x along the line
     get_price(id: LineObject, x: number): number {
         if (!id || id._deleted) return NaN;
-        if (id.xloc !== 'bar_index') return NaN;
+        if (id.xloc !== 'bi') return NaN;
         const dx = id.x2 - id.x1;
         if (dx === 0) return id.y1;
         // Linear interpolation/extrapolation (line treated as extend.both per Pine docs)
