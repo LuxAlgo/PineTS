@@ -1,5 +1,34 @@
 # Change Log
 
+## [0.9.0] - 2026-02-27 - Box, Table & Polyline Namespaces, Pine Script Compliance & Critical Fixes
+
+### Added
+
+- **Box Namespace (`box.*`)**: Full implementation of the box drawing namespace — `box.new()`, `box.copy()`, `box.delete()`, and all setter/getter methods (`set_left`, `set_right`, `set_top`, `set_bottom`, `set_bgcolor`, `set_border_color`, `set_border_width`, `set_border_style`, `set_text`, `set_text_color`, `set_text_size`, `set_extend`, etc.).
+- **Table Namespace (`table.*`)**: Full implementation of the table drawing namespace — `table.new()`, `table.cell()`, `table.delete()`, and cell/table setter methods. Tables are positioned at fixed screen locations (`position.top_left`, `position.bottom_center`, etc.) and rendered as DOM overlays in QFChart.
+- **Polyline Namespace (`polyline.*`)**: Implementation of `polyline.new()` for rendering multi-point connected paths from arrays of `chart.point` objects, with support for curved lines, closed shapes, and fill color.
+- **Primitive Type Declarations**: Added support for `int()`, `float()`, and `string()` cast/conversion expressions in Pine Script syntax (e.g., `x = int(someValue)`).
+- **`enum` Keyword Support**: Added `enum` keyword handling in the transpiler for Pine Script v6 enum declarations.
+- **Test Coverage**: Comprehensive new test suites — `box.test.ts`, `table.test.ts`, `polyline.test.ts`, `linefill.test.ts`, `fill.test.ts`, `hline.test.ts`, `line.test.ts`, `plot.test.ts`, `constants.test.ts`, `request.test.ts`, `ta-backfill.test.ts`, `parser-fixes.test.ts` (1000+ new test cases).
+
+### Changed
+
+- **Type Name Compliance**: Renamed internal type constant names to match Pine Script's naming convention exactly (e.g., `label.style_label_up` → `label.style_label_up`). Aligned string constants across label styles, line styles, shape types, and size presets so PineTS output is directly compatible with QFChart renderers without manual mapping.
+
+### Fixed
+
+- **`na == na` Equality**: Fixed `na == na` to correctly return `false` in Pine Script (unlike `NaN === NaN` in JavaScript which is also `false`, but the equality transpilation path was not applying `__eq()` consistently in all cases).
+- **TA Backfill in Conditional Closures**: Fixed backfill logic for `ta.*` window-based functions (`sma`, `highest`, `lowest`, `stdev`, `variance`, `dev`, `wma`, `linreg`, `cci`, `median`, `roc`, `change`, `alma`) when the function call is inside a conditional block (e.g., `if someCondition => ta.sma(...)`). Previously, the source-series backfill would fail because the method wasn't being called on bars where the condition was false, leaving the window incomplete.
+- **TA Function-Variable Hoisting**: Fixed `ta.obv`, `ta.tr`, and other TA function-variables that behave as both a function call and a variable. These must be evaluated on every bar — even when referenced inside a conditional block — to maintain accurate rolling state. They are now hoisted to the top of the context function.
+- **RSI Fix**: Fixed RSI calculation accuracy for edge cases.
+- **`math.round` Compliance**: Fixed `math.round` to match Pine Script's rounding behavior (rounds half away from zero, matching Pine's `math.round()` semantics rather than JavaScript's `Math.round()` which rounds half towards positive infinity).
+- **`request.security` — `syminfo.tickerId`**: Fixed `request.security` to correctly parse `syminfo.tickerId` when it contains the provider prefix (e.g., `"BINANCE:BTCUSDT"`), stripping the provider ID before lookup.
+- **`request.security` — Tuple Returns**: Fixed `request.security` to correctly unwrap and return tuple values from the secondary context.
+- **Transpiler — Multi-Level Nested Conditions**: Fixed transpiler handling of deeply nested `if/else if/else` chains that span multiple indentation levels.
+- **Transpiler — IIFE Statements**: Fixed handling of already-transformed IIFE (Immediately Invoked Function Expression) nodes to prevent double-transformation.
+- **Transpiler — Switch/Case Edge Cases**: Fixed several edge cases in switch statement transpilation including missing default cases and complex multi-line case bodies.
+- **`color.*` Fixes**: Fixed several `color.*` function edge cases for correct RGBA string generation.
+
 ## [0.8.12] - 2026-02-27 - Line & Linefill Namespaces, Plot Callsite IDs, Fill Support
 
 ### Added
