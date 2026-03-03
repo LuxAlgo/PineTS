@@ -95,6 +95,7 @@ export const CONTEXT_PINE_VARS = [
     'yloc',
     'text',
     'font',
+    'extend',
 ];
 
 // All known core variables in the context

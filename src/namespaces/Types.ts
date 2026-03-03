@@ -155,6 +155,13 @@ export enum yloc {
     belowbar = 'belowbar',
 }
 
+export enum extend {
+    left = 'left',
+    right = 'right',
+    both = 'both',
+    none = 'none',
+}
+
 export enum text {
     align_left = 'align_left',
     align_center = 'align_center',
@@ -180,6 +187,7 @@ const types = {
     barmerge,
     xloc,
     yloc,
+    extend,
     text,
     font,
 };
