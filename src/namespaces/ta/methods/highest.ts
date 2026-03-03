@@ -4,7 +4,7 @@ import { Series } from '../../../Series';
 
 export function highest(context: any) {
     return (source: any, _length: any, _callId?: string) => {
-        // if the _length is of type string, this is probably the _callId 
+        // if the _length is of type string, this is probably the _callId
         // ==> this is a weak approach to determine syntaxes : ta.highest(length) vs ta.highest(source, length)
         if (typeof _length === 'string' && _callId === undefined) {
             _callId = _length
@@ -54,7 +54,12 @@ export function highest(context: any) {
 
         // Track actual call count for callsite-correct backfill
         const callCount = state.prevCallCount + 1;
-        if (window.length < length && callCount >= length) {
+
+        // Backfill from source series when the window is undersized.
+        // Use both callCount (for top-level calls) and context.idx
+        // (for conditional blocks where callCount < length but enough
+        // chart bars exist to look back through the source series).
+        if (window.length < length && (callCount >= length || context.idx >= length - 1)) {
             const series = Series.from(source);
             while (window.length < length) {
                 window.push(series.get(window.length));

@@ -46,7 +46,7 @@ export function roc(context: any) {
 
         // Track actual call count for callsite-correct backfill
         const callCount = state.prevCallCount + 1;
-        if (window.length < length + 1 && callCount >= length + 1) {
+        if (window.length < length + 1 && (callCount >= length + 1 || context.idx >= length)) {
             const series = Series.from(source);
             while (window.length < length + 1) {
                 window.push(series.get(window.length));

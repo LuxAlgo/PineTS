@@ -52,13 +52,16 @@ export function sma(context: any) {
         // Track actual call count for callsite-correct backfill
         const callCount = state.prevCallCount + 1;
 
-        // Backfill from source if window is undersized due to dynamic length change
-        // Only allowed when function has been called enough times (not just enough bars exist)
-        if (window.length < period && callCount >= period) {
+        // Backfill from source series when window is undersized.
+        // Use both callCount (for top-level warmup) and context.idx
+        // (for conditional/barstate.islast where chart has enough history).
+        let backfilled = false;
+        if (window.length < period && (callCount >= period || context.idx >= period - 1)) {
             const series = Series.from(source);
             while (window.length < period) {
                 window.push(series.get(window.length));
             }
+            backfilled = true;
         }
 
         let sum;
@@ -67,7 +70,9 @@ export function sma(context: any) {
         const isCurrentInvalid = currentValue === undefined || currentValue === null || Number.isNaN(currentValue);
         const isPrevSumInvalid = Number.isNaN(state.prevSum);
 
-        let useFastPath = !isPrevSumInvalid && !isCurrentInvalid;
+        // When backfill added values to the window, prevSum doesn't include
+        // them so the incremental path would give wrong results.
+        let useFastPath = !isPrevSumInvalid && !isCurrentInvalid && !backfilled;
         
         // If fast path seems possible, we still need to be sure we didn't just pop a NaN (which would make result NaN -> Number, requiring recalc of prevSum didn't allow recovery)
         // Actually, if prevSum was Number, then the window *should* have contained only Numbers. 

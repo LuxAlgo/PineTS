@@ -58,7 +58,7 @@ export function stdev(context: any) {
 
         // Track actual call count for callsite-correct backfill
         const callCount = state.prevCallCount + 1;
-        if (window.length < length && callCount >= length) {
+        if (window.length < length && (callCount >= length || context.idx >= length - 1)) {
             const series = Series.from(source);
             while (window.length < length) {
                 const val = series.get(window.length);

@@ -54,7 +54,12 @@ export function lowest(context: any) {
 
         // Track actual call count for callsite-correct backfill
         const callCount = state.prevCallCount + 1;
-        if (window.length < length && callCount >= length) {
+
+        // Backfill from source series when the window is undersized.
+        // Use both callCount (for top-level calls) and context.idx
+        // (for conditional blocks where callCount < length but enough
+        // chart bars exist to look back through the source series).
+        if (window.length < length && (callCount >= length || context.idx >= length - 1)) {
             const series = Series.from(source);
             while (window.length < length) {
                 window.push(series.get(window.length));
@@ -70,7 +75,10 @@ export function lowest(context: any) {
         }
 
         const validValues = window.filter((v) => !isNaN(v) && v !== undefined);
-        const min = validValues.length > 0 ? Math.min(...validValues) : NaN;
+        if (validValues.length === 0) {
+            return NaN;
+        }
+        const min = Math.min(...validValues);
         return context.precision(min);
     };
 }

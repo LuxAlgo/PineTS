@@ -85,7 +85,7 @@ export function alma(context: any) {
 
         // Track actual call count for callsite-correct backfill
         const callCount = state.prevCallCount + 1;
-        if (window.length < period && callCount >= period) {
+        if (window.length < period && (callCount >= period || context.idx >= period - 1)) {
             const series = Series.from(source);
             while (window.length < period) {
                 window.push(series.get(window.length));
