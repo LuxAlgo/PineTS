@@ -1,5 +1,5 @@
-<svg width="118.9" height="20" viewBox="0 0 1189 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="API coverage: 70%">
-  <title>API coverage: 70%</title>
+<svg width="118.9" height="20" viewBox="0 0 1189 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="API coverage: 78%">
+  <title>API coverage: 78%</title>
   <g>
     <rect fill="#555" width="829" height="200"/>
     <rect fill="#08C" x="829" width="360" height="200"/>
@@ -7,8 +7,8 @@
   <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
     <text x="60" y="148" textLength="729" fill="#000" opacity="0.1">API coverage</text>
     <text x="50" y="138" textLength="729">API coverage</text>
-    <text x="884" y="148" textLength="260" fill="#000" opacity="0.1">70%</text>
-    <text x="874" y="138" textLength="260">70%</text>
+    <text x="884" y="148" textLength="260" fill="#000" opacity="0.1">78%</text>
+    <text x="874" y="138" textLength="260">78%</text>
   </g>
   
 </svg>

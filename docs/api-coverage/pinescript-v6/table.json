@@ -1,31 +1,31 @@
 {
     "Cell Operations": {
-        "table.cell()": false,
-        "table.cell_set_bgcolor()": false,
-        "table.cell_set_height()": false,
-        "table.cell_set_text()": false,
-        "table.cell_set_text_color()": false,
-        "table.cell_set_text_font_family()": false,
+        "table.cell()": true,
+        "table.cell_set_bgcolor()": true,
+        "table.cell_set_height()": true,
+        "table.cell_set_text()": true,
+        "table.cell_set_text_color()": true,
+        "table.cell_set_text_font_family()": true,
         "table.cell_set_text_formatting()": false,
-        "table.cell_set_text_halign()": false,
-        "table.cell_set_text_size()": false,
-        "table.cell_set_text_valign()": false,
-        "table.cell_set_tooltip()": false,
-        "table.cell_set_width()": false,
-        "table.merge_cells()": false
+        "table.cell_set_text_halign()": true,
+        "table.cell_set_text_size()": true,
+        "table.cell_set_text_valign()": true,
+        "table.cell_set_tooltip()": true,
+        "table.cell_set_width()": true,
+        "table.merge_cells()": true
     },
     "Management": {
-        "table.all": false,
-        "table.clear()": false,
-        "table.delete()": false,
-        "table.new()": false
+        "table.all": true,
+        "table.clear()": true,
+        "table.delete()": true,
+        "table.new()": true
     },
     "Table Settings": {
-        "table.set_bgcolor()": false,
-        "table.set_border_color()": false,
-        "table.set_border_width()": false,
-        "table.set_frame_color()": false,
-        "table.set_frame_width()": false,
-        "table.set_position()": false
+        "table.set_bgcolor()": true,
+        "table.set_border_color()": true,
+        "table.set_border_width()": true,
+        "table.set_frame_color()": true,
+        "table.set_frame_width()": true,
+        "table.set_position()": true
     }
 }

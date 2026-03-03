@@ -1,38 +1,38 @@
 {
     "Management": {
-        "box.all": false,
-        "box.copy()": false,
-        "box.delete()": false,
-        "box.new()": false
+        "box.all": true,
+        "box.copy()": true,
+        "box.delete()": true,
+        "box.new()": true
     },
     "Getters": {
-        "box.get_bottom()": false,
-        "box.get_left()": false,
-        "box.get_right()": false,
-        "box.get_top()": false
+        "box.get_bottom()": true,
+        "box.get_left()": true,
+        "box.get_right()": true,
+        "box.get_top()": true
     },
     "Setters": {
-        "box.set_bgcolor()": false,
-        "box.set_border_color()": false,
-        "box.set_border_style()": false,
-        "box.set_border_width()": false,
-        "box.set_bottom()": false,
-        "box.set_bottom_right_point()": false,
-        "box.set_extend()": false,
-        "box.set_left()": false,
-        "box.set_lefttop()": false,
-        "box.set_right()": false,
-        "box.set_rightbottom()": false,
-        "box.set_text()": false,
-        "box.set_text_color()": false,
-        "box.set_text_font_family()": false,
-        "box.set_text_formatting()": false,
-        "box.set_text_halign()": false,
-        "box.set_text_size()": false,
-        "box.set_text_valign()": false,
-        "box.set_text_wrap()": false,
-        "box.set_top()": false,
-        "box.set_top_left_point()": false,
-        "box.set_xloc()": false
+        "box.set_bgcolor()": true,
+        "box.set_border_color()": true,
+        "box.set_border_style()": true,
+        "box.set_border_width()": true,
+        "box.set_bottom()": true,
+        "box.set_bottom_right_point()": true,
+        "box.set_extend()": true,
+        "box.set_left()": true,
+        "box.set_lefttop()": true,
+        "box.set_right()": true,
+        "box.set_rightbottom()": true,
+        "box.set_text()": true,
+        "box.set_text_color()": true,
+        "box.set_text_font_family()": true,
+        "box.set_text_formatting()": true,
+        "box.set_text_halign()": true,
+        "box.set_text_size()": true,
+        "box.set_text_valign()": true,
+        "box.set_text_wrap()": true,
+        "box.set_top()": true,
+        "box.set_top_left_point()": true,
+        "box.set_xloc()": true
     }
 }
