@@ -51,20 +51,24 @@ export class PolylineHelper {
     }
 
     /**
-     * Extract raw ChartPointObject array from a PineArrayObject or plain array.
+     * Extract raw ChartPointObject array from a PineArrayObject, Series, or plain array.
      */
     private _extractPoints(points: any): ChartPointObject[] {
+        // First resolve Series wrappers (e.g. $.var.glb1_pivotPoints)
+        let resolved = this._resolve(points);
         // PineArrayObject wraps a raw .array property
-        const raw = points && points.array ? points.array : points;
+        const raw = resolved && resolved.array ? resolved.array : resolved;
         if (!Array.isArray(raw)) return [];
         return raw.filter((p: any) => p instanceof ChartPointObject);
     }
 
     // polyline.new(points, curved?, closed?, xloc?, line_color?, fill_color?, line_style?, line_width?, force_overlay?)
-    // The transpiler may pass named args as an options object in the second argument,
-    // e.g. polyline.new(pts, {curved: true, line_color: '#ff0000', ...})
+    // The transpiler may pass named args as:
+    //   1. A single options object: polyline.new({points: pts, curved: true, ...})
+    //   2. Points + options object: polyline.new(pts, {curved: true, ...})
+    //   3. Positional arguments: polyline.new(pts, true, false, ...)
     new(...args: any[]): PolylineObject {
-        const points = args[0];
+        let points: any;
         let curved: any = false;
         let closed: any = false;
         let xloc: any = 'bi';
@@ -74,11 +78,11 @@ export class PolylineHelper {
         let line_width: any = 1;
         let force_overlay: any = false;
 
-        // Detect options object: if arg[1] is a plain object with known keys
-        if (args.length === 2 && args[1] && typeof args[1] === 'object' && !Array.isArray(args[1])
-            && ('curved' in args[1] || 'closed' in args[1] || 'line_color' in args[1]
-                || 'fill_color' in args[1] || 'line_style' in args[1] || 'line_width' in args[1])) {
-            const opts = args[1];
+        const isOptionsObj = (v: any) => v && typeof v === 'object' && !Array.isArray(v)
+            && ('points' in v || 'curved' in v || 'closed' in v || 'line_color' in v
+                || 'fill_color' in v || 'line_style' in v || 'line_width' in v);
+
+        const applyOpts = (opts: any) => {
             curved = opts.curved ?? curved;
             closed = opts.closed ?? closed;
             xloc = opts.xloc ?? xloc;
@@ -87,8 +91,19 @@ export class PolylineHelper {
             line_style = opts.line_style ?? line_style;
             line_width = opts.line_width ?? line_width;
             force_overlay = opts.force_overlay ?? force_overlay;
+        };
+
+        if (args.length === 1 && isOptionsObj(args[0]) && 'points' in args[0]) {
+            // Single options object with all named params including 'points'
+            points = args[0].points;
+            applyOpts(args[0]);
+        } else if (args.length === 2 && args[1] && typeof args[1] === 'object' && !Array.isArray(args[1]) && isOptionsObj(args[1])) {
+            // Points as first arg, options object as second
+            points = args[0];
+            applyOpts(args[1]);
         } else {
             // Positional arguments
+            points = args[0];
             curved = args[1] ?? curved;
             closed = args[2] ?? closed;
             xloc = args[3] ?? xloc;
