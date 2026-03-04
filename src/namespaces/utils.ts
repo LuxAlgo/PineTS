@@ -3,7 +3,7 @@ import { ChartPointObject } from './chart/ChartPointObject';
 
 //TODO : we should use a more robust way to check if an argument is a plot.
 function isPlot(arg: any) {
-    return typeof arg === 'object' && arg.title !== undefined && arg.data !== undefined && arg.options !== undefined;
+    return typeof arg === 'object' && arg && (arg.title !== undefined || arg._plotKey !== undefined) && arg.data !== undefined && arg.options !== undefined;
 }
 const TYPE_CHECK = {
     series: (arg) => arg instanceof Series || typeof arg === 'number' || typeof arg === 'string' || typeof arg === 'boolean',
