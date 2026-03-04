@@ -19,12 +19,10 @@ export function atr(context: any): //
                 prevAtr: null,
                 prevInitSum: 0,
                 prevInitCount: 0,
-                prevPrevClose: null, // "Previous" of the previous close
                 // Tentative state
                 currentAtr: null,
                 currentInitSum: 0,
                 currentInitCount: 0,
-                currentPrevClose: null,
             };
         }
 
@@ -36,7 +34,6 @@ export function atr(context: any): //
                 state.prevAtr = state.currentAtr;
                 state.prevInitSum = state.currentInitSum;
                 state.prevInitCount = state.currentInitCount;
-                state.prevPrevClose = state.currentPrevClose;
             }
             state.lastIdx = context.idx;
         }
@@ -50,12 +47,14 @@ export function atr(context: any): //
             return NaN;
         }
 
-        // Use committed state
-        const prevClose = state.prevPrevClose;
+        // Read previous close directly from context data — always correct
+        // regardless of whether ATR was called on previous bars.
+        // This fixes the stale-prevClose bug when ATR is called conditionally.
+        const prevClose = context.idx > 0 ? context.get(context.data.close, 1) : null;
 
         // Calculate True Range
         let tr;
-        if (prevClose !== null) {
+        if (prevClose !== null && !isNaN(prevClose)) {
             const hl = high - low;
             const hc = Math.abs(high - prevClose);
             const lc = Math.abs(low - prevClose);
@@ -63,9 +62,6 @@ export function atr(context: any): //
         } else {
             tr = high - low;
         }
-
-        // Store tentative prevClose for NEXT bar
-        state.currentPrevClose = close;
 
         let initCount = state.prevInitCount;
         let initSum = state.prevInitSum;

@@ -592,7 +592,7 @@ export class Context {
             } else {
                 this.params[name][this.params[name].length - 1] = source;
             }
-            return new Series(this.params[name], 0);
+            return new Series(this.params[name], index || 0);
         }
     }
 

@@ -38,9 +38,7 @@ export function dmi(context: any) {
                 lastIdx: -1,
                 
                 // Committed state
-                prevHigh: NaN,
-                prevLow: NaN,
-                prevClose: NaN,
+                // (prevHigh/prevLow/prevClose removed — read directly from context)
 
                 // RMA states for TR, +DM, -DM
                 prevTrInitSum: 0,
@@ -58,10 +56,6 @@ export function dmi(context: any) {
                 prevADX: NaN,
 
                 // Tentative state (current)
-                currentHigh: NaN,
-                currentLow: NaN,
-                currentClose: NaN,
-
                 currentTrInitSum: 0,
                 currentPlusInitSum: 0,
                 currentMinusInitSum: 0,
@@ -82,10 +76,6 @@ export function dmi(context: any) {
         // Commit logic
         if (context.idx > state.lastIdx) {
             if (state.lastIdx >= 0) {
-                state.prevHigh = state.currentHigh;
-                state.prevLow = state.currentLow;
-                state.prevClose = state.currentClose;
-
                 state.prevTrInitSum = state.currentTrInitSum;
                 state.prevPlusInitSum = state.currentPlusInitSum;
                 state.prevMinusInitSum = state.currentMinusInitSum;
@@ -110,23 +100,24 @@ export function dmi(context: any) {
             return [[NaN, NaN, NaN]];
         }
 
-        // Store current bars as tentative "previous" for the NEXT bar
-        state.currentHigh = high;
-        state.currentLow = low;
-        state.currentClose = close;
+        // Read previous bar's OHLC directly from context data — always correct
+        // regardless of whether DMI was called on previous bars.
+        // This fixes the stale-prevClose bug when DMI is called conditionally.
+        const prevHigh = context.idx > 0 ? context.get(context.data.high, 1) : NaN;
+        const prevLow = context.idx > 0 ? context.get(context.data.low, 1) : NaN;
+        const prevClose = context.idx > 0 ? context.get(context.data.close, 1) : NaN;
 
-        // Use committed previous values to calculate DM and TR for CURRENT bar
-        if (isNaN(state.prevHigh)) {
-            // First bar
+        if (isNaN(prevHigh)) {
+            // First bar — no previous data
             return [[NaN, NaN, NaN]];
         }
 
         // Calculate TR
-        const tr = Math.max(high - low, Math.abs(high - state.prevClose), Math.abs(low - state.prevClose));
+        const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
 
         // Calculate Directional Movement
-        const up = high - state.prevHigh;
-        const down = state.prevLow - low;
+        const up = high - prevHigh;
+        const down = prevLow - low;
 
         const plusDM = (up > down && up > 0) ? up : 0;
         const minusDM = (down > up && down > 0) ? down : 0;
