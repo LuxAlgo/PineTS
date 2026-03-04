@@ -10,6 +10,7 @@
 - **Primitive Type Declarations**: Added support for `int()`, `float()`, and `string()` cast/conversion expressions in Pine Script syntax (e.g., `x = int(someValue)`).
 - **`enum` Keyword Support**: Added `enum` keyword handling in the transpiler for Pine Script v6 enum declarations.
 - **Test Coverage**: Comprehensive new test suites — `box.test.ts`, `table.test.ts`, `polyline.test.ts`, `linefill.test.ts`, `fill.test.ts`, `hline.test.ts`, `line.test.ts`, `plot.test.ts`, `constants.test.ts`, `request.test.ts`, `ta-backfill.test.ts`, `parser-fixes.test.ts` (1000+ new test cases).
+- **Missing extend.\* enum** conributed by @dcaoyuan
 
 ### Changed
 
@@ -17,6 +18,7 @@
 
 ### Fixed
 
+- **hline consistency** : Fixed by @dcaoyuan
 - **`na == na` Equality**: Fixed `na == na` to correctly return `false` in Pine Script (unlike `NaN === NaN` in JavaScript which is also `false`, but the equality transpilation path was not applying `__eq()` consistently in all cases).
 - **TA Backfill in Conditional Closures**: Fixed backfill logic for `ta.*` window-based functions (`sma`, `highest`, `lowest`, `stdev`, `variance`, `dev`, `wma`, `linreg`, `cci`, `median`, `roc`, `change`, `alma`) when the function call is inside a conditional block (e.g., `if someCondition => ta.sma(...)`). Previously, the source-series backfill would fail because the method wasn't being called on bars where the condition was false, leaving the window incomplete.
 - **TA Function-Variable Hoisting**: Fixed `ta.obv`, `ta.tr`, and other TA function-variables that behave as both a function call and a variable. These must be evaluated on every bar — even when referenced inside a conditional block — to maintain accurate rolling state. They are now hoisted to the top of the context function.

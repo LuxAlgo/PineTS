@@ -25,6 +25,7 @@ import { BoxHelper } from './namespaces/box/BoxHelper';
 import { LinefillHelper } from './namespaces/linefill/LinefillHelper';
 import { PolylineHelper } from './namespaces/polyline/PolylineHelper';
 import { TableHelper } from './namespaces/table/TableHelper';
+import type { IndicatorOptions } from './types/PineTypes';
 
 export class Context {
     public data: any = {
@@ -401,30 +402,14 @@ export class Context {
 
         // linefill namespace
         const linefillHelper = new LinefillHelper(this);
-        this.bindContextObject(
-            linefillHelper,
-            [
-                'any',
-                'new',
-                'param',
-                'set_color',
-                'get_line1',
-                'get_line2',
-                'delete',
-            ],
-            'linefill',
-        );
+        this.bindContextObject(linefillHelper, ['any', 'new', 'param', 'set_color', 'get_line1', 'get_line2', 'delete'], 'linefill');
         Object.defineProperty(this.pine['linefill'], 'all', {
             get: () => linefillHelper.all,
         });
 
         // polyline namespace
         const polylineHelper = new PolylineHelper(this);
-        this.bindContextObject(
-            polylineHelper,
-            ['any', 'new', 'param', 'delete'],
-            'polyline',
-        );
+        this.bindContextObject(polylineHelper, ['any', 'new', 'param', 'delete'], 'polyline');
         Object.defineProperty(this.pine['polyline'], 'all', {
             get: () => polylineHelper.all,
         });

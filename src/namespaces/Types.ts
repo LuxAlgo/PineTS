@@ -156,10 +156,10 @@ export enum yloc {
 }
 
 export enum extend {
-    left = 'left',
-    right = 'right',
-    both = 'both',
-    none = 'none',
+    left = 'l',
+    right = 'r',
+    both = 'b',
+    none = 'n',
 }
 
 export enum text {

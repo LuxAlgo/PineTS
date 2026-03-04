@@ -3,6 +3,7 @@
 import { Series } from '../Series';
 import { PineTypeObject } from './PineTypeObject';
 import { parseArgsForPineParams } from './utils';
+import type { IndicatorOptions, PlotCharOptions } from '../types/PineTypes';
 
 //prettier-ignore
 const TIMESTAMP_SIGNATURES = [
@@ -93,11 +94,19 @@ function parseColorToRGBA(color: string): [number, number, number, number] | nul
  * Convert [r, g, b, a] back to a hex string.  If a < 1, include the alpha byte.
  */
 function rgbaToHex(r: number, g: number, b: number, a: number): string {
-    const rr = Math.round(Math.max(0, Math.min(255, r))).toString(16).padStart(2, '0');
-    const gg = Math.round(Math.max(0, Math.min(255, g))).toString(16).padStart(2, '0');
-    const bb = Math.round(Math.max(0, Math.min(255, b))).toString(16).padStart(2, '0');
+    const rr = Math.round(Math.max(0, Math.min(255, r)))
+        .toString(16)
+        .padStart(2, '0');
+    const gg = Math.round(Math.max(0, Math.min(255, g)))
+        .toString(16)
+        .padStart(2, '0');
+    const bb = Math.round(Math.max(0, Math.min(255, b)))
+        .toString(16)
+        .padStart(2, '0');
     if (a >= 1) return `#${rr}${gg}${bb}`.toUpperCase();
-    const aa = Math.round(Math.max(0, Math.min(255, a * 255))).toString(16).padStart(2, '0');
+    const aa = Math.round(Math.max(0, Math.min(255, a * 255)))
+        .toString(16)
+        .padStart(2, '0');
     return `#${rr}${gg}${bb}${aa}`.toUpperCase();
 }
 
@@ -377,15 +386,7 @@ export class Core {
      * Convert calendar components in an IANA timezone to a UTC timestamp.
      * Uses Intl.DateTimeFormat to determine the timezone offset.
      */
-    private _timestampFromIANA(
-        timezone: string,
-        year: number,
-        month: number,
-        day: number,
-        hour: number,
-        minute: number,
-        second: number,
-    ): number {
+    private _timestampFromIANA(timezone: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
         // Build a rough UTC estimate, then use Intl to find the actual offset
         const utcEstimate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
         if (year >= 0 && year < 100) utcEstimate.setUTCFullYear(year);
