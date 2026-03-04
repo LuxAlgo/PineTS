@@ -532,6 +532,7 @@ export class PineTS {
         if (context.data.closeTime) {
             context.data.closeTime.data.pop();
         }
+        context.data.bar_index.data.pop();
 
         // Fix: Rollback context variables (let, var, const, params)
         const contextVarNames = ['const', 'var', 'let', 'params'];
@@ -622,6 +623,7 @@ export class PineTS {
             context.data.hlcc4.data.push(this.hlcc4[i]);
             context.data.openTime.data.push(this.openTime[i]);
             context.data.closeTime.data.push(this.closeTime[i]);
+            context.data.bar_index.data.push(i);
 
             const result = await transpiledFn(context);
 

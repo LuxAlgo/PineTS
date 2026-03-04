@@ -38,6 +38,7 @@ export class Context {
         hlc3: new Series([]),
         ohlc4: new Series([]),
         hlcc4: new Series([]),
+        bar_index: new Series([]),
     };
     public indicator: IndicatorOptions;
     public cache: any = {};
@@ -177,7 +178,7 @@ export class Context {
             //we need to implement a better way to handle realtime states
             barstate: new Barstate(this),
             get bar_index() {
-                return _this.idx;
+                return _this.data.bar_index;
             },
             get last_bar_index() {
                 return _this.data.close.length - 1;
