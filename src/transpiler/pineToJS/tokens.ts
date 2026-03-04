@@ -66,6 +66,7 @@ export const Keywords = new Set([
     'export',
     'method',
     'extends',
+    'enum',
 ]);
 
 // Multi-character operators

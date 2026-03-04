@@ -22,4 +22,8 @@ export class LinefillObject {
         this.color = color;
         this._deleted = false;
     }
+
+    delete(): void {
+        this._deleted = true;
+    }
 }

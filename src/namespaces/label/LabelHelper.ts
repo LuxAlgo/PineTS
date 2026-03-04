@@ -78,15 +78,15 @@ export class LabelHelper {
         x: number,
         y: number,
         text: string = '',
-        xloc: string = 'bar_index',
-        yloc: string = 'price',
+        xloc: string = 'bi',
+        yloc: string = 'pr',
         color: string = '',
         style: string = 'style_label_down',
         textcolor: string = '',
         size: string = 'normal',
-        textalign: string = 'align_center',
+        textalign: string = 'center',
         tooltip: string = '',
-        text_font_family: string = 'family_default',
+        text_font_family: string = 'default',
         force_overlay: boolean = false,
     ): LabelObject {
         // Resolve any Series/function values to scalars for label properties
@@ -124,13 +124,13 @@ export class LabelHelper {
             const pt = parsed.point as ChartPointObject;
             if (pt.index !== undefined) {
                 x = pt.index;
-                xloc = xloc || 'bar_index';
+                xloc = xloc || 'bi';
             } else if (pt.time !== undefined) {
                 x = pt.time;
-                xloc = xloc || 'bar_time';
+                xloc = xloc || 'bt';
             } else {
                 x = 0;
-                xloc = xloc || 'bar_index';
+                xloc = xloc || 'bi';
             }
             y = pt.price;
         } else {
@@ -207,10 +207,10 @@ export class LabelHelper {
         if (id && !id._deleted && point) {
             if (point.index !== undefined) {
                 id.x = point.index;
-                id.xloc = 'bar_index';
+                id.xloc = 'bi';
             } else if (point.time !== undefined) {
                 id.x = point.time;
-                id.xloc = 'bar_time';
+                id.xloc = 'bt';
             }
             id.y = point.price;
         }

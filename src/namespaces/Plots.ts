@@ -1,9 +1,10 @@
+import type { BackgroundColorOptions, BarColorOptions, FillOptions, PlotArrowOptions, PlotBarOptions, PlotCandleOptions, PlotOptions, PlotCharOptions, PlotShapeOptions, HlineOptions } from '../types/PineTypes';
 import { Series } from '../Series';
 import { parseArgsForPineParams, extractCallsiteId } from './utils';
 
 //prettier-ignore
 const PLOT_SIGNATURE = [
-    'series', 'title', 'color', 'linewidth', 'style', 'trackprice', 'histbase', 'offset', 
+    'series', 'title', 'color', 'linewidth', 'style', 'trackprice', 'histbase', 'offset',
     'join', 'editable', 'show_last', 'display', 'format', 'precision', 'force_overlay',
 ];
 
@@ -15,7 +16,7 @@ const PLOT_SHAPE_SIGNATURE = [
 
 //prettier-ignore
 const PLOT_ARROW_SIGNATURE = [
-    'series', 'title', 'colorup', 'colordown', 'offset', 'minheight', 'maxheight', 
+    'series', 'title', 'colorup', 'colordown', 'offset', 'minheight', 'maxheight',
     'editable', 'show_last', 'display', 'format', 'precision', 'force_overlay',
 ];
 
@@ -36,6 +37,11 @@ const BGCOLOR_SIGNATURE = [
 //prettier-ignore
 const BARCOLOR_SIGNATURE = [
     'color', 'offset', 'editable', 'show_last', 'title', 'display'
+];
+
+//prettier-ignore
+const HLINE_SIGNATURE = [
+    'price', 'title', 'color', 'linestyle', 'linewidth', 'editable', 'display',
 ];
 
 //prettier-ignore
@@ -77,21 +83,27 @@ const PLOTBAR_ARGS_TYPES = {
 //prettier-ignore
 const PLOTCANDLE_ARGS_TYPES = {
     open: 'series', high: 'series', low: 'series', close: 'series',
-    title: 'string', color: 'string', wickcolor: 'string', bordercolor: 'string', 
+    title: 'string', color: 'string', wickcolor: 'string', bordercolor: 'string',
     editable: 'boolean', show_last: 'number', display: 'string',
     format: 'string', precision: 'number', force_overlay: 'boolean',
 };
 
 //prettier-ignore
 const BGCOLOR_ARGS_TYPES = {
-    color: 'string', offset: 'number', editable: 'boolean', show_last: 'number', 
+    color: 'string', offset: 'number', editable: 'boolean', show_last: 'number',
     title: 'string', display: 'string', force_overlay: 'boolean',
 };
 
 //prettier-ignore
 const BARCOLOR_ARGS_TYPES = {
-    color: 'string', offset: 'number', editable: 'boolean', show_last: 'number', 
+    color: 'string', offset: 'number', editable: 'boolean', show_last: 'number',
     title: 'string', display: 'string',
+};
+
+//prettier-ignore
+const HLINE_ARGS_TYPES = {
+    price: 'series', title: 'string', color: 'string', linestyle: 'string', linewidth: 'number',
+    editable: 'boolean', display: 'string'
 };
 
 //prettier-ignore
@@ -100,7 +112,7 @@ const FILL_ARGS_TYPES = {
 };
 
 export class PlotHelper {
-    constructor(private context: any) {}
+    constructor(private context: any) { }
 
     /**
      * Resolve the key to use in context.plots.
@@ -249,14 +261,14 @@ export class PlotHelper {
             options:
                 options?.location === 'absolute' || value
                     ? {
-                          text: options.text,
-                          textcolor: options.textcolor,
-                          color: options.color,
-                          offset: options.offset,
-                          shape: options.style,
-                          location: options.location,
-                          size: options.size,
-                      }
+                        text: options.text,
+                        textcolor: options.textcolor,
+                        color: options.color,
+                        offset: options.offset,
+                        shape: options.style,
+                        location: options.location,
+                        size: options.size,
+                    }
                     : undefined,
         });
         return this.context.plots[plotKey];
@@ -286,8 +298,8 @@ export class PlotHelper {
                           textcolor: undefined,
                           color: value > 0 ? options.colorup : options.colordown,
                           offset: options.offset,
-                          shape: value > 0 ? 'arrowup' : 'arrowdown',
-                          location: value > 0 ? 'belowbar' : 'abovebar',
+                          shape: value > 0 ? 'shape_arrow_up' : 'shape_arrow_down',
+                          location: value > 0 ? 'BelowBar' : 'AboveBar',
                           height: options.maxheight,
                       }
                     : undefined,
@@ -381,7 +393,7 @@ export class PlotHelper {
 }
 
 export class HlineHelper {
-    constructor(private context: any) {}
+    constructor(private context: any) { }
 
     public get style_dashed() {
         return 'dashed';
@@ -401,8 +413,9 @@ export class HlineHelper {
     any(...args) {
         // Extract transpiler-injected callsite ID and forward to plot.any
         const callsiteId = extractCallsiteId(args);
-        const [price, title, color, linestyle, linewidth, editable, display] = args;
-        const plotArgs: any[] = [price, { title, color, linestyle, linewidth, editable, display }];
+        const _parsed = parseArgsForPineParams<HlineOptions>(args, HLINE_SIGNATURE, HLINE_ARGS_TYPES);
+        const { price, title, color, linestyle, linewidth, editable, display } = _parsed
+        const plotArgs: any[] = [price, { title, color, linestyle, linewidth, editable, display, style: "hline" }];
         if (callsiteId) {
             plotArgs.push({ __callsiteId: callsiteId });
         }
@@ -411,7 +424,7 @@ export class HlineHelper {
 }
 
 export class FillHelper {
-    constructor(private context: any) {}
+    constructor(private context: any) { }
     param(source: any, index: number = 0, name?: string) {
         return Series.from(source).get(index);
     }

@@ -17,7 +17,10 @@ export function security(context: any) {
         currency: any = null,
         calc_bars_count: any = null
     ) => {
-        const _symbol = symbol[0];
+        // Strip exchange prefix (e.g. "BINANCE:BTCUSDC" → "BTCUSDC") so the
+        // provider receives a clean ticker when creating a secondary context.
+        const rawSymbol = symbol[0];
+        const _symbol = typeof rawSymbol === 'string' && rawSymbol.includes(':') ? rawSymbol.split(':')[1] : rawSymbol;
         const _timeframe = timeframe[0];
         const _expression = expression[0];
         const _expression_name = expression[1];
@@ -28,7 +31,7 @@ export function security(context: any) {
         // If this is a secondary context (created by another request.security),
         // just return the expression value directly without creating another context
         if (context.isSecondaryContext) {
-            return _expression;
+            return Array.isArray(_expression) ? [_expression] : _expression;
         }
 
         const ctxTimeframeIdx = TIMEFRAMES.indexOf(context.timeframe);
@@ -39,7 +42,9 @@ export function security(context: any) {
         }
 
         if (ctxTimeframeIdx === reqTimeframeIdx) {
-            return _expression;
+            // Wrap tuples in 2D array to match $.precision() convention
+            // (same wrapping as HTF/LTF return paths below)
+            return Array.isArray(_expression) ? [_expression] : _expression;
         }
 
         const isLTF = ctxTimeframeIdx > reqTimeframeIdx;

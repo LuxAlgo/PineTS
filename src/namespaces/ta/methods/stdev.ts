@@ -17,9 +17,11 @@ export function stdev(context: any) {
                 // Committed state
                 prevWindow: [],
                 prevSum: 0,
+                prevCallCount: 0,
                 // Tentative state
                 currentWindow: [],
                 currentSum: 0,
+                currentCallCount: 0,
             };
         }
 
@@ -30,6 +32,7 @@ export function stdev(context: any) {
             if (state.lastIdx >= 0) {
                 state.prevWindow = [...state.currentWindow];
                 state.prevSum = state.currentSum;
+                state.prevCallCount = state.currentCallCount;
             }
             state.lastIdx = context.idx;
         }
@@ -53,9 +56,9 @@ export function stdev(context: any) {
             sum -= oldValue;
         }
 
-        // Backfill from source if window is undersized (dynamic length recovery)
-        // Break on NaN since this function intentionally excludes NaN from the window
-        if (window.length < length && context.idx >= length - 1) {
+        // Track actual call count for callsite-correct backfill
+        const callCount = state.prevCallCount + 1;
+        if (window.length < length && (callCount >= length || context.idx >= length - 1)) {
             const series = Series.from(source);
             while (window.length < length) {
                 const val = series.get(window.length);
@@ -68,6 +71,7 @@ export function stdev(context: any) {
         // Update tentative state
         state.currentWindow = window;
         state.currentSum = sum;
+        state.currentCallCount = callCount;
 
         if (window.length < length) {
             return NaN;

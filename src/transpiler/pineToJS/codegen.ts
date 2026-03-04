@@ -251,6 +251,14 @@ export class CodeGenerator {
 
     // Generate ExpressionStatement
     generateExpressionStatement(node) {
+        // Special case: discriminant-less SwitchExpression used as a statement (not assigned to a variable)
+        // should generate plain if/else, not IIFE. The IIFE is only needed in expression context.
+        if (node.expression.type === 'SwitchExpression' && node.expression.discriminant === null) {
+            this.write(this.indentStr.repeat(this.indent));
+            this.generateSwitchAsIfElse(node.expression);
+            this.write('\n');
+            return;
+        }
         this.write(this.indentStr.repeat(this.indent));
         this.generateExpression(node.expression);
         this.write(';\n');
@@ -727,6 +735,10 @@ export class CodeGenerator {
                 return this.generateSwitchExpression(node);
             case 'SequenceExpression':
                 return this.generateSequenceExpression(node);
+            case 'ForStatement':
+                return this.generateLoopAsExpression(node, 'for');
+            case 'WhileStatement':
+                return this.generateLoopAsExpression(node, 'while');
             default:
                 throw new Error(`Unknown expression type: ${node.type}`);
         }
@@ -799,8 +811,12 @@ export class CodeGenerator {
         this.write(op);
 
         const argPrecedence = this.getPrecedence(node.argument);
-        // Unary is 15. If arg < 15, wrap.
-        if (argPrecedence < 15) {
+        // Always wrap in parens if arg is also a unary with same operator to avoid --x or ++x
+        const needsParens =
+            argPrecedence < 15 ||
+            (node.argument.type === 'UnaryExpression' && (op === '-' || op === '+') && (node.argument.operator === '-' || node.argument.operator === '+'));
+
+        if (needsParens) {
             this.write('(');
             this.generateExpression(node.argument);
             this.write(')');
@@ -1291,9 +1307,9 @@ export class CodeGenerator {
 
     // Generate SwitchExpression (convert to IIFE with switch statement or if/else if)
     generateSwitchExpression(node) {
-        // If discriminant is null, it's a switch without expression - convert to if/else if
+        // If discriminant is null, it's a switch without expression - convert to IIFE with if/else if
         if (node.discriminant === null) {
-            this.generateSwitchAsIfElse(node);
+            this.generateSwitchAsIfElseIIFE(node);
             return;
         }
 
@@ -1372,7 +1388,81 @@ export class CodeGenerator {
         this.write('})()');
     }
 
-    // Generate switch without discriminant as if/else if/else chain
+    // Generate switch without discriminant as IIFE with if/else if/else chain (for expression context)
+    generateSwitchAsIfElseIIFE(node) {
+        this.write('(() => {\n');
+        this.indent++;
+
+        this.write(this.indentStr.repeat(this.indent));
+        for (let i = 0; i < node.cases.length; i++) {
+            const c = node.cases[i];
+
+            if (c.test) {
+                if (i === 0) {
+                    this.write('if (');
+                } else {
+                    this.write(' else if (');
+                }
+                this.generateExpression(c.test);
+                this.write(') {\n');
+            } else {
+                if (i > 0) {
+                    this.write(' else {\n');
+                } else {
+                    this.write('{\n');
+                }
+            }
+
+            this.indent++;
+
+            // Generate all statements except the last, then return the last value
+            if (c.statements && c.statements.length > 0) {
+                const lastStmt = c.statements[c.statements.length - 1];
+                const hasReturnValue = lastStmt.type === 'ExpressionStatement' || lastStmt.type === 'VariableDeclaration';
+
+                if (hasReturnValue) {
+                    for (let j = 0; j < c.statements.length - 1; j++) {
+                        this.write(this.indentStr.repeat(this.indent));
+                        this.generateStatement(c.statements[j]);
+                    }
+                    this.write(this.indentStr.repeat(this.indent));
+                    this.write('return ');
+                    if (lastStmt.type === 'ExpressionStatement') {
+                        this.generateExpression(lastStmt.expression);
+                    } else {
+                        this.generateExpression(c.consequent);
+                    }
+                    this.write(';\n');
+                } else {
+                    for (const stmt of c.statements) {
+                        this.write(this.indentStr.repeat(this.indent));
+                        this.generateStatement(stmt);
+                    }
+                    this.write(this.indentStr.repeat(this.indent));
+                    this.write('return null;\n');
+                }
+            } else {
+                this.write(this.indentStr.repeat(this.indent));
+                this.write('return ');
+                this.generateExpression(c.consequent);
+                this.write(';\n');
+            }
+
+            this.indent--;
+            this.write(this.indentStr.repeat(this.indent));
+            this.write('}');
+
+            if (i >= node.cases.length - 1) {
+                this.write('\n');
+            }
+        }
+
+        this.indent--;
+        this.write(this.indentStr.repeat(this.indent));
+        this.write('})()');
+    }
+
+    // Generate switch without discriminant as if/else if/else chain (for statement context)
     generateSwitchAsIfElse(node) {
         for (let i = 0; i < node.cases.length; i++) {
             const c = node.cases[i];
@@ -1422,6 +1512,52 @@ export class CodeGenerator {
                 this.write('\n');
             }
         }
+    }
+
+    // Generate for/while loop used as expression (wrapped in IIFE)
+    // The last expression in the loop body becomes the return value
+    generateLoopAsExpression(node, loopType) {
+        this.write('(() => {\n');
+        this.indent++;
+
+        // Declare result variable
+        this.write(this.indentStr.repeat(this.indent));
+        this.write('let __result;\n');
+
+        // Modify the loop body: replace last expression statement with assignment to __result
+        const body = node.body;
+        if (body && body.body && body.body.length > 0) {
+            const lastIdx = body.body.length - 1;
+            const lastStmt = body.body[lastIdx];
+            if (lastStmt.type === 'ExpressionStatement') {
+                // Replace last expression with __result = expression
+                body.body[lastIdx] = {
+                    type: 'ExpressionStatement',
+                    expression: {
+                        type: 'AssignmentExpression',
+                        operator: '=',
+                        left: { type: 'Identifier', name: '__result' },
+                        right: lastStmt.expression,
+                    },
+                    _line: lastStmt._line,
+                };
+            }
+        }
+
+        // Generate the loop statement
+        if (loopType === 'for') {
+            this.generateForStatement(node);
+        } else {
+            this.generateWhileStatement(node);
+        }
+
+        // Return result
+        this.write(this.indentStr.repeat(this.indent));
+        this.write('return __result;\n');
+
+        this.indent--;
+        this.write(this.indentStr.repeat(this.indent));
+        this.write('})()');
     }
 
     // Generate SequenceExpression

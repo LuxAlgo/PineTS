@@ -657,3 +657,175 @@ describe('Request ', () => {
         expect(plotdata_str.trim()).toEqual(expected_plot.trim());
     });
 });
+
+/**
+ * Binance provider tests — exercise the full transpiler pipeline with syminfo.tickerid,
+ * testing symbol prefix stripping, same-TF tuple returns, HTF boundary alignment,
+ * and log suppression in secondary contexts.
+ *
+ * These use Pine Script strings (not JS callbacks) so the transpiler wraps arguments
+ * correctly via request.param(), matching real-world usage.
+ */
+describe('Request (Binance - transpiled Pine Script)', () => {
+    // Helper: extract plot data as { time, value }[] filtered to date range
+    function extractPlot(
+        plots: any,
+        name: string,
+        sDate: number,
+        eDate: number,
+    ): { time: string; value: any }[] {
+        const plotdata = plots[name]?.data || [];
+        return plotdata
+            .filter((e: any) => e.time >= sDate && e.time <= eDate)
+            .map((e: any) => ({
+                time: new Date(e.time).toISOString().slice(0, 10),
+                value: e.value,
+            }));
+    }
+
+    it('request.security cross-timeframe with syminfo.tickerid (D close from W chart)', async () => {
+        const sDate = new Date('2019-06-01').getTime();
+        const eDate = new Date('2019-09-01').getTime();
+        const warmup = 365 * 24 * 60 * 60 * 1000;
+
+        const pineTS = new PineTS(Provider.Binance, 'BTCUSDC', 'W', null, sDate - warmup);
+
+        const { plots } = await pineTS.run(
+`//@version=5
+indicator("Test")
+_daily_close = request.security(syminfo.tickerid, "D", close)
+plot(_daily_close, "_dc")
+`);
+
+        const data = extractPlot(plots, '_dc', sDate, eDate);
+
+        // Verify we got 13 weekly bars
+        expect(data.length).toBe(13);
+
+        // Spot-check known TV-verified values (daily close, lookahead=false)
+        expect(data[0].time).toBe('2019-06-03');
+        expect(data[0].value).toBeCloseTo(7638.29, 1);
+
+        expect(data[4].time).toBe('2019-07-01');
+        expect(data[4].value).toBeCloseTo(11480.77, 1);
+
+        expect(data[12].time).toBe('2019-08-26');
+        expect(data[12].value).toBeCloseTo(9758.57, 1);
+    }, 30000);
+
+    it('request.security HTF monthly close with boundary straddling (M close from W chart)', async () => {
+        const sDate = new Date('2019-06-01').getTime();
+        const eDate = new Date('2019-09-01').getTime();
+        const warmup = 365 * 24 * 60 * 60 * 1000;
+
+        const pineTS = new PineTS(Provider.Binance, 'BTCUSDC', 'W', null, sDate - warmup);
+
+        const { plots } = await pineTS.run(
+`//@version=5
+indicator("Test")
+_monthly_close = request.security(syminfo.tickerid, "M", close)
+plot(_monthly_close, "_mc")
+`);
+
+        const data = extractPlot(plots, '_mc', sDate, eDate);
+
+        expect(data.length).toBe(13);
+
+        // First 3 weeks of June: should show May's monthly close (lookahead=false)
+        expect(data[0].value).toBeCloseTo(8561.8, 1);
+        expect(data[1].value).toBeCloseTo(8561.8, 1);
+        expect(data[2].value).toBeCloseTo(8561.8, 1);
+
+        // Week of June 24 onward: June's monthly close
+        expect(data[3].value).toBeCloseTo(10748.93, 1);
+
+        // CRITICAL: Week of Jul 29 — straddles July/August boundary.
+        // Must return July's close, NOT NaN.
+        expect(data[8].time).toBe('2019-07-29');
+        expect(data[8].value).toBeCloseTo(10100.84, 1);
+
+        // CRITICAL: Week of Aug 26 — straddles August/September boundary.
+        // Must return August's close, NOT NaN.
+        expect(data[12].time).toBe('2019-08-26');
+        expect(data[12].value).toBeCloseTo(9591.86, 1);
+    }, 30000);
+
+    it('request.security same-TF tuple return ([open, close] from W chart)', async () => {
+        const sDate = new Date('2019-06-01').getTime();
+        const eDate = new Date('2019-09-01').getTime();
+        const warmup = 365 * 24 * 60 * 60 * 1000;
+
+        const pineTS = new PineTS(Provider.Binance, 'BTCUSDC', 'W', null, sDate - warmup);
+
+        const { plots } = await pineTS.run(
+`//@version=5
+indicator("Test")
+[sec_open, sec_close] = request.security(syminfo.tickerid, "W", [open, close])
+// Same TF: sec_open should equal open, sec_close should equal close
+plot(sec_open, "_so")
+plot(sec_close, "_sc")
+plot(open, "_o")
+plot(close, "_c")
+`);
+
+        const secOpen = extractPlot(plots, '_so', sDate, eDate);
+        const secClose = extractPlot(plots, '_sc', sDate, eDate);
+        const chartOpen = extractPlot(plots, '_o', sDate, eDate);
+        const chartClose = extractPlot(plots, '_c', sDate, eDate);
+
+        expect(secOpen.length).toBe(13);
+        expect(secClose.length).toBe(13);
+
+        // Same-TF: returned values must match the chart's own open/close
+        for (let i = 0; i < secOpen.length; i++) {
+            expect(secOpen[i].value).toBeCloseTo(chartOpen[i].value, 2);
+            expect(secClose[i].value).toBeCloseTo(chartClose[i].value, 2);
+        }
+
+        // Spot-check specific TV-verified values
+        expect(secOpen[0].time).toBe('2019-06-03');
+        expect(secOpen[0].value).toBeCloseTo(8743.6, 1);
+        expect(secClose[0].value).toBeCloseTo(7638.29, 1);
+    }, 30000);
+
+    it('request.security same-TF triple tuple return ([high, low, volume] from W chart)', async () => {
+        const sDate = new Date('2019-06-01').getTime();
+        const eDate = new Date('2019-09-01').getTime();
+        const warmup = 365 * 24 * 60 * 60 * 1000;
+
+        const pineTS = new PineTS(Provider.Binance, 'BTCUSDC', 'W', null, sDate - warmup);
+
+        const { plots } = await pineTS.run(
+`//@version=5
+indicator("Test")
+[sec_high, sec_low, sec_vol] = request.security(syminfo.tickerid, "W", [high, low, volume])
+plot(sec_high, "_sh")
+plot(sec_low, "_sl")
+plot(sec_vol, "_sv")
+plot(high, "_h")
+plot(low, "_l")
+plot(volume, "_v")
+`);
+
+        const secHigh = extractPlot(plots, '_sh', sDate, eDate);
+        const secLow = extractPlot(plots, '_sl', sDate, eDate);
+        const secVol = extractPlot(plots, '_sv', sDate, eDate);
+        const chartHigh = extractPlot(plots, '_h', sDate, eDate);
+        const chartLow = extractPlot(plots, '_l', sDate, eDate);
+        const chartVol = extractPlot(plots, '_v', sDate, eDate);
+
+        expect(secHigh.length).toBe(13);
+
+        // Same-TF: returned values must match the chart's own high/low/volume
+        for (let i = 0; i < secHigh.length; i++) {
+            expect(secHigh[i].value).toBeCloseTo(chartHigh[i].value, 2);
+            expect(secLow[i].value).toBeCloseTo(chartLow[i].value, 2);
+            expect(secVol[i].value).toBeCloseTo(chartVol[i].value, 0);
+        }
+
+        // Spot-check specific TV-verified values
+        expect(secHigh[0].time).toBe('2019-06-03');
+        expect(secHigh[0].value).toBeCloseTo(8752.45, 1);
+        expect(secLow[0].value).toBeCloseTo(7441.21, 1);
+    }, 30000);
+});

@@ -21,9 +21,9 @@ describe('LABEL Namespace', () => {
         expect(result.lbl_text[0]).toBe('Hello');
         expect(result.lbl_style[0]).toBe('style_label_down');
         expect(result.lbl_size[0]).toBe('normal');
-        expect(result.lbl_textalign[0]).toBe('align_center');
-        expect(result.lbl_xloc[0]).toBe('bar_index');
-        expect(result.lbl_yloc[0]).toBe('price');
+        expect(result.lbl_textalign[0]).toBe('center');
+        expect(result.lbl_xloc[0]).toBe('bi');
+        expect(result.lbl_yloc[0]).toBe('pr');
         expect(plots['__labels__']).toBeDefined();
         expect(plots['__labels__'].data.length).toBeGreaterThan(0);
     });
@@ -49,9 +49,9 @@ describe('LABEL Namespace', () => {
 
         expect(result.lbl_text[0]).toBe('Full');
         expect(result.lbl_style[0]).toBe('style_label_up');
-        expect(result.lbl_yloc[0]).toBe('abovebar');
+        expect(result.lbl_yloc[0]).toBe('ab');
         expect(result.lbl_size[0]).toBe('large');
-        expect(result.lbl_textalign[0]).toBe('align_left');
+        expect(result.lbl_textalign[0]).toBe('left');
         expect(result.lbl_tooltip[0]).toBe('My tooltip');
     });
 
@@ -135,7 +135,7 @@ describe('LABEL Namespace', () => {
             return { lbl_textalign, lbl_tooltip };
         });
 
-        expect(result.lbl_textalign[0]).toBe('align_right');
+        expect(result.lbl_textalign[0]).toBe('right');
         expect(result.lbl_tooltip[0]).toBe('New tooltip');
     });
 
@@ -242,7 +242,7 @@ describe('LABEL Namespace', () => {
 
         expect(result.xAfter[0]).toBe(42);
         expect(result.yAfter[0]).toBe(75000);
-        expect(result.xlocAfter[0]).toBe('bar_index');
+        expect(result.xlocAfter[0]).toBe('bi');
     });
 
     it('all 21 style constants are accessible', async () => {

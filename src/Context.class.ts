@@ -21,7 +21,11 @@ import { FillHelper, HlineHelper, PlotHelper } from './namespaces/Plots';
 import { ChartHelper } from './namespaces/chart/ChartHelper';
 import { LabelHelper } from './namespaces/label/LabelHelper';
 import { LineHelper } from './namespaces/line/LineHelper';
+import { BoxHelper } from './namespaces/box/BoxHelper';
 import { LinefillHelper } from './namespaces/linefill/LinefillHelper';
+import { PolylineHelper } from './namespaces/polyline/PolylineHelper';
+import { TableHelper } from './namespaces/table/TableHelper';
+import type { IndicatorOptions } from './types/PineTypes';
 
 export class Context {
     public data: any = {
@@ -151,6 +155,9 @@ export class Context {
             year: new TimeComponentHelper(this, EXTRACTORS.year),
             //types
             bool: core.bool.bind(core),
+            int: core.int.bind(core),
+            float: core.float.bind(core),
+            string: core.string.bind(core),
         };
 
         // Initialize everything directly in pine - the default way to access everything
@@ -350,23 +357,96 @@ export class Context {
             get: () => lineHelper.all,
         });
 
-        // linefill namespace
-        const linefillHelper = new LinefillHelper(this);
+        // box namespace
+        const boxHelper = new BoxHelper(this);
         this.bindContextObject(
-            linefillHelper,
+            boxHelper,
             [
                 'any',
                 'new',
                 'param',
-                'set_color',
-                'get_line1',
-                'get_line2',
+                'copy',
                 'delete',
+                'set_left',
+                'set_right',
+                'set_top',
+                'set_bottom',
+                'set_lefttop',
+                'set_rightbottom',
+                'set_top_left_point',
+                'set_bottom_right_point',
+                'set_bgcolor',
+                'set_border_color',
+                'set_border_width',
+                'set_border_style',
+                'set_extend',
+                'set_xloc',
+                'set_text',
+                'set_text_color',
+                'set_text_size',
+                'set_text_halign',
+                'set_text_valign',
+                'set_text_wrap',
+                'set_text_font_family',
+                'set_text_formatting',
+                'get_left',
+                'get_right',
+                'get_top',
+                'get_bottom',
             ],
-            'linefill',
+            'box',
         );
+        Object.defineProperty(this.pine['box'], 'all', {
+            get: () => boxHelper.all,
+        });
+
+        // linefill namespace
+        const linefillHelper = new LinefillHelper(this);
+        this.bindContextObject(linefillHelper, ['any', 'new', 'param', 'set_color', 'get_line1', 'get_line2', 'delete'], 'linefill');
         Object.defineProperty(this.pine['linefill'], 'all', {
             get: () => linefillHelper.all,
+        });
+
+        // polyline namespace
+        const polylineHelper = new PolylineHelper(this);
+        this.bindContextObject(polylineHelper, ['any', 'new', 'param', 'delete'], 'polyline');
+        Object.defineProperty(this.pine['polyline'], 'all', {
+            get: () => polylineHelper.all,
+        });
+
+        // table namespace
+        const tableHelper = new TableHelper(this);
+        this.bindContextObject(
+            tableHelper,
+            [
+                'any',
+                'new',
+                'param',
+                'cell',
+                'delete',
+                'clear',
+                'merge_cells',
+                'cell_set_text',
+                'cell_set_bgcolor',
+                'cell_set_text_color',
+                'cell_set_text_size',
+                'cell_set_height',
+                'cell_set_width',
+                'cell_set_tooltip',
+                'cell_set_text_halign',
+                'cell_set_text_valign',
+                'cell_set_text_font_family',
+                'set_position',
+                'set_bgcolor',
+                'set_border_color',
+                'set_border_width',
+                'set_frame_color',
+                'set_frame_width',
+            ],
+            'table',
+        );
+        Object.defineProperty(this.pine['table'], 'all', {
+            get: () => tableHelper.all,
         });
     }
 

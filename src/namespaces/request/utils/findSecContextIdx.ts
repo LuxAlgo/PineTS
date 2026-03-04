@@ -8,7 +8,10 @@ export function findSecContextIdx(
     lookahead: boolean = false
 ): number {
     for (let i = 0; i < openTime.length; i++) {
-        if (openTime[i] <= myOpenTime && myCloseTime <= closeTime[i]) {
+        // Match based on where the LTF bar opens, not requiring full containment.
+        // This handles bars that straddle HTF boundaries (e.g. a weekly bar that
+        // opens in July but closes in August).
+        if (openTime[i] <= myOpenTime && myOpenTime < closeTime[i]) {
             if (lookahead) {
                 return i;
             }

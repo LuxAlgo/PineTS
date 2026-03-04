@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-type PlotCharOptions = {
+export type PlotCharOptions = {
     title?: string;
     char?: string;
     location?: string;
@@ -17,7 +17,7 @@ type PlotCharOptions = {
     force_overlay?: boolean;
 };
 
-type PlotOptions = {
+export type PlotOptions = {
     series?: number;
     title?: string;
     color?: string;
@@ -35,7 +35,7 @@ type PlotOptions = {
     force_overlay?: boolean;
 };
 
-type PlotShapeOptions = {
+export type PlotShapeOptions = {
     series?: number;
     title?: string;
     style?: string;
@@ -53,7 +53,7 @@ type PlotShapeOptions = {
     force_overlay?: boolean;
 };
 
-type PlotArrowOptions = {
+export type PlotArrowOptions = {
     series?: number;
     title?: string;
     colorup?: string;
@@ -69,7 +69,7 @@ type PlotArrowOptions = {
     force_overlay?: boolean;
 };
 
-type PlotBarOptions = {
+export type PlotBarOptions = {
     open: number;
     high: number;
     low: number;
@@ -84,7 +84,7 @@ type PlotBarOptions = {
     force_overlay?: boolean;
 };
 
-type BackgroundColorOptions = {
+export type BackgroundColorOptions = {
     color?: string;
     offset?: number;
     editable?: boolean;
@@ -93,7 +93,7 @@ type BackgroundColorOptions = {
     display?: string;
     force_overlay?: boolean;
 };
-type BarColorOptions = {
+export type BarColorOptions = {
     color?: string;
     offset?: number;
     editable?: boolean;
@@ -101,7 +101,7 @@ type BarColorOptions = {
     title?: string;
     display?: string;
 };
-type PlotCandleOptions = {
+export type PlotCandleOptions = {
     open: number;
     high: number;
     low: number;
@@ -117,7 +117,7 @@ type PlotCandleOptions = {
     precision?: number;
     force_overlay?: boolean;
 };
-type IndicatorOptions = {
+export type IndicatorOptions = {
     title: string;
     shorttitle: string;
     overlay: boolean;
@@ -137,7 +137,17 @@ type IndicatorOptions = {
     behind_chart: boolean;
 };
 
-type FillOptions = {
+export type HlineOptions = {
+    price: number;
+    title: string;
+    color: string;
+    linestyle: string;
+    linewidth: number;
+    editable: boolean;
+    display: string;
+};
+
+export type FillOptions = {
     plot1: Record<string, any>;
     plot2: Record<string, any>;
     color: string;
@@ -147,7 +157,7 @@ type FillOptions = {
     fillgaps: boolean;
     display: string;
 };
-type TSessionInfo = {
+export type TSessionInfo = {
     isfirstbar: boolean;
     isfirstbar_regular: boolean;
     islastbar: boolean;

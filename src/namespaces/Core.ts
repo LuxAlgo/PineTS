@@ -3,6 +3,7 @@
 import { Series } from '../Series';
 import { PineTypeObject } from './PineTypeObject';
 import { parseArgsForPineParams } from './utils';
+import type { IndicatorOptions, PlotCharOptions } from '../types/PineTypes';
 
 //prettier-ignore
 const TIMESTAMP_SIGNATURES = [
@@ -61,6 +62,54 @@ const INDICATOR_ARGS_TYPES = {
     behind_chart: 'boolean',
 };
 
+/**
+ * Parse any color string (#hex, #hexAA, rgb(), rgba()) into [r, g, b, a] with a in 0..1.
+ * Returns null if unparsable.
+ */
+function parseColorToRGBA(color: string): [number, number, number, number] | null {
+    if (!color || typeof color !== 'string') return null;
+
+    // #RRGGBB or #RRGGBBAA
+    if (color.startsWith('#')) {
+        const hex = color.slice(1);
+        if (hex.length === 6) {
+            return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16), 1];
+        }
+        if (hex.length === 8) {
+            return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16), parseInt(hex.slice(6, 8), 16) / 255];
+        }
+        return null;
+    }
+
+    // rgba(r, g, b, a) or rgb(r, g, b)
+    const rgbaMatch = color.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\s*\)/);
+    if (rgbaMatch) {
+        return [parseInt(rgbaMatch[1]), parseInt(rgbaMatch[2]), parseInt(rgbaMatch[3]), rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1];
+    }
+
+    return null;
+}
+
+/**
+ * Convert [r, g, b, a] back to a hex string.  If a < 1, include the alpha byte.
+ */
+function rgbaToHex(r: number, g: number, b: number, a: number): string {
+    const rr = Math.round(Math.max(0, Math.min(255, r)))
+        .toString(16)
+        .padStart(2, '0');
+    const gg = Math.round(Math.max(0, Math.min(255, g)))
+        .toString(16)
+        .padStart(2, '0');
+    const bb = Math.round(Math.max(0, Math.min(255, b)))
+        .toString(16)
+        .padStart(2, '0');
+    if (a >= 1) return `#${rr}${gg}${bb}`.toUpperCase();
+    const aa = Math.round(Math.max(0, Math.min(255, a * 255)))
+        .toString(16)
+        .padStart(2, '0');
+    return `#${rr}${gg}${bb}${aa}`.toUpperCase();
+}
+
 const COLOR_CONSTANTS = {
     aqua: '#00BCD4',
     black: '#363A45',
@@ -110,9 +159,18 @@ export class Core {
             return Series.from(source).get(index);
         },
         rgb: (r: number, g: number, b: number, a?: number) => (a ? `rgba(${r}, ${g}, ${b}, ${(100 - a) / 100})` : `rgb(${r}, ${g}, ${b})`),
-        new: (color: string, a?: number) => {
+        new: (color: any, a?: number) => {
+            // Resolve bound functions (e.g. chart.fg_color, chart.bg_color)
+            if (typeof color === 'function') color = color();
+            // Resolve Series objects
+            if (color && typeof color === 'object' && Array.isArray(color.data) && typeof color.get === 'function') {
+                color = color.get(0);
+            }
+            // Ensure color is a string
+            if (!color || typeof color !== 'string') return color;
+
             // Handle hexadecimal colors
-            if (color && color.startsWith('#')) {
+            if (color.startsWith('#')) {
                 // Remove # and convert to RGB
                 const hex = color.slice(1);
                 return a
@@ -134,6 +192,38 @@ export class Core {
                       ? `rgba(${color}, ${(100 - a) / 100})`
                       : color; // Handle existing RGB format
             }
+        },
+        from_gradient: (value: any, bottom_value: any, top_value: any, bottom_color: any, top_color: any): string => {
+            // Resolve Series/functions for all args
+            if (typeof value === 'function') value = value();
+            if (typeof bottom_value === 'function') bottom_value = bottom_value();
+            if (typeof top_value === 'function') top_value = top_value();
+            if (typeof bottom_color === 'function') bottom_color = bottom_color();
+            if (typeof top_color === 'function') top_color = top_color();
+            if (value && typeof value === 'object' && typeof value.get === 'function') value = value.get(0);
+            if (bottom_value && typeof bottom_value === 'object' && typeof bottom_value.get === 'function') bottom_value = bottom_value.get(0);
+            if (top_value && typeof top_value === 'object' && typeof top_value.get === 'function') top_value = top_value.get(0);
+            if (bottom_color && typeof bottom_color === 'object' && typeof bottom_color.get === 'function') bottom_color = bottom_color.get(0);
+            if (top_color && typeof top_color === 'object' && typeof top_color.get === 'function') top_color = top_color.get(0);
+
+            // Clamp position between 0 and 1
+            let t = 0;
+            if (top_value !== bottom_value) {
+                t = (value - bottom_value) / (top_value - bottom_value);
+            }
+            t = Math.max(0, Math.min(1, t));
+
+            // Parse both colors to RGBA
+            const bc = parseColorToRGBA(typeof bottom_color === 'string' ? bottom_color : '#000000') || [0, 0, 0, 1];
+            const tc = parseColorToRGBA(typeof top_color === 'string' ? top_color : '#FFFFFF') || [255, 255, 255, 1];
+
+            // Linear interpolation
+            const r = bc[0] + (tc[0] - bc[0]) * t;
+            const g = bc[1] + (tc[1] - bc[1]) * t;
+            const b = bc[2] + (tc[2] - bc[2]) * t;
+            const a = bc[3] + (tc[3] - bc[3]) * t;
+
+            return rgbaToHex(r, g, b, a);
         },
         aqua: COLOR_CONSTANTS['aqua'],
         black: COLOR_CONSTANTS['black'],
@@ -296,15 +386,7 @@ export class Core {
      * Convert calendar components in an IANA timezone to a UTC timestamp.
      * Uses Intl.DateTimeFormat to determine the timezone offset.
      */
-    private _timestampFromIANA(
-        timezone: string,
-        year: number,
-        month: number,
-        day: number,
-        hour: number,
-        minute: number,
-        second: number,
-    ): number {
+    private _timestampFromIANA(timezone: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
         // Build a rough UTC estimate, then use Intl to find the actual offset
         const utcEstimate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
         if (year >= 0 && year < 100) utcEstimate.setUTCFullYear(year);
@@ -352,7 +434,7 @@ export class Core {
             throw new Error(
                 `Cannot call "int" with argument "x"="${val}". An argument of "literal string" type was used but a "simple int" is expected.`,
             );
-        return Math.floor(val);
+        return Math.trunc(val);
     }
     float(series: any) {
         const val = Series.from(series).get(0);

@@ -16,9 +16,11 @@ export function sma(context: any) {
                 // Committed state
                 prevWindow: [],
                 prevSum: 0,
+                prevCallCount: 0,
                 // Tentative state
                 currentWindow: [],
                 currentSum: 0,
+                currentCallCount: 0,
             };
         }
 
@@ -29,6 +31,7 @@ export function sma(context: any) {
             if (state.lastIdx >= 0) {
                 state.prevWindow = [...state.currentWindow];
                 state.prevSum = state.currentSum;
+                state.prevCallCount = state.currentCallCount;
             }
             state.lastIdx = context.idx;
         }
@@ -46,42 +49,30 @@ export function sma(context: any) {
             window.pop();
         }
 
-        // Backfill from source if window is undersized (dynamic length recovery)
-        let didBackfill = false;
-        if (window.length < period && context.idx >= period - 1) {
+        // Track actual call count for callsite-correct backfill
+        const callCount = state.prevCallCount + 1;
+
+        // Backfill from source series when window is undersized.
+        // Use both callCount (for top-level warmup) and context.idx
+        // (for conditional/barstate.islast where chart has enough history).
+        let backfilled = false;
+        if (window.length < period && (callCount >= period || context.idx >= period - 1)) {
             const series = Series.from(source);
             while (window.length < period) {
                 window.push(series.get(window.length));
             }
-            didBackfill = true;
+            backfilled = true;
         }
 
         let sum;
 
         // Check for NaN contamination to decide on calculation strategy
-        // If any value in the window is NaN (or previous sum was NaN), we must verify the sum by full recalculation
-        // to correctly handle NaN propagation and recovery.
-        // We also check for undefined/null which treated as NaN for calculation purposes.
         const isCurrentInvalid = currentValue === undefined || currentValue === null || Number.isNaN(currentValue);
         const isPrevSumInvalid = Number.isNaN(state.prevSum);
-        
-        // We assume fast path is possible if everything looks valid.
-        // But if we are popping a value, we can't easily know if it was NaN without checking.
-        // Given SMA window sizes are usually manageable, O(N) sum when state is suspect is safer.
-        // Optimization: If prevSum is valid and current is valid, we still need to know if the popped value was valid.
-        // Since we've already popped it (or not), we can't easily check it unless we checked before pop.
-        
-        // To avoid complexity, we use the "NaN check" strategy:
-        // 1. If sum needs repair (NaN involved), calculate from scratch.
-        // 2. Otherwise try incremental.
-        
-        // But checking "popped value was NaN" implies we need access to it.
-        // Let's simplify: Always calculate sum O(N) if any NaN is present in window?
-        // Or just implement the O(N) loop which is robust.
-        
-        // Let's try the robust O(N) fallback only when necessary.
-        
-        let useFastPath = !isPrevSumInvalid && !isCurrentInvalid && !didBackfill;
+
+        // When backfill added values to the window, prevSum doesn't include
+        // them so the incremental path would give wrong results.
+        let useFastPath = !isPrevSumInvalid && !isCurrentInvalid && !backfilled;
         
         // If fast path seems possible, we still need to be sure we didn't just pop a NaN (which would make result NaN -> Number, requiring recalc of prevSum didn't allow recovery)
         // Actually, if prevSum was Number, then the window *should* have contained only Numbers. 
@@ -134,6 +125,7 @@ export function sma(context: any) {
         // Update tentative state
         state.currentWindow = window;
         state.currentSum = sum;
+        state.currentCallCount = callCount;
         
         if (window.length < period) {
             return NaN;

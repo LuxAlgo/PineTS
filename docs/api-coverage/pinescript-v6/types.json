@@ -1,24 +1,24 @@
 {
     "dividends": {
-        "dividends.future_amount": false,
-        "dividends.future_ex_date": false,
-        "dividends.future_pay_date": false,
-        "dividends.gross": false,
-        "dividends.net": false
+        "dividends.future_amount": true,
+        "dividends.future_ex_date": true,
+        "dividends.future_pay_date": true,
+        "dividends.gross": true,
+        "dividends.net": true
     },
     "earnings": {
-        "earnings.future_eps": false,
-        "earnings.future_period_end_time": false,
-        "earnings.future_revenue": false,
-        "earnings.future_time": false,
-        "earnings.actual": false,
-        "earnings.estimate": false,
-        "earnings.standardized": false
+        "earnings.future_eps": true,
+        "earnings.future_period_end_time": true,
+        "earnings.future_revenue": true,
+        "earnings.future_time": true,
+        "earnings.actual": true,
+        "earnings.estimate": true,
+        "earnings.standardized": true
     },
     "adjustment": {
-        "adjustment.dividends": false,
-        "adjustment.none": false,
-        "adjustment.splits": false
+        "adjustment.dividends": true,
+        "adjustment.none": true,
+        "adjustment.splits": true
     },
     "alert": {
         "alert.freq_all": false,
@@ -26,9 +26,9 @@
         "alert.freq_once_per_bar_close": false
     },
     "backadjustment": {
-        "backadjustment.inherit": false,
-        "backadjustment.off": false,
-        "backadjustment.on": false
+        "backadjustment.inherit": true,
+        "backadjustment.off": true,
+        "backadjustment.on": true
     },
     "barmerge": {
         "barmerge.gaps_off": false,
@@ -205,8 +205,8 @@
         "size.tiny": true
     },
     "splits": {
-        "splits.denominator": false,
-        "splits.numerator": false
+        "splits.denominator": true,
+        "splits.numerator": true
     },
     "text": {
         "text.align_bottom": false,

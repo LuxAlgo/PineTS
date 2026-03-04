@@ -27,15 +27,15 @@ export class LabelObject {
         x: number,
         y: number,
         text: string = '',
-        xloc: string = 'bar_index',
-        yloc: string = 'price',
+        xloc: string = 'bi',
+        yloc: string = 'pr',
         color: string = '',
         style: string = 'style_label_down',
         textcolor: string = '',
         size: string = 'normal',
-        textalign: string = 'align_center',
+        textalign: string = 'center',
         tooltip: string = '',
-        text_font_family: string = 'family_default',
+        text_font_family: string = 'default',
         force_overlay: boolean = false,
     ) {
         this.id = _labelIdCounter++;
@@ -53,6 +53,10 @@ export class LabelObject {
         this.text_font_family = text_font_family;
         this.force_overlay = force_overlay;
         this._deleted = false;
+    }
+
+    delete(): void {
+        this._deleted = true;
     }
 
     copy(): LabelObject {

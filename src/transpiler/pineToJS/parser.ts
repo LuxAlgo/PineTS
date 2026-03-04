@@ -86,7 +86,7 @@ export class Parser {
         if (token.type === TokenType.NEWLINE) {
             offset++;
             token = this.peek(offset);
-            
+
             // Optional INDENT after NEWLINE
             if (token.type === TokenType.INDENT) {
                 offset++;
@@ -101,8 +101,46 @@ export class Parser {
         for (let i = 0; i < offset; i++) {
             this.advance();
         }
-        
+
         return true;
+    }
+
+    // Peek ahead for an operator, optionally ignoring NEWLINE and INDENT (non-consuming unless matched)
+    // Returns the operator value if found, null otherwise
+    // IMPORTANT: Does NOT match across NEWLINE+INDENT for ambiguous operators (+, -)
+    // that could be unary, since NEWLINE+INDENT indicates a new indented block
+    peekOperatorEx(validOps: string[]) {
+        let offset = 0;
+        let token = this.peek(offset);
+        let crossedIndent = false;
+
+        // Skip NEWLINE and subsequent INDENT
+        if (token.type === TokenType.NEWLINE) {
+            offset++;
+            token = this.peek(offset);
+
+            // Optional INDENT after NEWLINE
+            if (token.type === TokenType.INDENT) {
+                crossedIndent = true;
+                offset++;
+                token = this.peek(offset);
+            }
+        }
+
+        if (token.type !== TokenType.OPERATOR) return null;
+        if (!validOps.includes(token.value)) return null;
+
+        // If we crossed an INDENT boundary and the operator is ambiguous (could be unary),
+        // do NOT treat it as a binary operator continuation
+        if (crossedIndent && (token.value === '+' || token.value === '-')) {
+            return null;
+        }
+
+        // Only now consume the skipped NEWLINE/INDENT tokens
+        for (let i = 0; i < offset; i++) {
+            this.advance();
+        }
+        return token.value;
     }
 
     skipNewlines(allowIndent = false) {
@@ -153,8 +191,12 @@ export class Parser {
 
         let stmt;
 
+        // Enum definition
+        if (this.match(TokenType.KEYWORD, 'enum')) {
+            stmt = this.parseEnumDefinition();
+        }
         // Type definition
-        if (this.match(TokenType.KEYWORD, 'type')) {
+        else if (this.match(TokenType.KEYWORD, 'type')) {
             stmt = this.parseTypeDefinition();
         }
         // Variable declaration (var/varip)
@@ -331,6 +373,42 @@ export class Parser {
         }
         
         return baseType; // Simple type: "float", "int", etc.
+    }
+
+    // Parse enum definition: enum Name \n member1 \n member2 \n ...
+    // Generates: const Name = { member1: 'Name.member1', member2: 'Name.member2', ... }
+    parseEnumDefinition() {
+        this.expect(TokenType.KEYWORD, 'enum');
+        const name = this.expect(TokenType.IDENTIFIER).value;
+
+        this.skipNewlines();
+        this.expect(TokenType.INDENT);
+
+        const members: string[] = [];
+        while (!this.match(TokenType.DEDENT) && !this.match(TokenType.EOF)) {
+            this.skipNewlines();
+            if (this.match(TokenType.DEDENT)) break;
+            if (this.match(TokenType.COMMENT)) {
+                this.advance();
+                continue;
+            }
+
+            const memberName = this.expect(TokenType.IDENTIFIER).value;
+            members.push(memberName);
+            this.skipNewlines();
+        }
+
+        if (this.match(TokenType.DEDENT)) {
+            this.advance();
+        }
+
+        // Generate: const Name = { member1: 'Name.member1', ... }
+        const props = members.map((m) => new Property(new Identifier(m), new Literal(`${name}.${m}`)));
+        const objExpr = new ObjectExpression(props);
+        return new VariableDeclaration(
+            [new VariableDeclarator(new Identifier(name), objExpr)],
+            VariableDeclarationKind.CONST
+        );
     }
 
     parseTypeDefinition() {
@@ -1148,7 +1226,7 @@ export class Parser {
     parseLogicalOr() {
         let left = this.parseLogicalAnd();
 
-        while (this.matchEx(TokenType.KEYWORD, 'or', true) || (this.matchEx(TokenType.OPERATOR, null, true) && this.peek().value === '||')) {
+        while (this.matchEx(TokenType.KEYWORD, 'or', true) || this.peekOperatorEx(['||'])) {
             this.advance();
             this.skipNewlines(true);
             const right = this.parseLogicalAnd();
@@ -1161,7 +1239,7 @@ export class Parser {
     parseLogicalAnd() {
         let left = this.parseEquality();
 
-        while (this.matchEx(TokenType.KEYWORD, 'and', true) || (this.matchEx(TokenType.OPERATOR, null, true) && this.peek().value === '&&')) {
+        while (this.matchEx(TokenType.KEYWORD, 'and', true) || this.peekOperatorEx(['&&'])) {
             this.advance();
             this.skipNewlines();
             const right = this.parseEquality();
@@ -1174,11 +1252,8 @@ export class Parser {
     parseEquality() {
         let left = this.parseComparison();
 
-        while (this.matchEx(TokenType.OPERATOR, null, true)) {
-            const op = this.peek().value;
-            if (!['==', '!='].includes(op)) break;
-
-            this.advance();
+        while (this.peekOperatorEx(['==', '!='])) {
+            const op = this.advance().value;
             this.skipNewlines(true);
             const right = this.parseComparison();
             left = new BinaryExpression(op, left, right);
@@ -1190,11 +1265,8 @@ export class Parser {
     parseComparison() {
         let left = this.parseAdditive();
 
-        while (this.matchEx(TokenType.OPERATOR, null, true)) {
-            const op = this.peek().value;
-            if (!['<', '>', '<=', '>='].includes(op)) break;
-
-            this.advance();
+        while (this.peekOperatorEx(['<', '>', '<=', '>='])) {
+            const op = this.advance().value;
             this.skipNewlines();
             const right = this.parseAdditive();
             left = new BinaryExpression(op, left, right);
@@ -1206,11 +1278,8 @@ export class Parser {
     parseAdditive() {
         let left = this.parseMultiplicative();
 
-        while (this.matchEx(TokenType.OPERATOR, null, true)) {
-            const op = this.peek().value;
-            if (!['+', '-'].includes(op)) break;
-
-            this.advance();
+        while (this.peekOperatorEx(['+', '-'])) {
+            const op = this.advance().value;
             this.skipNewlines(true);
             const right = this.parseMultiplicative();
             left = new BinaryExpression(op, left, right);
@@ -1222,11 +1291,8 @@ export class Parser {
     parseMultiplicative() {
         let left = this.parseUnary();
 
-        while (this.matchEx(TokenType.OPERATOR, null, true)) {
-            const op = this.peek().value;
-            if (!['*', '/', '%'].includes(op)) break;
-
-            this.advance();
+        while (this.peekOperatorEx(['*', '/', '%'])) {
+            const op = this.advance().value;
             this.skipNewlines(true);
             const right = this.parseUnary();
             left = new BinaryExpression(op, left, right);
@@ -1423,6 +1489,16 @@ export class Parser {
             return this.parseSwitchExpression();
         }
 
+        // For expression (for loop as expression — returns last evaluated value)
+        if (this.match(TokenType.KEYWORD, 'for')) {
+            return this.parseForExpression();
+        }
+
+        // While expression (while loop as expression — returns last evaluated value)
+        if (this.match(TokenType.KEYWORD, 'while')) {
+            return this.parseWhileExpression();
+        }
+
         throw new Error(`Unexpected token ${token.type} '${token.value}' at ${token.line}:${token.column}`);
     }
 
@@ -1581,6 +1657,24 @@ export class Parser {
 
         this.advance(); // DEDENT
         return new SwitchExpression(discriminant, cases);
+    }
+
+    // Parse for loop used as expression (returns last evaluated value)
+    // Example: _result = for i = 0 to 4 \n close[i]
+    parseForExpression() {
+        const forStmt = this.parseForStatement();
+        // Mark as expression-returning
+        (forStmt as any).isExpression = true;
+        return forStmt;
+    }
+
+    // Parse while loop used as expression (returns last evaluated value)
+    // Example: _result = while condition \n expr
+    parseWhileExpression() {
+        const whileStmt = this.parseWhileStatement();
+        // Mark as expression-returning
+        (whileStmt as any).isExpression = true;
+        return whileStmt;
     }
 
     getBlockValue(statements) {

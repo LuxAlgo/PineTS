@@ -367,7 +367,7 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                                     const newBody: any[] = [];
                                     node.body.body.forEach((stmt: any) => {
                                         scopeManager.enterHoistingScope();
-                                        c(stmt, { parent: node.body });
+                                        c(stmt, { parent: node.body, insideIIFE: true });
                                         const hoistedStmts = scopeManager.exitHoistingScope();
                                         newBody.push(...hoistedStmts);
                                         newBody.push(stmt);
@@ -375,7 +375,7 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                                     node.body.body = newBody;
                                 } else {
                                     // For expression body, traverse the expression
-                                    c(node.body, { parent: node });
+                                    c(node.body, { parent: node, insideIIFE: true });
                                 }
                             }
                         },
@@ -385,7 +385,7 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                                 const newBody: any[] = [];
                                 node.body.body.forEach((stmt: any) => {
                                     scopeManager.enterHoistingScope();
-                                    c(stmt, { parent: node.body });
+                                    c(stmt, { parent: node.body, insideIIFE: true });
                                     const hoistedStmts = scopeManager.exitHoistingScope();
                                     newBody.push(...hoistedStmts);
                                     newBody.push(stmt);
@@ -425,6 +425,24 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                                 });
                                 node.consequent = newConsequent;
                             }
+                        },
+                        AssignmentExpression(node: any, state: any, c: any) {
+                            // Only transform assignment expressions inside IIFEs (e.g., while/for-as-expression)
+                            // Don't transform assignments used as sub-expressions in normal initializers
+                            // (e.g., let result = (val = 10) + 5 — the (val = 10) must remain a JS assignment)
+                            if (!state.insideIIFE) return;
+
+                            // Skip local IIFE variables (like __result) that aren't registered Pine Script vars
+                            if (node.left.type === 'Identifier') {
+                                const [scopedName] = scopeManager.getVariable(node.left.name);
+                                if (scopedName === node.left.name && !scopeManager.isContextBound(node.left.name)) {
+                                    // Unknown local variable — don't transform the assignment,
+                                    // but still traverse the right-hand side for identifier transformations
+                                    c(node.right, { parent: node });
+                                    return;
+                                }
+                            }
+                            transformAssignmentExpression(node, scopeManager);
                         },
                     }
                 );

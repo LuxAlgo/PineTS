@@ -11,10 +11,10 @@ export const ASYNC_METHODS = ['request.security', 'request.security_lower_tf'];
 // Factory methods that create objects with side effects (format: 'namespace.method')
 // When used inside `var` declarations, these calls are wrapped in arrow functions
 // so they are only evaluated on bar 0 (deferred evaluation via initVar thunk).
-export const FACTORY_METHODS = ['line.new', 'line.copy', 'label.new', 'label.copy'];
+export const FACTORY_METHODS = ['line.new', 'line.copy', 'label.new', 'label.copy', 'polyline.new', 'box.new', 'box.copy', 'table.new'];
 
 // All known data variables in the context
-export const CONTEXT_DATA_VARS = ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'openTime', 'closeTime'];
+export const CONTEXT_DATA_VARS = ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'openTime', 'closeTime'];
 
 // All known Pine variables in the context
 export const CONTEXT_PINE_VARS = [
@@ -51,6 +51,7 @@ export const CONTEXT_PINE_VARS = [
     'table',
     'chart',
     'linefill',
+    'polyline',
     'map',
     'matrix',
     'log',
@@ -58,6 +59,9 @@ export const CONTEXT_PINE_VARS = [
     //types
     'Type', //UDT
     'bool',
+    'int',
+    'float',
+    'string',
 
     //market info
     'timeframe',
@@ -95,6 +99,17 @@ export const CONTEXT_PINE_VARS = [
     'yloc',
     'text',
     'font',
+    'extend',
+    'position',
+
+    // Adjustment constants
+    'adjustment',
+    'backadjustment',
+
+    // Financial data constants
+    'earnings',
+    'dividends',
+    'splits',
 ];
 
 // All known core variables in the context

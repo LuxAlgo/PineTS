@@ -25,7 +25,7 @@ export class LineObject {
         y1: number,
         x2: number,
         y2: number,
-        xloc: string = 'bar_index',
+        xloc: string = 'bi',
         extend: string = 'none',
         color: string = '',
         style: string = 'style_solid',
@@ -44,6 +44,10 @@ export class LineObject {
         this.width = width;
         this.force_overlay = force_overlay;
         this._deleted = false;
+    }
+
+    delete(): void {
+        this._deleted = true;
     }
 
     copy(): LineObject {
