@@ -244,8 +244,25 @@ export function runTransformationPass(
             }
             transformMemberExpression(node, originalParamName, state);
         },
-        AssignmentExpression(node: any, state: ScopeManager) {
+        AssignmentExpression(node: any, state: ScopeManager, c: any) {
             transformAssignmentExpression(node, state);
+            // After compound assignment transformation, the node becomes $.set(target, rhs).
+            // Traverse any IIFEs in the RHS to transform identifiers inside them
+            // (e.g., switch-expression IIFEs in compound assignments like disp /= switch i {...}).
+            if (node.type === 'CallExpression' && node.arguments) {
+                const traverseForIIFEs = (n: any): void => {
+                    if (!n) return;
+                    if (n.type === 'CallExpression' && n.callee &&
+                        (n.callee.type === 'ArrowFunctionExpression' || n.callee.type === 'FunctionExpression')) {
+                        c(n.callee, state);
+                    }
+                    if (n.type === 'BinaryExpression') {
+                        traverseForIIFEs(n.left);
+                        traverseForIIFEs(n.right);
+                    }
+                };
+                node.arguments.forEach((arg: any) => traverseForIIFEs(arg));
+            }
         },
         FunctionDeclaration(node: any, state: ScopeManager, c: any) {
             transformFunctionDeclaration(node, state, c);

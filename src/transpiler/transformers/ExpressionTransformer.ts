@@ -938,6 +938,12 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
         } else if (arg.object.type === 'MemberExpression') {
             // Recursively handle nested member expressions like obj.prop1.prop2
             transformFunctionArgument(arg.object, namespace, scopeManager);
+        } else if (arg.object.type === 'CallExpression') {
+            // Recursively handle call expression objects like arr.get(2).out
+            // The call might contain user variable identifiers that need transformation
+            if (!arg.object._transformed) {
+                transformCallExpression(arg.object, scopeManager);
+            }
         }
     }
 
