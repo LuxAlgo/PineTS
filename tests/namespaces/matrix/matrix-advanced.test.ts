@@ -722,27 +722,188 @@ describe('Matrix Methods - Advanced Operations', () => {
             expect(typeof plots['det'].data[0].value).toBe('number');
         });
 
-        it('should compute matrix inverse', async () => {
+        it('should compute 2x2 matrix inverse with correct values', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
 
+            // [[4, 7], [2, 6]] → inv = 1/(24-14) * [[6, -7], [-2, 4]] = [[0.6, -0.7], [-0.2, 0.4]]
             const code = `
                 const { matrix, plotchar } = context.pine;
-                
+
                 let m = matrix.new(2, 2, 0);
                 matrix.set(m, 0, 0, 4);
                 matrix.set(m, 0, 1, 7);
                 matrix.set(m, 1, 0, 2);
                 matrix.set(m, 1, 1, 6);
-                
+
                 let inv = matrix.inv(m);
-                let val00 = matrix.get(inv, 0, 0);
-                
-                plotchar(val00, 'val00');
+                plotchar(matrix.get(inv, 0, 0), 'v00');
+                plotchar(matrix.get(inv, 0, 1), 'v01');
+                plotchar(matrix.get(inv, 1, 0), 'v10');
+                plotchar(matrix.get(inv, 1, 1), 'v11');
             `;
 
             const { plots } = await pineTS.run(code);
-            // Inverse exists if determinant != 0
-            expect(plots['val00'].data[0].value).toBeDefined();
+            expect(plots['v00'].data[0].value).toBeCloseTo(0.6, 10);
+            expect(plots['v01'].data[0].value).toBeCloseTo(-0.7, 10);
+            expect(plots['v10'].data[0].value).toBeCloseTo(-0.2, 10);
+            expect(plots['v11'].data[0].value).toBeCloseTo(0.4, 10);
+        });
+
+        it('should compute 3x3 matrix inverse (A * A^-1 = I)', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            // [[1,2,3],[0,1,4],[5,6,0]] — verify A * inv(A) = I
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let m = matrix.new(3, 3, 0);
+                matrix.set(m, 0, 0, 1); matrix.set(m, 0, 1, 2); matrix.set(m, 0, 2, 3);
+                matrix.set(m, 1, 0, 0); matrix.set(m, 1, 1, 1); matrix.set(m, 1, 2, 4);
+                matrix.set(m, 2, 0, 5); matrix.set(m, 2, 1, 6); matrix.set(m, 2, 2, 0);
+
+                let inv = matrix.inv(m);
+                let product = matrix.mult(m, inv);
+
+                // Diagonal should be 1, off-diagonal should be 0
+                plotchar(matrix.get(product, 0, 0), 'd00');
+                plotchar(matrix.get(product, 1, 1), 'd11');
+                plotchar(matrix.get(product, 2, 2), 'd22');
+                plotchar(matrix.get(product, 0, 1), 'o01');
+                plotchar(matrix.get(product, 1, 0), 'o10');
+                plotchar(matrix.get(product, 0, 2), 'o02');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            // Diagonal elements should be 1
+            expect(plots['d00'].data[0].value).toBeCloseTo(1, 8);
+            expect(plots['d11'].data[0].value).toBeCloseTo(1, 8);
+            expect(plots['d22'].data[0].value).toBeCloseTo(1, 8);
+            // Off-diagonal elements should be 0
+            expect(plots['o01'].data[0].value).toBeCloseTo(0, 8);
+            expect(plots['o10'].data[0].value).toBeCloseTo(0, 8);
+            expect(plots['o02'].data[0].value).toBeCloseTo(0, 8);
+        });
+
+        it('should compute 4x4 matrix inverse', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            // 4x4 matrix — verify A * inv(A) diagonal = 1
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let m = matrix.new(4, 4, 0);
+                matrix.set(m, 0, 0, 2); matrix.set(m, 0, 1, 1); matrix.set(m, 0, 2, 0); matrix.set(m, 0, 3, 1);
+                matrix.set(m, 1, 0, 3); matrix.set(m, 1, 1, 2); matrix.set(m, 1, 2, 1); matrix.set(m, 1, 3, 0);
+                matrix.set(m, 2, 0, 1); matrix.set(m, 2, 1, 0); matrix.set(m, 2, 2, 2); matrix.set(m, 2, 3, 1);
+                matrix.set(m, 3, 0, 0); matrix.set(m, 3, 1, 1); matrix.set(m, 3, 2, 1); matrix.set(m, 3, 3, 3);
+
+                let inv = matrix.inv(m);
+                let product = matrix.mult(m, inv);
+
+                plotchar(matrix.get(product, 0, 0), 'd00');
+                plotchar(matrix.get(product, 1, 1), 'd11');
+                plotchar(matrix.get(product, 2, 2), 'd22');
+                plotchar(matrix.get(product, 3, 3), 'd33');
+                plotchar(matrix.get(product, 0, 3), 'o03');
+                plotchar(matrix.get(product, 2, 1), 'o21');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['d00'].data[0].value).toBeCloseTo(1, 8);
+            expect(plots['d11'].data[0].value).toBeCloseTo(1, 8);
+            expect(plots['d22'].data[0].value).toBeCloseTo(1, 8);
+            expect(plots['d33'].data[0].value).toBeCloseTo(1, 8);
+            expect(plots['o03'].data[0].value).toBeCloseTo(0, 8);
+            expect(plots['o21'].data[0].value).toBeCloseTo(0, 8);
+        });
+
+        it('should return identity when inverting identity matrix', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let m = matrix.new(3, 3, 0);
+                matrix.set(m, 0, 0, 1);
+                matrix.set(m, 1, 1, 1);
+                matrix.set(m, 2, 2, 1);
+
+                let inv = matrix.inv(m);
+                plotchar(matrix.get(inv, 0, 0), 'd00');
+                plotchar(matrix.get(inv, 1, 1), 'd11');
+                plotchar(matrix.get(inv, 2, 2), 'd22');
+                plotchar(matrix.get(inv, 0, 1), 'o01');
+                plotchar(matrix.get(inv, 1, 2), 'o12');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['d00'].data[0].value).toBeCloseTo(1, 10);
+            expect(plots['d11'].data[0].value).toBeCloseTo(1, 10);
+            expect(plots['d22'].data[0].value).toBeCloseTo(1, 10);
+            expect(plots['o01'].data[0].value).toBeCloseTo(0, 10);
+            expect(plots['o12'].data[0].value).toBeCloseTo(0, 10);
+        });
+
+        it('should return NaN for singular matrix', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            // [[1,2],[2,4]] is singular (det=0, row 2 = 2 * row 1)
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let m = matrix.new(2, 2, 0);
+                matrix.set(m, 0, 0, 1);
+                matrix.set(m, 0, 1, 2);
+                matrix.set(m, 1, 0, 2);
+                matrix.set(m, 1, 1, 4);
+
+                let inv = matrix.inv(m);
+                plotchar(matrix.get(inv, 0, 0), 'v00');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['v00'].data[0].value).toBeNaN();
+        });
+
+        it('should return NaN for non-square matrix', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let m = matrix.new(2, 3, 1);
+                let inv = matrix.inv(m);
+                plotchar(matrix.get(inv, 0, 0), 'v00');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['v00'].data[0].value).toBeNaN();
+        });
+
+        it('should compute inverse of diagonal matrix', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            // diag(2, 5, 4) → inv = diag(1/2, 1/5, 1/4)
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let m = matrix.new(3, 3, 0);
+                matrix.set(m, 0, 0, 2);
+                matrix.set(m, 1, 1, 5);
+                matrix.set(m, 2, 2, 4);
+
+                let inv = matrix.inv(m);
+                plotchar(matrix.get(inv, 0, 0), 'v00');
+                plotchar(matrix.get(inv, 1, 1), 'v11');
+                plotchar(matrix.get(inv, 2, 2), 'v22');
+                plotchar(matrix.get(inv, 0, 1), 'o01');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['v00'].data[0].value).toBeCloseTo(0.5, 10);
+            expect(plots['v11'].data[0].value).toBeCloseTo(0.2, 10);
+            expect(plots['v22'].data[0].value).toBeCloseTo(0.25, 10);
+            expect(plots['o01'].data[0].value).toBeCloseTo(0, 10);
         });
 
         it('should compute matrix rank', async () => {
@@ -833,12 +994,13 @@ describe('Matrix Methods - Advanced Operations', () => {
             expect(plots['rows'].data[0].value).toBeGreaterThan(0);
         });
 
-        it('should compute pseudo-inverse', async () => {
+        it('should compute pseudo-inverse of wide matrix (m < n) with correct dimensions', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
 
+            // 2x3 wide matrix → pinv should be 3x2
             const code = `
                 const { matrix, plotchar } = context.pine;
-                
+
                 let m = matrix.new(2, 3, 0);
                 matrix.set(m, 0, 0, 1);
                 matrix.set(m, 0, 1, 2);
@@ -846,18 +1008,160 @@ describe('Matrix Methods - Advanced Operations', () => {
                 matrix.set(m, 1, 0, 4);
                 matrix.set(m, 1, 1, 5);
                 matrix.set(m, 1, 2, 6);
-                
+
                 let pinv = matrix.pinv(m);
-                let rows = matrix.rows(pinv);
-                let cols = matrix.columns(pinv);
-                
-                plotchar(rows, 'rows');
-                plotchar(cols, 'cols');
+                plotchar(matrix.rows(pinv), 'rows');
+                plotchar(matrix.columns(pinv), 'cols');
             `;
 
             const { plots } = await pineTS.run(code);
             expect(plots['rows'].data[0].value).toBe(3);
             expect(plots['cols'].data[0].value).toBe(2);
+        });
+
+        it('should compute pseudo-inverse of tall matrix (m > n) with correct dimensions', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            // 3x2 tall matrix → pinv should be 2x3
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let m = matrix.new(3, 2, 0);
+                matrix.set(m, 0, 0, 1); matrix.set(m, 0, 1, 2);
+                matrix.set(m, 1, 0, 3); matrix.set(m, 1, 1, 4);
+                matrix.set(m, 2, 0, 5); matrix.set(m, 2, 1, 6);
+
+                let pinv = matrix.pinv(m);
+                plotchar(matrix.rows(pinv), 'rows');
+                plotchar(matrix.columns(pinv), 'cols');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['rows'].data[0].value).toBe(2);
+            expect(plots['cols'].data[0].value).toBe(3);
+        });
+
+        it('should satisfy A * pinv(A) * A ≈ A for tall matrix', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            // Moore-Penrose property: A * pinv(A) * A = A
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let A = matrix.new(3, 2, 0);
+                matrix.set(A, 0, 0, 1); matrix.set(A, 0, 1, 2);
+                matrix.set(A, 1, 0, 3); matrix.set(A, 1, 1, 4);
+                matrix.set(A, 2, 0, 5); matrix.set(A, 2, 1, 6);
+
+                let Ap = matrix.pinv(A);
+                let AApA = matrix.mult(matrix.mult(A, Ap), A);
+
+                plotchar(matrix.get(AApA, 0, 0), 'r00');
+                plotchar(matrix.get(AApA, 0, 1), 'r01');
+                plotchar(matrix.get(AApA, 1, 0), 'r10');
+                plotchar(matrix.get(AApA, 1, 1), 'r11');
+                plotchar(matrix.get(AApA, 2, 0), 'r20');
+                plotchar(matrix.get(AApA, 2, 1), 'r21');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            // A * pinv(A) * A should equal A
+            expect(plots['r00'].data[0].value).toBeCloseTo(1, 6);
+            expect(plots['r01'].data[0].value).toBeCloseTo(2, 6);
+            expect(plots['r10'].data[0].value).toBeCloseTo(3, 6);
+            expect(plots['r11'].data[0].value).toBeCloseTo(4, 6);
+            expect(plots['r20'].data[0].value).toBeCloseTo(5, 6);
+            expect(plots['r21'].data[0].value).toBeCloseTo(6, 6);
+        });
+
+        it('should satisfy A * pinv(A) * A ≈ A for wide matrix', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let A = matrix.new(2, 3, 0);
+                matrix.set(A, 0, 0, 1); matrix.set(A, 0, 1, 2); matrix.set(A, 0, 2, 3);
+                matrix.set(A, 1, 0, 4); matrix.set(A, 1, 1, 5); matrix.set(A, 1, 2, 6);
+
+                let Ap = matrix.pinv(A);
+                let AApA = matrix.mult(matrix.mult(A, Ap), A);
+
+                plotchar(matrix.get(AApA, 0, 0), 'r00');
+                plotchar(matrix.get(AApA, 0, 1), 'r01');
+                plotchar(matrix.get(AApA, 0, 2), 'r02');
+                plotchar(matrix.get(AApA, 1, 0), 'r10');
+                plotchar(matrix.get(AApA, 1, 1), 'r11');
+                plotchar(matrix.get(AApA, 1, 2), 'r12');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['r00'].data[0].value).toBeCloseTo(1, 6);
+            expect(plots['r01'].data[0].value).toBeCloseTo(2, 6);
+            expect(plots['r02'].data[0].value).toBeCloseTo(3, 6);
+            expect(plots['r10'].data[0].value).toBeCloseTo(4, 6);
+            expect(plots['r11'].data[0].value).toBeCloseTo(5, 6);
+            expect(plots['r12'].data[0].value).toBeCloseTo(6, 6);
+        });
+
+        it('should equal regular inverse for square matrix', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            // For square invertible matrix, pinv(A) = inv(A)
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let m = matrix.new(2, 2, 0);
+                matrix.set(m, 0, 0, 4); matrix.set(m, 0, 1, 7);
+                matrix.set(m, 1, 0, 2); matrix.set(m, 1, 1, 6);
+
+                let pinvM = matrix.pinv(m);
+                let invM = matrix.inv(m);
+
+                plotchar(matrix.get(pinvM, 0, 0), 'p00');
+                plotchar(matrix.get(pinvM, 0, 1), 'p01');
+                plotchar(matrix.get(pinvM, 1, 0), 'p10');
+                plotchar(matrix.get(pinvM, 1, 1), 'p11');
+                plotchar(matrix.get(invM, 0, 0), 'i00');
+                plotchar(matrix.get(invM, 0, 1), 'i01');
+                plotchar(matrix.get(invM, 1, 0), 'i10');
+                plotchar(matrix.get(invM, 1, 1), 'i11');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['p00'].data[0].value).toBeCloseTo(plots['i00'].data[0].value, 8);
+            expect(plots['p01'].data[0].value).toBeCloseTo(plots['i01'].data[0].value, 8);
+            expect(plots['p10'].data[0].value).toBeCloseTo(plots['i10'].data[0].value, 8);
+            expect(plots['p11'].data[0].value).toBeCloseTo(plots['i11'].data[0].value, 8);
+        });
+
+        it('should compute pinv for column vector (Nx1)', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+
+            // pinv of column vector [a; b; c] = [a b c] / (a² + b² + c²)
+            const code = `
+                const { matrix, plotchar } = context.pine;
+
+                let v = matrix.new(3, 1, 0);
+                matrix.set(v, 0, 0, 1);
+                matrix.set(v, 1, 0, 2);
+                matrix.set(v, 2, 0, 3);
+
+                let pinvV = matrix.pinv(v);
+                plotchar(matrix.rows(pinvV), 'rows');
+                plotchar(matrix.columns(pinvV), 'cols');
+                // pinv([1;2;3]) = [1 2 3]/(1+4+9) = [1/14, 2/14, 3/14]
+                plotchar(matrix.get(pinvV, 0, 0), 'v00');
+                plotchar(matrix.get(pinvV, 0, 1), 'v01');
+                plotchar(matrix.get(pinvV, 0, 2), 'v02');
+            `;
+
+            const { plots } = await pineTS.run(code);
+            expect(plots['rows'].data[0].value).toBe(1);
+            expect(plots['cols'].data[0].value).toBe(3);
+            expect(plots['v00'].data[0].value).toBeCloseTo(1/14, 8);
+            expect(plots['v01'].data[0].value).toBeCloseTo(2/14, 8);
+            expect(plots['v02'].data[0].value).toBeCloseTo(3/14, 8);
         });
 
         it('should compute matrix multiplication (scalar)', async () => {
