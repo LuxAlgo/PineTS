@@ -33,7 +33,8 @@ export function inferValueType(value: any): PineArrayType {
     } else if (typeof value === 'boolean') {
         return PineArrayType.bool;
     } else {
-        throw new Error('Cannot infer type from value');
+        // Objects (LineObject, LabelObject, BoxObject, etc.) get 'any' type
+        return PineArrayType.any;
     }
 }
 

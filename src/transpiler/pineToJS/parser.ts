@@ -703,6 +703,15 @@ export class Parser {
                 paramType = (paramType || '') + this.advance().value;
             }
 
+            // Handle generic type: array<float>, map<string, float>, etc.
+            if (
+                this.peek().type === TokenType.IDENTIFIER &&
+                this.peek(1).type === TokenType.OPERATOR && this.peek(1).value === '<'
+            ) {
+                const genericType = this.parseTypeExpression();
+                paramType = paramType ? paramType + ' ' + genericType : genericType;
+            }
+
             const paramName = this.expect(TokenType.IDENTIFIER).value;
             const param = new Identifier(paramName);
             if (paramType) param.varType = paramType;
@@ -763,6 +772,15 @@ export class Parser {
                     paramType += ' ';
                 }
                 paramType = (paramType || '') + this.advance().value;
+            }
+
+            // Handle generic type: array<float>, map<string, float>, etc.
+            if (
+                this.peek().type === TokenType.IDENTIFIER &&
+                this.peek(1).type === TokenType.OPERATOR && this.peek(1).value === '<'
+            ) {
+                const genericType = this.parseTypeExpression();
+                paramType = paramType ? paramType + ' ' + genericType : genericType;
             }
 
             const paramName = this.expect(TokenType.IDENTIFIER).value;
@@ -1269,7 +1287,7 @@ export class Parser {
 
         while (this.matchEx(TokenType.KEYWORD, 'and', true) || this.peekOperatorEx(['&&'])) {
             this.advance();
-            this.skipNewlines();
+            this.skipNewlines(true);
             const right = this.parseEquality();
             left = new BinaryExpression('&&', left, right);
         }
@@ -1295,7 +1313,7 @@ export class Parser {
 
         while (this.peekOperatorEx(['<', '>', '<=', '>='])) {
             const op = this.advance().value;
-            this.skipNewlines();
+            this.skipNewlines(true);
             const right = this.parseAdditive();
             left = new BinaryExpression(op, left, right);
         }

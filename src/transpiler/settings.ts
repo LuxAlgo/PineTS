@@ -55,7 +55,6 @@ export const CONTEXT_PINE_VARS = [
     'map',
     'matrix',
     'log',
-    'map',
     //types
     'Type', //UDT
     'bool',

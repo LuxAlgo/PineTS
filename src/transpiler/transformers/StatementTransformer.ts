@@ -698,10 +698,16 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
                     scopeManager.popScope();
                 }
             },
-            MemberExpression(node: any) {
+            MemberExpression(node: any, state: ScopeManager, c: any) {
                 scopeManager.pushScope('for');
                 transformMemberExpression(node, '', scopeManager);
                 scopeManager.popScope();
+                // If still a MemberExpression after transformation, recurse into the
+                // object so user variable identifiers (e.g. lineMatrix in
+                // lineMatrix.rows()) get transformed via the Identifier handler.
+                if (node.type === 'MemberExpression' && node.object) {
+                    c(node.object, state);
+                }
             },
             CallExpression(node: any, state: ScopeManager, c: any) {
                 // Set parent on callee so transformMemberExpression knows it's already being called

@@ -1158,3 +1158,158 @@ plot(_sum, "Sum")
         expect(lastValue).toBe(25);
     });
 });
+
+// ---------------------------------------------------------------------------
+// 13. Multi-Line Expression Continuation
+// ---------------------------------------------------------------------------
+describe('Parser Fix: Multi-Line Expression Continuation', () => {
+    it('should parse "and" at end of line with continuation', () => {
+        const code = `
+//@version=5
+indicator("And Continuation")
+
+a = close < open and
+    low < high
+plot(a ? 1 : 0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        expect(pine2js.code).toContain('&&');
+    });
+
+    it('should parse "or" at end of line with continuation', () => {
+        const code = `
+//@version=5
+indicator("Or Continuation")
+
+b = close > open or
+    high > low
+plot(b ? 1 : 0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        expect(pine2js.code).toContain('||');
+    });
+
+    it('should parse chained "and" across multiple lines', () => {
+        const code = `
+//@version=5
+indicator("Chained And")
+
+c = close > open and
+    high > low and
+    volume > 0
+plot(c ? 1 : 0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        // Should produce two && operators
+        const matches = pine2js.code!.match(/&&/g);
+        expect(matches).not.toBeNull();
+        expect(matches!.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should parse comparison operator at end of line with continuation', () => {
+        const code = `
+//@version=5
+indicator("Comparison Continuation")
+
+d = close >
+    open
+plot(d ? 1 : 0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        expect(pine2js.code).toContain('>');
+    });
+
+    it('should parse mixed "and"/"or" across lines', () => {
+        const code = `
+//@version=5
+indicator("Mixed And Or")
+
+e = close < open and
+    low < high or
+    volume > 0
+plot(e ? 1 : 0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        expect(pine2js.code).toContain('&&');
+        expect(pine2js.code).toContain('||');
+    });
+
+    it('should parse deeply nested multiline with parentheses', () => {
+        const code = `
+//@version=5
+indicator("Nested Parens")
+
+f = (close > open and
+    high > low) or
+    (volume > 0 and
+    close > 100)
+plot(f ? 1 : 0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        expect(pine2js.code).toContain('&&');
+        expect(pine2js.code).toContain('||');
+    });
+
+    it('should parse "not" on continuation line after "and"', () => {
+        const code = `
+//@version=5
+indicator("Not Continuation")
+
+g = close > open and
+    not (low > high)
+plot(g ? 1 : 0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        expect(pine2js.code).toContain('&&');
+        expect(pine2js.code).toContain('!');
+    });
+
+    it('should run multiline "and" condition at runtime', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+        const code = `
+//@version=5
+indicator("And Runtime")
+
+_a = close < open and
+    low < high
+plot(_a ? 1 : 0, "A")
+`;
+        const { plots } = await pineTS.run(code);
+        expect(plots['A']).toBeDefined();
+        expect(plots['A'].data.length).toBeGreaterThan(0);
+
+        // Every value should be 0 or 1
+        for (const pt of plots['A'].data) {
+            expect([0, 1]).toContain(pt.value);
+        }
+    });
+
+    it('should run multiline comparison continuation at runtime', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+        const code = `
+//@version=5
+indicator("Cmp Runtime")
+
+_d = close >
+    open
+plot(_d ? 1 : 0, "D")
+`;
+        const { plots } = await pineTS.run(code);
+        expect(plots['D']).toBeDefined();
+        expect(plots['D'].data.length).toBeGreaterThan(0);
+
+        // Every value should be 0 or 1
+        for (const pt of plots['D'].data) {
+            expect([0, 1]).toContain(pt.value);
+        }
+    });
+});
