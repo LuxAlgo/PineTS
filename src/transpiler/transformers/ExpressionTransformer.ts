@@ -514,10 +514,24 @@ function transformOperand(node: any, scopeManager: ScopeManager, namespace: stri
         case 'MemberExpression': {
             // Handle array access
             const transformedObject = node.object.type === 'Identifier' ? transformIdentifierForParam(node.object, scopeManager) : node.object;
+
+            // For non-computed property access on user variables (e.g. get_spt.output),
+            // wrap the object in $.get() to extract the current bar's value.
+            // Without this, `$.let.glb1_get_spt.output` accesses the Series object itself,
+            // not the current bar value's property.
+            let finalObject = transformedObject;
+            if (!node.computed && node.object.type === 'Identifier') {
+                const [scopedName] = scopeManager.getVariable(node.object.name);
+                const isUserVariable = scopedName !== node.object.name;
+                if (isUserVariable && !scopeManager.isLoopVariable(node.object.name)) {
+                    finalObject = ASTFactory.createGetCall(transformedObject, 0);
+                }
+            }
+
             // Don't add [0] if this is already an array access
             return {
                 type: 'MemberExpression',
-                object: transformedObject,
+                object: finalObject,
                 property: node.property,
                 computed: node.computed,
             };
@@ -674,8 +688,9 @@ function getParamFromConditionalExpression(node: any, scopeManager: ScopeManager
                 }
             },
             MemberExpression(node: any, state: any, c: any) {
-                // Transform array indices first
-                transformArrayIndex(node, scopeManager);
+                // Transform member expression (handles array index renaming AND
+                // computed access conversion to $.get() for context variables)
+                transformMemberExpression(node, '', scopeManager);
                 // Then continue with object transformation
                 if (node.object) {
                     c(node.object, { parent: node, inNamespaceCall: state.inNamespaceCall });
@@ -923,6 +938,12 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
         } else if (arg.object.type === 'MemberExpression') {
             // Recursively handle nested member expressions like obj.prop1.prop2
             transformFunctionArgument(arg.object, namespace, scopeManager);
+        } else if (arg.object.type === 'CallExpression') {
+            // Recursively handle call expression objects like arr.get(2).out
+            // The call might contain user variable identifiers that need transformation
+            if (!arg.object._transformed) {
+                transformCallExpression(arg.object, scopeManager);
+            }
         }
     }
 
@@ -1032,6 +1053,28 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
     }
 
     return paramCall;
+}
+
+/**
+ * Recursively resolves identifiers in a callee object chain.
+ * Handles patterns like: obj.get(i).out.method() where obj is a user variable
+ * that needs to be resolved to $.get($.var.xxx, 0).
+ */
+function resolveCalleeObject(node: any, parentNode: any, scopeManager: ScopeManager): void {
+    if (!node) return;
+    if (node.type === 'Identifier') {
+        node.parent = parentNode;
+        transformIdentifier(node, scopeManager);
+    } else if (node.type === 'MemberExpression') {
+        resolveCalleeObject(node.object, node, scopeManager);
+    } else if (node.type === 'CallExpression') {
+        if (node.callee && node.callee.type === 'MemberExpression') {
+            resolveCalleeObject(node.callee.object, node.callee, scopeManager);
+        }
+        if (!node._transformed) {
+            transformCallExpression(node, scopeManager);
+        }
+    }
 }
 
 export function transformCallExpression(node: any, scopeManager: ScopeManager, namespace?: string): void {
@@ -1266,6 +1309,10 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
 
         if (node.callee.object.type === 'Identifier') {
             transformIdentifier(node.callee.object, scopeManager);
+        } else {
+            // For complex callee chains (e.g. obj.get(i).out.method()),
+            // recursively resolve inner identifiers and calls
+            resolveCalleeObject(node.callee.object, node.callee, scopeManager);
         }
     }
 
@@ -1315,6 +1362,11 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
                     c(node.argument, newState);
                 },
                 CallExpression(node: any, state: any, c: any) {
+                    // Traverse callee chain to resolve inner identifiers (e.g. obj.get(i).out.avg())
+                    if (node.callee && node.callee.type === 'MemberExpression' && node.callee.object) {
+                        node.callee.object.parent = node.callee;
+                        c(node.callee.object, { parent: node.callee });
+                    }
                     if (!node._transformed) {
                         // First transform the call expression itself
                         transformCallExpression(node, scopeManager);

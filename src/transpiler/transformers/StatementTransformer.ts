@@ -734,6 +734,13 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
     scopeManager.pushScope('for');
     c(node.body, scopeManager);
     scopeManager.popScope();
+
+    // Clean up loop variable so it doesn't leak to outer scope
+    // (prevents shadowing issues when the same name is reused later)
+    if (node.init && node.init.type === 'VariableDeclaration') {
+        const decl = node.init.declarations[0];
+        scopeManager.removeLoopVariable(decl.id.name);
+    }
 }
 
 export function transformWhileStatement(node: any, scopeManager: ScopeManager, c: any): void {
@@ -754,7 +761,17 @@ export function transformWhileStatement(node: any, scopeManager: ScopeManager, c
 
 export function transformExpression(node: any, scopeManager: ScopeManager): void {
     walk.recursive(node, scopeManager, {
-        MemberExpression(node: any) {
+        MemberExpression(node: any, state: ScopeManager, c: any) {
+            // Recurse into non-context-bound Identifier objects for DOT access only
+            // (e.g. Signal.Buy where Signal is an enum). Skip computed/bracket access
+            // (e.g. aa[0]) — those are handled by transformArrayIndex inside
+            // transformMemberExpression, which needs the object as a raw Identifier.
+            if (node.object && node.object.type === 'Identifier'
+                && !scopeManager.isContextBound(node.object.name)
+                && !node.computed) {
+                node.object.parent = node;
+                c(node.object, state);
+            }
             transformMemberExpression(node, '', scopeManager);
         },
 
@@ -891,6 +908,16 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
             transformIdentifier(node.argument, scopeManager);
             if (node.argument.type === 'Identifier') {
                 addArrayAccess(node.argument, scopeManager);
+            }
+        } else if (node.argument.type === 'MemberExpression') {
+            // Handle non-context-bound member expressions (e.g. return Signal.Buy)
+            // where the object is a user-defined variable (enum, struct, etc.)
+            if (
+                node.argument.object.type === 'Identifier' &&
+                !scopeManager.isContextBound(node.argument.object.name) &&
+                !scopeManager.isLoopVariable(node.argument.object.name)
+            ) {
+                transformIdentifier(node.argument.object, scopeManager);
             }
         }
 

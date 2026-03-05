@@ -17,7 +17,7 @@ export function fill(context: Context) {
                     }' is expected.`
                 );
             }
-            id.array[i] = context.precision(value);
+            id.array[i] = typeof value === 'number' ? context.precision(value) : value;
         }
     };
 }

@@ -85,6 +85,10 @@ ${objectInitProps}
         return '[' + this.array.toString().replace(/,/g, ', ') + ']';
     }
 
+    [Symbol.iterator]() {
+        return this.array[Symbol.iterator]();
+    }
+
 ${objectMethodDefs}
 }
 `;

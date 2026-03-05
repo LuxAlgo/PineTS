@@ -155,6 +155,10 @@ export class PineArrayObject {
         return '[' + this.array.toString().replace(/,/g, ', ') + ']';
     }
 
+    [Symbol.iterator]() {
+        return this.array[Symbol.iterator]();
+    }
+
     abs(...args: any[]) {
         return this._abs(this, ...args);
     }

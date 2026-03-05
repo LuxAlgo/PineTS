@@ -410,6 +410,115 @@ plot(result)
         expect(jsCode).toBeDefined();
         expect(jsCode).toContain('$.let.glb1_result');
     });
+
+    it('should rename enum in arrow function return with if/else', () => {
+        const code = `
+//@version=6
+indicator("Enum Fn Return")
+
+enum Signal
+    Buy
+    Sell
+    Neutral
+
+getSignal(rsi) =>
+    if rsi < 30
+        Signal.Buy
+    else if rsi > 70
+        Signal.Sell
+    else
+        Signal.Neutral
+
+rsi = ta.rsi(close, 14)
+sig = getSignal(rsi)
+plot(sig == Signal.Buy ? 1 : 0)
+`;
+        const result = transpile(code);
+        const jsCode = result.toString();
+
+        // Enum should be renamed inside function return statements
+        expect(jsCode).toContain('$.get($.let.glb1_Signal, 0).Buy');
+        expect(jsCode).toContain('$.get($.let.glb1_Signal, 0).Sell');
+        expect(jsCode).toContain('$.get($.let.glb1_Signal, 0).Neutral');
+
+        // Should NOT contain bare 'Signal.Buy' (except in string literals and comments)
+        const lines = jsCode.split('\n').filter(l => !l.trim().startsWith('//'));
+        const codeOnly = lines.filter(l => !l.includes("'Signal."));
+        expect(codeOnly.join('\n')).not.toMatch(/(?<!\.)Signal\./);
+    });
+
+    it('should rename enum in if-condition test', () => {
+        const code = `
+//@version=6
+indicator("Enum If Condition", overlay=true)
+
+enum Signal
+    Buy
+    Sell
+
+sig = close > open ? Signal.Buy : Signal.Sell
+if sig == Signal.Buy
+    label.new(bar_index, low, "BUY")
+if sig == Signal.Sell
+    label.new(bar_index, high, "SELL")
+`;
+        const result = transpile(code);
+        const jsCode = result.toString();
+
+        // Enum access in if-condition should be fully renamed
+        expect(jsCode).toContain('$.get($.let.glb1_Signal, 0).Buy');
+        expect(jsCode).toContain('$.get($.let.glb1_Signal, 0).Sell');
+
+        // The if-conditions should use __eq with renamed enum
+        expect(jsCode).toContain('__eq');
+    });
+
+    it('should rename enum in ternary expression', () => {
+        const code = `
+//@version=6
+indicator("Enum Ternary")
+
+enum Dir
+    Up
+    Down
+
+dir = close > open ? Dir.Up : Dir.Down
+val = dir == Dir.Up ? 1 : -1
+plot(val)
+`;
+        const result = transpile(code);
+        const jsCode = result.toString();
+
+        // Enum access in ternary should be renamed
+        expect(jsCode).toContain('$.get($.let.glb1_Dir, 0).Up');
+        expect(jsCode).toContain('$.get($.let.glb1_Dir, 0).Down');
+    });
+
+    it('should generate implicit return for arrow function with if/else', () => {
+        const code = `
+//@version=6
+indicator("Implicit Return")
+
+enum State
+    Active
+    Idle
+
+getState(val) =>
+    if val > 0
+        State.Active
+    else
+        State.Idle
+
+s = getState(close)
+plot(s == State.Active ? 1 : 0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+
+        // Phase 1 should generate return statements for each branch
+        expect(pine2js.code).toContain('return State.Active');
+        expect(pine2js.code).toContain('return State.Idle');
+    });
 });
 
 // ---------------------------------------------------------------------------

@@ -25,8 +25,7 @@ export function param(context: any) {
             } else {
                 context.params[name][context.params[name].length - 1] = source;
             }
-            return new Series(context.params[name], 0);
+            return new Series(context.params[name], index || 0);
         }
     };
 }
-

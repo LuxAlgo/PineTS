@@ -149,7 +149,13 @@ export class NAHelper {
     }
 
     any(series: any) {
-        return isNaN(Series.from(series).get(0));
+        const val = Series.from(series).get(0);
+        // null/undefined are always na
+        if (val === null || val === undefined) return true;
+        // For numbers, check NaN (Pine Script na for numeric types)
+        if (typeof val === 'number') return val !== val;
+        // Objects (arrays, UDTs, etc.) and strings are never na
+        return false;
     }
 }
 
@@ -451,14 +457,42 @@ export class Core {
         return val.toString();
     }
 
-    Type(definition: Record<string, string>) {
+    Type(definition: Record<string, string | [string, any]>) {
+        // Extract field names, types, and defaults from definition.
+        // Fields can be either 'type' (no default) or ['type', defaultValue].
         const definitionKeys = Object.keys(definition);
+        const fieldTypes: Record<string, string> = {};
+        const fieldDefaults: Record<string, any> = {};
+        for (const key of definitionKeys) {
+            let val: any = definition[key];
+            // $.param() wraps ['type', default] arrays in Series — unwrap them
+            // so we can detect the [type, default] structure.
+            if (val instanceof Series) {
+                val = val.data;
+            }
+            if (Array.isArray(val)) {
+                fieldTypes[key] = val[0];
+                fieldDefaults[key] = val[1];
+            } else {
+                fieldTypes[key] = val;
+                // No default — field is na (undefined) when not provided
+            }
+        }
+
         const UDT = {
             new: function (...args: any[]) {
-                //map the args to the definition
-                const mappedArgs = {};
-                for (let i = 0; i < args.length; i++) {
-                    mappedArgs[definitionKeys[i]] = args[i];
+                // Map positional args to field names, applying defaults for missing args
+                const mappedArgs: Record<string, any> = {};
+                for (let i = 0; i < definitionKeys.length; i++) {
+                    const key = definitionKeys[i];
+                    if (i < args.length) {
+                        mappedArgs[key] = args[i];
+                    } else if (key in fieldDefaults) {
+                        // Evaluate default at construction time — handles series references
+                        // (e.g. hl2) that need to resolve to the current bar's value.
+                        mappedArgs[key] = Series.from(fieldDefaults[key]).get(0);
+                    }
+                    // else: field remains absent (na/undefined)
                 }
                 return new PineTypeObject(mappedArgs, this.context);
             },

@@ -827,15 +827,43 @@ export class Parser {
             this.advance();
         }
 
-        // Make last statement a return if it's an expression
+        // Make last statement a return if it's an expression.
+        // For if/else/switch as the last statement, recursively add return to each branch.
         if (statements.length > 0) {
-            const last = statements[statements.length - 1];
-            if (last.type === 'ExpressionStatement') {
-                statements[statements.length - 1] = new ReturnStatement(last.expression);
-            }
+            this._addImplicitReturn(statements);
         }
 
         return new BlockStatement(statements);
+    }
+
+    /**
+     * Recursively convert the last expression in a statement list to a ReturnStatement.
+     * Handles if/else chains by adding return to each branch's last expression.
+     */
+    private _addImplicitReturn(statements: any[]): void {
+        const last = statements[statements.length - 1];
+        if (last.type === 'ExpressionStatement') {
+            statements[statements.length - 1] = new ReturnStatement(last.expression);
+        } else if (last.type === 'IfStatement') {
+            this._addImplicitReturnToIf(last);
+        }
+    }
+
+    private _addImplicitReturnToIf(node: any): void {
+        // Add return to the consequent branch
+        if (node.consequent && node.consequent.type === 'BlockStatement' && node.consequent.body.length > 0) {
+            this._addImplicitReturn(node.consequent.body);
+        }
+        // Add return to the alternate branch (else / else if)
+        if (node.alternate) {
+            if (node.alternate.type === 'IfStatement') {
+                // else if — recurse
+                this._addImplicitReturnToIf(node.alternate);
+            } else if (node.alternate.type === 'BlockStatement' && node.alternate.body.length > 0) {
+                // else block
+                this._addImplicitReturn(node.alternate.body);
+            }
+        }
     }
 
     // Parse statement or comma-separated sequence

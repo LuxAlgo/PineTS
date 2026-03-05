@@ -44,7 +44,7 @@ export function supertrend(context: any) {
                 prevUpperBand: NaN,
                 prevSuperTrend: NaN,
                 prevDirection: NaN,
-                prevClose: NaN,
+                // (prevClose removed — read directly from context)
                 // Tentative state
                 currentTrSum: 0,
                 currentAtrValue: NaN,
@@ -53,7 +53,6 @@ export function supertrend(context: any) {
                 currentUpperBand: NaN,
                 currentSuperTrend: NaN,
                 currentDirection: NaN,
-                currentClose: NaN,
             };
         }
 
@@ -69,7 +68,6 @@ export function supertrend(context: any) {
                 state.prevUpperBand = state.currentUpperBand;
                 state.prevSuperTrend = state.currentSuperTrend;
                 state.prevDirection = state.currentDirection;
-                state.prevClose = state.currentClose;
             }
             state.lastIdx = context.idx;
         }
@@ -87,8 +85,10 @@ export function supertrend(context: any) {
         // Calculate hl2 (source)
         const hl2 = (high + low) / 2;
 
-        // Use committed previous close
-        const prevClose = state.prevClose;
+        // Read previous close directly from context data — always correct
+        // regardless of whether Supertrend was called on previous bars.
+        // This fixes the stale-prevClose bug when Supertrend is called conditionally.
+        const prevClose = context.idx > 0 ? context.get(context.data.close, 1) : NaN;
 
         // Calculate True Range
         let tr;
@@ -116,11 +116,10 @@ export function supertrend(context: any) {
 
         const atr = atrValue;
 
-        // Store tentative state for ATR & Close
+        // Store tentative state for ATR
         state.currentAtrCount = atrCount;
         state.currentTrSum = trSum;
         state.currentAtrValue = atrValue;
-        state.currentClose = close;
 
         // Not enough data for ATR yet
         if (isNaN(atr)) {

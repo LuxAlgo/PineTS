@@ -13,6 +13,6 @@ export function set(context: Context) {
                 }' is expected.`
             );
         }
-        id.array[index] = context.precision(value);
+        id.array[index] = typeof value === 'number' ? context.precision(value) : value;
     };
 }

@@ -42,6 +42,7 @@ export class TableObject {
     public _deleted: boolean;
     public cells: (TableCell | null)[][];
     public merges: MergeRegion[];
+    private _helper: any;
 
     constructor(
         position: string = 'top_right',
@@ -106,6 +107,35 @@ export class TableObject {
         if (row < 0 || row >= this.rows || column < 0 || column >= this.columns) return;
         this.cells[row][column] = null;
     }
+
+    // ── Helper injection (mirrors PineArrayObject pattern) ──────
+    _setHelper(helper: any): void {
+        this._helper = helper;
+    }
+
+    // ── Pine Script method-call delegates ───────────────────────
+    // Enables tb.cell(...) syntax as sugar for table.cell(tb, ...)
+    cell(...args: any[]) { return this._helper.cell(this, ...args); }
+    clear(...args: any[]) { return this._helper.clear(this, ...args); }
+    merge_cells(...args: any[]) { return this._helper.merge_cells(this, ...args); }
+
+    cell_set_text(...args: any[]) { return this._helper.cell_set_text(this, ...args); }
+    cell_set_bgcolor(...args: any[]) { return this._helper.cell_set_bgcolor(this, ...args); }
+    cell_set_text_color(...args: any[]) { return this._helper.cell_set_text_color(this, ...args); }
+    cell_set_text_size(...args: any[]) { return this._helper.cell_set_text_size(this, ...args); }
+    cell_set_height(...args: any[]) { return this._helper.cell_set_height(this, ...args); }
+    cell_set_width(...args: any[]) { return this._helper.cell_set_width(this, ...args); }
+    cell_set_tooltip(...args: any[]) { return this._helper.cell_set_tooltip(this, ...args); }
+    cell_set_text_halign(...args: any[]) { return this._helper.cell_set_text_halign(this, ...args); }
+    cell_set_text_valign(...args: any[]) { return this._helper.cell_set_text_valign(this, ...args); }
+    cell_set_text_font_family(...args: any[]) { return this._helper.cell_set_text_font_family(this, ...args); }
+
+    set_position(...args: any[]) { return this._helper.set_position(this, ...args); }
+    set_bgcolor(...args: any[]) { return this._helper.set_bgcolor(this, ...args); }
+    set_border_color(...args: any[]) { return this._helper.set_border_color(this, ...args); }
+    set_border_width(...args: any[]) { return this._helper.set_border_width(this, ...args); }
+    set_frame_color(...args: any[]) { return this._helper.set_frame_color(this, ...args); }
+    set_frame_width(...args: any[]) { return this._helper.set_frame_width(this, ...args); }
 
     private _defaultCell(): TableCell {
         return {

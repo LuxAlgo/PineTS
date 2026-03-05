@@ -51,7 +51,7 @@ const FILL_SIGNATURE = [
 
 //prettier-ignore
 const PLOT_ARGS_TYPES = {
-    series: 'series', title: 'string', color: 'string', linewidth: 'number',
+    series: 'series', title: 'string', color: 'series', linewidth: 'number',
     style: 'string', trackprice: 'boolean', histbase: 'number', offset: 'number',
     join: 'bool', editable: 'boolean', show_last: 'number', display: 'string',
     format: 'string', precision: 'number', force_overlay: 'boolean',
@@ -228,11 +228,23 @@ export class PlotHelper {
 
         const value = Series.from(series).get(0);
 
+        // Always set an explicit color on every point so QFChart can unambiguously
+        // distinguish "use this color" from "hide this segment":
+        //   - User didn't pass color  → use Pine Script default #2962ff
+        //   - User passed a color string → use that value (e.g. '#089981')
+        //   - User passed color = na  → undefined (Pine na → NaN; QFChart hides the segment)
+        const rawColor = options.color;
+        const pointColor = 'color' in others
+            ? (typeof rawColor === 'string' ? rawColor : undefined)
+            : (rawColor || '#2962ff');
+        const pointOptions: any = { color: pointColor };
+        if ('offset' in others) pointOptions.offset = options.offset;
+
         this.context.plots[plotKey].data.push({
             title,
             time: this.context.marketData[this.context.idx].openTime,
             value: value,
-            options: { color: options.color, offset: options.offset },
+            options: pointOptions,
         });
         return this.context.plots[plotKey];
     }

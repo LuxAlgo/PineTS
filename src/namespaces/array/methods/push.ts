@@ -13,6 +13,7 @@ export function push(context: Context) {
                 }' is expected.`
             );
         }
-        id.array.push(context.precision(value));
+        // Only apply precision rounding to numbers; UDT objects and other types pass through as-is
+        id.array.push(typeof value === 'number' ? context.precision(value) : value);
     };
 }

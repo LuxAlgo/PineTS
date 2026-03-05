@@ -101,6 +101,7 @@ export class TableHelper {
             this._resolve(border_width) || 0,
             this._resolve(force_overlay) ?? false,
         );
+        tbl._setHelper(this);
         this._tables.push(tbl);
         this._syncToPlot();
         return tbl;

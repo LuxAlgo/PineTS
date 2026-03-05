@@ -1,5 +1,32 @@
 # Change Log
 
+## [0.9.1] - 2026-03-04 - Enum Values, ATR/DMI/Supertrend Fixes, UDT & Transpiler Improvements
+
+### Added
+
+- **Enum Value Syntax (`Signal.Buy`)**: Full support for user-defined enum member access (e.g., `Signal.Buy`, `Direction.Long`). The transpiler now recurses into non-context-bound identifiers inside `MemberExpression` nodes, correctly resolving enum identifiers in return statements, if-test conditions, and operand positions.
+- **Implicit Return for `=>` Arrow Functions with `if/else`**: The Pine Script parser now adds an implicit `return` when the last statement of a `=>` function body is an `if/else` block, matching Pine Script's expression-based semantics.
+
+### Fixed
+
+- **ATR Stale `prevClose`**: Fixed `ta.atr` using a stale previous close value when called conditionally. Replaced state-tracked `prevClose` with a direct `context.get(context.data.close, 1)` read, ensuring ATR always uses the actual previous bar's close.
+- **ATR / DMI / Supertrend Backfill**: Fixed backfill for `ta.atr`, `ta.dmi`, and `ta.supertrend` when called inside conditional blocks. When `context.idx >= period` but the function hasn't accumulated enough calls (due to conditional execution), values are now computed from historical data directly — matching the backfill pattern used by other window-based TA functions.
+- **`ta.param()` Hardcoded Index**: Fixed `ta.param()` functions across several TA methods that were using a hardcoded `0` index instead of the actual passed index, causing incorrect lookback reads.
+- **`bar_index` as a Series**: Fixed `bar_index` to be handled correctly as a Series value throughout the runtime, ensuring lookback access (`bar_index[1]`) works as expected.
+- **`array.new<UDT>(size)` Type Inference**: Fixed type inference for `array.new<UDT>(0)` when only a size argument is provided (no `initial_value`). The array element type was not being inferred in this case.
+- **UDT Field Defaults in Codegen**: Fixed fields with expression defaults (e.g., `float upper = hl2`) not generating the correct `['type', default]` pair in the `Type()` constructor call, causing incorrect UDT instantiation.
+- **Member Expression Chains on `var` Variables**: Fixed complex member expression chains like `holder.get(k).trend` not resolving correctly when `holder` is a `var`-declared variable.
+- **`na()` Crash on UDT Objects**: Fixed `na()` crashing when called on UDT objects with circular references. `JSON.stringify` was replaced with a safer check.
+- **UDT Defaults Lost by `$.param()` Wrapping**: Fixed `$.param(['float', 0])` wrapping the `[type, default]` array in a Series, causing `Type()` to fail to detect the pair structure.
+- **`array.indexof(NaN)` Returns `-1`**: Fixed `array.indexof` returning `-1` for `NaN` values because JavaScript's `Array.indexOf` uses `===` which never matches `NaN`. The method now uses `Number.isNaN` for correct detection.
+- **`MemberExpression` Missing `$.get()` in Call Args**: Fixed member expressions on Series variables (e.g., `get_spt.output`) inside binary expressions used as function arguments being transpiled as `$.let.glb1_get_spt.output` (a Series object) instead of `$.get($.let.glb1_get_spt, 0).output` (the current bar's value).
+- **Table Fixes**: Fixed several issues in the `table.*` namespace implementation.
+- **Polyline Named Arguments**: Fixed `polyline.new()` not correctly parsing named arguments.
+- **Polyline Points from Series**: Fixed `polyline.new()` not correctly extracting `chart.point` values when points are stored in a Series.
+- **Plot Default Color**: Fixed plots not falling back to a default color when no color is specified.
+- **`hline` Options Consistency**: Fixed inconsistent evaluation of `hline()` options (contribution by @dcaoyuan, PR #134).
+- **Missing `enum` Extend**: Fixed missing `extend` handling for enum declarations (contribution by @dcaoyuan, PR #137).
+
 ## [0.9.0] - 2026-02-27 - Box, Table & Polyline Namespaces, Pine Script Compliance & Critical Fixes
 
 ### Added
@@ -10,15 +37,13 @@
 - **Primitive Type Declarations**: Added support for `int()`, `float()`, and `string()` cast/conversion expressions in Pine Script syntax (e.g., `x = int(someValue)`).
 - **`enum` Keyword Support**: Added `enum` keyword handling in the transpiler for Pine Script v6 enum declarations.
 - **Test Coverage**: Comprehensive new test suites — `box.test.ts`, `table.test.ts`, `polyline.test.ts`, `linefill.test.ts`, `fill.test.ts`, `hline.test.ts`, `line.test.ts`, `plot.test.ts`, `constants.test.ts`, `request.test.ts`, `ta-backfill.test.ts`, `parser-fixes.test.ts` (1000+ new test cases).
-- **Missing extend.\* enum** conributed by @dcaoyuan
 
 ### Changed
 
-- **Type Name Compliance**: Renamed internal type constant names to match Pine Script's naming convention exactly (e.g., `label.style_label_up` → `label.style_label_up`). Aligned string constants across label styles, line styles, shape types, and size presets so PineTS output is directly compatible with QFChart renderers without manual mapping.
+- **Type Name Compliance**: Renamed internal type constant names to match Pine Script's naming convention exactly. Aligned string constants across label styles, line styles, shape types, and size presets so PineTS output is directly compatible with QFChart renderers without manual mapping.
 
 ### Fixed
 
-- **hline consistency** : Fixed by @dcaoyuan
 - **`na == na` Equality**: Fixed `na == na` to correctly return `false` in Pine Script (unlike `NaN === NaN` in JavaScript which is also `false`, but the equality transpilation path was not applying `__eq()` consistently in all cases).
 - **TA Backfill in Conditional Closures**: Fixed backfill logic for `ta.*` window-based functions (`sma`, `highest`, `lowest`, `stdev`, `variance`, `dev`, `wma`, `linreg`, `cci`, `median`, `roc`, `change`, `alma`) when the function call is inside a conditional block (e.g., `if someCondition => ta.sma(...)`). Previously, the source-series backfill would fail because the method wasn't being called on bars where the condition was false, leaving the window incomplete.
 - **TA Function-Variable Hoisting**: Fixed `ta.obv`, `ta.tr`, and other TA function-variables that behave as both a function call and a variable. These must be evaluated on every bar — even when referenced inside a conditional block — to maintain accurate rolling state. They are now hoisted to the top of the context function.

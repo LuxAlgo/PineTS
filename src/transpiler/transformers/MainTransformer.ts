@@ -115,6 +115,14 @@ export function runTransformationPass(
                 // Traverse the IIFE callee (the function itself)
                 c(node.callee, state);
             }
+            // For method call chains (a.b().c.d()), traverse the callee's object chain
+            // to resolve inner identifiers and calls before processing this call
+            else if (node.callee && node.callee.type === 'MemberExpression' && node.callee.object) {
+                // Set parent so Identifier handler knows this is a member expression object
+                // (prevents NAMESPACES_LIKE wrapping for line, label, etc.)
+                node.callee.object.parent = node.callee;
+                c(node.callee.object, state);
+            }
             // Transform the call expression (this handles argument wrapping)
             transformCallExpression(node, state);
         },
@@ -147,16 +155,20 @@ export function runTransformationPass(
                     });
                 }
             }
-            // Transform the right (iterable expression) - parameters should use $.get()
+            // Transform the right (iterable expression) - build $.get(scopedRef, 0).array
             if (node.right && node.right.type === 'Identifier') {
+                // transformIdentifier may already wrap user variables in $.get($.var.X, 0).
+                // addArrayAccess reads the (stale) node.name and overwrites the result.
+                // Fix: call transformIdentifier, then only call addArrayAccess if the node
+                // wasn't already transformed (i.e. it's still an Identifier).
                 transformIdentifier(node.right, state);
-                addArrayAccess(node.right, state);
-                
-                // NEW: Access .array property for iteration over Pine Script arrays
-                // The node.right has been transformed to $.get(X, 0) in place by addArrayAccess
-                // We need to wrap it to access .array property: $.get(X, 0).array
-                
-                // Create a shallow copy of the current node.right (the CallExpression)
+                if (node.right.type === 'Identifier') {
+                    // transformIdentifier didn't rename this (context-bound / built-in var)
+                    addArrayAccess(node.right, state);
+                }
+
+                // Access .array property for iteration over Pine Script arrays
+                // Build: $.get(X, 0).array
                 const currentRight = { ...node.right };
                 
                 // Create MemberExpression: currentRight.array
@@ -189,6 +201,20 @@ export function runTransformationPass(
             if (node.body) {
                 c(node.body, state);
             }
+
+            // Clean up loop variables so they don't leak to outer scope
+            if (node.left && node.left.type === 'VariableDeclaration') {
+                const decl = node.left.declarations[0];
+                if (decl.id.type === 'Identifier') {
+                    state.removeLoopVariable(decl.id.name);
+                } else if (decl.id.type === 'ArrayPattern') {
+                    decl.id.elements.forEach((elem: any) => {
+                        if (elem.type === 'Identifier') {
+                            state.removeLoopVariable(elem.name);
+                        }
+                    });
+                }
+            }
         },
         ForInStatement(node: any, state: ScopeManager, c: any) {
             // Mark the left (variable declaration) to skip transformation
@@ -198,7 +224,9 @@ export function runTransformationPass(
             // Transform the right (iterable expression) - parameters should use $.get()
             if (node.right && node.right.type === 'Identifier') {
                 transformIdentifier(node.right, state);
-                addArrayAccess(node.right, state);
+                if (node.right.type === 'Identifier') {
+                    addArrayAccess(node.right, state);
+                }
             } else if (node.right) {
                 c(node.right, state);
             }
@@ -207,11 +235,42 @@ export function runTransformationPass(
                 c(node.body, state);
             }
         },
-        MemberExpression(node: any, state: ScopeManager) {
+        MemberExpression(node: any, state: ScopeManager, c: any) {
+            // Traverse the object for nested call/member chains (e.g. a.get(i).out)
+            // to resolve inner identifiers before transforming this member expression
+            if (node.object && (node.object.type === 'CallExpression' || node.object.type === 'MemberExpression')) {
+                node.object.parent = node;
+                c(node.object, state);
+            }
+            // Also recurse into Identifier objects so user-defined variables (like enums)
+            // get properly renamed inside function bodies.
+            // Context-bound identifiers (namespaces like color, ta) are safe — the Identifier
+            // handler returns early for them, preserving the existing namespace handling below.
+            if (node.object && node.object.type === 'Identifier' && !state.isContextBound(node.object.name)) {
+                node.object.parent = node;
+                c(node.object, state);
+            }
             transformMemberExpression(node, originalParamName, state);
         },
-        AssignmentExpression(node: any, state: ScopeManager) {
+        AssignmentExpression(node: any, state: ScopeManager, c: any) {
             transformAssignmentExpression(node, state);
+            // After compound assignment transformation, the node becomes $.set(target, rhs).
+            // Traverse any IIFEs in the RHS to transform identifiers inside them
+            // (e.g., switch-expression IIFEs in compound assignments like disp /= switch i {...}).
+            if (node.type === 'CallExpression' && node.arguments) {
+                const traverseForIIFEs = (n: any): void => {
+                    if (!n) return;
+                    if (n.type === 'CallExpression' && n.callee &&
+                        (n.callee.type === 'ArrowFunctionExpression' || n.callee.type === 'FunctionExpression')) {
+                        c(n.callee, state);
+                    }
+                    if (n.type === 'BinaryExpression') {
+                        traverseForIIFEs(n.left);
+                        traverseForIIFEs(n.right);
+                    }
+                };
+                node.arguments.forEach((arg: any) => traverseForIIFEs(arg));
+            }
         },
         FunctionDeclaration(node: any, state: ScopeManager, c: any) {
             transformFunctionDeclaration(node, state, c);

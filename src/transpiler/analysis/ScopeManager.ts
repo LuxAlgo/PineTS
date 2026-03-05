@@ -178,6 +178,11 @@ export class ScopeManager {
         this.loopVarNames.set(originalName, transformedName);
     }
 
+    removeLoopVariable(originalName: string): void {
+        this.loopVars.delete(originalName);
+        this.loopVarNames.delete(originalName);
+    }
+
     getLoopVariableName(name: string): string | undefined {
         return this.loopVarNames.get(name);
     }

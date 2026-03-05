@@ -136,6 +136,8 @@ export class CodeGenerator {
     }
 
     // Generate TypeDefinition (convert to Type(...) call)
+    // Fields with defaults: { name: ['type', defaultExpr] }
+    // Fields without defaults: { name: 'type' }
     generateTypeDefinition(node) {
         this.write(this.indentStr.repeat(this.indent));
         this.write(`const ${node.name} = Type({`);
@@ -144,7 +146,13 @@ export class CodeGenerator {
             this.write(' ');
             for (let i = 0; i < node.fields.length; i++) {
                 const field = node.fields[i];
-                this.write(`${field.name}: '${field.type}'`);
+                if (field.defaultValue) {
+                    this.write(`${field.name}: ['${field.type}', `);
+                    this.generateExpression(field.defaultValue);
+                    this.write(`]`);
+                } else {
+                    this.write(`${field.name}: '${field.type}'`);
+                }
                 if (i < node.fields.length - 1) {
                     this.write(', ');
                 }
