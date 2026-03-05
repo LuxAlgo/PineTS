@@ -1,5 +1,21 @@
 # Change Log
 
+## [0.9.2] - 2026-03-05 - Gradient Fill, Matrix Inverse, Array Optimizations & Plot Fixes
+
+### Added
+
+- **Gradient Fill (`fill()`)**: Added support for Pine Script's gradient fill signature — `fill(plot1, plot2, top_value, bottom_value, top_color, bottom_color)`. The `FillHelper` now detects the gradient form by checking whether the third argument is a number (gradient) or a string/color (simple fill), and stores per-bar `top_value`/`bottom_value`/`top_color`/`bottom_color` data for rendering.
+
+### Fixed
+
+- **`matrix.inv()` — Full NxN Support**: Rewrote `matrix.inv()` from a 2×2-only implementation to a general Gauss-Jordan elimination with partial pivoting, supporting any square matrix of arbitrary size. Singular matrices (pivot < 1e-14) correctly return a NaN matrix.
+- **`matrix.pinv()` — Real Pseudoinverse**: Rewrote `matrix.pinv()` from a placeholder stub to a correct Moore-Penrose pseudoinverse: square matrices use `inv()`, tall matrices (m > n) use `(AᵀA)⁻¹Aᵀ`, and wide matrices (m < n) use `Aᵀ(AAᵀ)⁻¹`.
+- **`array.min()` / `array.max()` Performance**: Added an O(N) fast path for the common `nth=0` case (find absolute min/max) instead of always sorting the full array O(N log N). Sorting is still used only when `nth > 0`.
+- **`array.median()` Performance**: Replaced the `for...of` copy + complex sort comparator with a direct index loop and simple numeric sort for faster execution.
+- **`array.percentile_linear_interpolation()` Performance**: Validate and copy the array in a single pass (eliminating the separate `validValues` allocation), then sort once.
+- **`array.percentile_nearest_rank()` Performance**: Same single-pass validate-and-copy optimization as `percentile_linear_interpolation`.
+- **`isPlot()` with Undefined Title**: Fixed the `isPlot()` helper check to accept plots that have no `title` property but do have a `_plotKey` property (e.g., plots created via `fill()` or accessed by callsite ID). Previously these were not recognised as plot objects, causing `fill()` to misidentify its arguments (contribution by @dcaoyuan, [#142](https://github.com/QuantForgeOrg/PineTS/issues/142)).
+
 ## [0.9.1] - 2026-03-04 - Enum Values, ATR/DMI/Supertrend Fixes, UDT & Transpiler Improvements
 
 ### Added
