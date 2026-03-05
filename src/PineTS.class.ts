@@ -24,6 +24,7 @@ export class PineTS {
     public hlcc4: any = [];
     public openTime: any = [];
     public closeTime: any = [];
+    public bar_index: any = [];
     //#endregion
 
     //#region run context
@@ -82,6 +83,7 @@ export class PineTS {
                 const _hlcc4 = marketData.map((d) => (d.high + d.low + d.close + d.close) / 4);
                 const _openTime = marketData.map((d) => d.openTime);
                 const _closeTime = marketData.map((d) => d.closeTime);
+                const _bar_index = marketData.map((d, index) => index);
 
                 this.open = _open;
                 this.close = _close;
@@ -94,6 +96,7 @@ export class PineTS {
                 this.hlcc4 = _hlcc4;
                 this.openTime = _openTime;
                 this.closeTime = _closeTime;
+                this.bar_index = _bar_index;
 
                 if (source && (source as IProvider).getSymbolInfo) {
                     const symbolInfo = (source as IProvider)
@@ -482,6 +485,7 @@ export class PineTS {
         this.hlcc4[index] = (candle.high + candle.low + candle.close + candle.close) / 4;
         this.openTime[index] = candle.openTime;
         this.closeTime[index] = candle.closeTime;
+        this.bar_index[index] = index;
     }
 
     /**
@@ -501,6 +505,7 @@ export class PineTS {
         this.hlcc4.push((candle.high + candle.low + candle.close + candle.close) / 4);
         this.openTime.push(candle.openTime);
         this.closeTime.push(candle.closeTime);
+        this.bar_index.push(this.bar_index.length)
     }
 
     /**
@@ -587,6 +592,7 @@ export class PineTS {
         context.data.hlcc4 = new Series([]);
         context.data.openTime = new Series([]);
         context.data.closeTime = new Series([]);
+        context.data.bar_index = new Series([]);
 
         context.length = this.data.length;
 
