@@ -442,31 +442,80 @@ export class FillHelper {
     }
     any(...args) {
         const callsiteId = extractCallsiteId(args);
-        const _parsed = parseArgsForPineParams<FillOptions>(args, FILL_SIGNATURE, FILL_ARGS_TYPES);
-        const { plot1, plot2, color, title, editable, show_last, fillgaps, display } = _parsed;
 
-        // For fill: prefer title, then callsite ID, then generic fallback
-        let fillKey = title || 'fill';
-        const existing = this.context.plots[fillKey];
-        if (existing && callsiteId && existing._callsiteId !== callsiteId) {
-            fillKey = callsiteId;
-        }
+        // Detect gradient fill: fill(plot1, plot2, top_value, bottom_value, top_color, bottom_color, ...)
+        // vs simple fill:       fill(plot1, plot2, color, title, ...)
+        // The 3rd positional arg (index 2) is a number (top_value) for gradient fills,
+        // but a color string for simple fills.
+        const isGradientFill = args.length >= 6 && typeof args[2] === 'number';
 
-        if (!this.context.plots[fillKey]) {
+        if (isGradientFill) {
+            const plot1 = args[0];
+            const plot2 = args[1];
+            const top_value = args[2];
+            const bottom_value = args[3];
+            const top_color = args[4];
+            const bottom_color = args[5];
+            const title = args.length > 6 && typeof args[6] === 'string' ? args[6] : undefined;
+
             const p1Key = plot1?._plotKey || plot1?.title;
             const p2Key = plot2?._plotKey || plot2?.title;
-            this.context.plots[fillKey] = {
-                title: title || 'Fill',
-                plot1: p1Key,
-                plot2: p2Key,
-                options: {
+            let fillKey = title || 'fill';
+            const existing = this.context.plots[fillKey];
+            if (existing && callsiteId && existing._callsiteId !== callsiteId) {
+                fillKey = callsiteId;
+            }
+
+            if (!this.context.plots[fillKey]) {
+                this.context.plots[fillKey] = {
+                    title: title || 'Fill',
                     plot1: p1Key,
                     plot2: p2Key,
-                    color, editable, show_last, fillgaps, display, style: 'fill',
-                },
-                _plotKey: fillKey,
-                _callsiteId: callsiteId,
-            };
+                    data: [],
+                    options: {
+                        plot1: p1Key,
+                        plot2: p2Key,
+                        style: 'fill',
+                        gradient: true,
+                    },
+                    _plotKey: fillKey,
+                    _callsiteId: callsiteId,
+                };
+            }
+
+            // Push per-bar gradient data
+            this.context.plots[fillKey].data.push({
+                time: this.context.marketData[this.context.idx].openTime,
+                value: null,
+                options: { top_value, bottom_value, top_color, bottom_color },
+            });
+        } else {
+            const _parsed = parseArgsForPineParams<FillOptions>(args, FILL_SIGNATURE, FILL_ARGS_TYPES);
+            const { plot1, plot2, color, title, editable, show_last, fillgaps, display } = _parsed;
+
+            // For fill: prefer title, then callsite ID, then generic fallback
+            let fillKey = title || 'fill';
+            const existing = this.context.plots[fillKey];
+            if (existing && callsiteId && existing._callsiteId !== callsiteId) {
+                fillKey = callsiteId;
+            }
+
+            if (!this.context.plots[fillKey]) {
+                const p1Key = plot1?._plotKey || plot1?.title;
+                const p2Key = plot2?._plotKey || plot2?.title;
+                this.context.plots[fillKey] = {
+                    title: title || 'Fill',
+                    plot1: p1Key,
+                    plot2: p2Key,
+                    options: {
+                        plot1: p1Key,
+                        plot2: p2Key,
+                        color, editable, show_last, fillgaps, display, style: 'fill',
+                    },
+                    _plotKey: fillKey,
+                    _callsiteId: callsiteId,
+                };
+            }
         }
     }
 }

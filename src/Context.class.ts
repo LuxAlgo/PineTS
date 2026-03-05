@@ -559,8 +559,10 @@ export class Context {
      * @param decimals - the number of decimals to precision to
      * @returns the precision number
      */
+    private static readonly PRECISION_EPSILON = 10 ** 10; // Cache default epsilon
+
     precision(value: number, decimals: number = 10) {
-        const epsilon = 10 ** decimals;
+        const epsilon = decimals === 10 ? Context.PRECISION_EPSILON : 10 ** decimals;
         return typeof value === 'number' ? Math.round(value * epsilon) / epsilon : value;
         //if (typeof n !== 'number' || isNaN(n)) return n;
         //return Number(n.toFixed(decimals));
