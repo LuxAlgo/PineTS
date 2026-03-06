@@ -20,6 +20,8 @@ export class PolylineObject {
     public line_width: number;
     public force_overlay: boolean;
     public _deleted: boolean;
+    /** Bar index at which this object was created (for streaming rollback) */
+    public _createdAtBar: number = -1;
 
     constructor(
         points: ChartPointObject[],

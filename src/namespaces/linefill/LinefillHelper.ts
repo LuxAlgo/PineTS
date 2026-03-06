@@ -3,6 +3,7 @@
 import { Series } from '../../Series';
 import { LineObject } from '../line/LineObject';
 import { LinefillObject } from './LinefillObject';
+import { NAHelper } from '../Core';
 
 export class LinefillHelper {
     private _linefills: LinefillObject[] = [];
@@ -40,6 +41,8 @@ export class LinefillHelper {
      */
     private _resolve(val: any): any {
         if (val === null || val === undefined) return val;
+        // NAHelper (na) → resolve to NaN
+        if (val instanceof NAHelper) return NaN;
         if (typeof val === 'object' && Array.isArray(val.data) && typeof val.get === 'function') {
             return val.get(0);
         }
@@ -53,6 +56,7 @@ export class LinefillHelper {
     new(line1: LineObject, line2: LineObject, color: any): LinefillObject {
         const resolvedColor = this._resolve(color) || '';
         const lf = new LinefillObject(line1, line2, resolvedColor);
+        lf._createdAtBar = this.context.idx;
         this._linefills.push(lf);
         this._syncToPlot();
         return lf;
@@ -88,5 +92,14 @@ export class LinefillHelper {
     // linefill.all — all active linefill objects
     get all(): LinefillObject[] {
         return this._linefills.filter((lf) => !lf._deleted);
+    }
+
+    /**
+     * Remove all drawing objects created at or after the given bar index.
+     * Called during streaming rollback to prevent accumulation.
+     */
+    rollbackFromBar(barIdx: number): void {
+        this._linefills = this._linefills.filter((lf) => lf._createdAtBar < barIdx);
+        this._syncToPlot();
     }
 }

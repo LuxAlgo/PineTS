@@ -4,6 +4,7 @@ import { Series } from '../../Series';
 import { parseArgsForPineParams } from '../utils';
 import { LabelObject } from './LabelObject';
 import { ChartPointObject } from '../chart/ChartPointObject';
+import { NAHelper } from '../Core';
 
 //prettier-ignore
 const LABEL_NEW_SIGNATURES = [
@@ -63,6 +64,8 @@ export class LabelHelper {
      */
     private _resolve(val: any): any {
         if (val === null || val === undefined) return val;
+        // NAHelper (na) → resolve to NaN
+        if (val instanceof NAHelper) return NaN;
         // Resolve Series-like objects (has data array and get method)
         if (typeof val === 'object' && Array.isArray(val.data) && typeof val.get === 'function') {
             return val.get(0);
@@ -105,6 +108,7 @@ export class LabelHelper {
             force_overlay,
         );
         lbl._helper = this;
+        lbl._createdAtBar = this.context.idx;
         this._labels.push(lbl);
         this._syncToPlot();
         return lbl;
@@ -237,6 +241,7 @@ export class LabelHelper {
         if (!id) return undefined;
         const lbl = id.copy();
         lbl._helper = this;
+        lbl._createdAtBar = this.context.idx;
         this._labels.push(lbl);
         this._syncToPlot();
         return lbl;
@@ -250,6 +255,15 @@ export class LabelHelper {
 
     get all(): LabelObject[] {
         return this._labels.filter((l) => !l._deleted);
+    }
+
+    /**
+     * Remove all drawing objects created at or after the given bar index.
+     * Called during streaming rollback to prevent accumulation.
+     */
+    rollbackFromBar(barIdx: number): void {
+        this._labels = this._labels.filter((l) => l._createdAtBar < barIdx);
+        this._syncToPlot();
     }
 
     // --- Style constants ---

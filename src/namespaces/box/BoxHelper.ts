@@ -4,6 +4,7 @@ import { Series } from '../../Series';
 import { parseArgsForPineParams } from '../utils';
 import { BoxObject } from './BoxObject';
 import { ChartPointObject } from '../chart/ChartPointObject';
+import { NAHelper } from '../Core';
 
 //prettier-ignore
 const BOX_NEW_SIGNATURES = [
@@ -62,6 +63,8 @@ export class BoxHelper {
 
     private _resolve(val: any): any {
         if (val === null || val === undefined) return val;
+        // NAHelper (na) → resolve to NaN
+        if (val instanceof NAHelper) return NaN;
         if (typeof val === 'object' && Array.isArray(val.data) && typeof val.get === 'function') {
             return val.get(0);
         }
@@ -69,6 +72,18 @@ export class BoxHelper {
             return val();
         }
         return val;
+    }
+
+    /**
+     * Resolve a color value, preserving NaN (na) so renderers can detect "no color".
+     * The regular `_resolve(val) || fallback` pattern treats NaN as falsy and replaces
+     * it with the default, losing the explicit `border_color = na` intent.
+     */
+    private _resolveColor(val: any, fallback: string): any {
+        const resolved = this._resolve(val);
+        // NaN means `na` in Pine Script — preserve it so renderers can detect it
+        if (typeof resolved === 'number' && isNaN(resolved)) return NaN;
+        return resolved || fallback;
     }
 
     private _createBox(
@@ -85,12 +100,12 @@ export class BoxHelper {
         const b = new BoxObject(
             left, top, right, bottom, xloc,
             this._resolve(extend),
-            this._resolve(border_color) || '#2962ff',
+            this._resolveColor(border_color, '#2962ff'),
             this._resolve(border_style) || 'style_solid',
             this._resolve(border_width) ?? 1,
-            this._resolve(bgcolor) || '#2962ff',
+            this._resolveColor(bgcolor, '#2962ff'),
             this._resolve(text) || '',
-            this._resolve(text_color) || '#000000',
+            this._resolveColor(text_color, '#000000'),
             this._resolve(text_size) || 'auto',
             this._resolve(text_halign) || 'center',
             this._resolve(text_valign) || 'center',
@@ -100,6 +115,7 @@ export class BoxHelper {
             force_overlay,
         );
         b._helper = this;
+        b._createdAtBar = this.context.idx;
         this._boxes.push(b);
         this._syncToPlot();
         return b;
@@ -291,6 +307,7 @@ export class BoxHelper {
         if (!id) return undefined;
         const b = id.copy();
         b._helper = this;
+        b._createdAtBar = this.context.idx;
         this._boxes.push(b);
         this._syncToPlot();
         return b;
@@ -302,5 +319,15 @@ export class BoxHelper {
 
     get all(): BoxObject[] {
         return this._boxes.filter((b) => !b._deleted);
+    }
+
+    /**
+     * Remove all drawing objects created at or after the given bar index,
+     * and un-delete objects that were deleted during rolled-back bars.
+     * Called during streaming rollback to prevent accumulation.
+     */
+    rollbackFromBar(barIdx: number): void {
+        this._boxes = this._boxes.filter((b) => b._createdAtBar < barIdx);
+        this._syncToPlot();
     }
 }

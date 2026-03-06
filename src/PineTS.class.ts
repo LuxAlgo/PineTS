@@ -349,6 +349,10 @@ export class PineTS {
             // Step back one position to reprocess last candle
             processedUpToIdx = this.data.length - (newCandles + 1);
 
+            // Roll back drawing objects created during the previous processing of
+            // these bars so they don't accumulate on each streaming tick.
+            context.rollbackDrawings(processedUpToIdx);
+
             // Next iteration of loop will process from updated position (#1)
 
             //barstate.isnew becomes false on live bars
@@ -524,6 +528,7 @@ export class PineTS {
         this._removeLastResult(context);
         context.length = this.data.length;
         const processFrom = this.data.length - (newCandles + 1);
+        context.rollbackDrawings(processFrom);
         await this._executeIterations(context, this._transpiledCode as Function, processFrom, this.data.length);
         return true;
     }

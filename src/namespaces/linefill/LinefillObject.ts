@@ -14,6 +14,8 @@ export class LinefillObject {
     public line2: LineObject;
     public color: string;
     public _deleted: boolean;
+    /** Bar index at which this object was created (for streaming rollback) */
+    public _createdAtBar: number = -1;
 
     constructor(line1: LineObject, line2: LineObject, color: string) {
         this.id = _linefillIdCounter++;

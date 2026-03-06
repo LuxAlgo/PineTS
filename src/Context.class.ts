@@ -52,6 +52,9 @@ export class Context {
     public lang: any;
     public length: number = 0;
 
+    /** References to drawing helpers for streaming rollback */
+    public _drawingHelpers: { rollbackFromBar(barIdx: number): void }[] = [];
+
     // Combined namespace and core functions - the default way to access everything
     public pine: {
         // input: Input;
@@ -417,6 +420,9 @@ export class Context {
             get: () => polylineHelper.all,
         });
 
+        // Register drawing helpers for streaming rollback
+        this._drawingHelpers = [labelHelper, lineHelper, boxHelper, linefillHelper, polylineHelper];
+
         // table namespace
         const tableHelper = new TableHelper(this);
         this.bindContextObject(
@@ -451,6 +457,16 @@ export class Context {
         Object.defineProperty(this.pine['table'], 'all', {
             get: () => tableHelper.all,
         });
+    }
+
+    /**
+     * Roll back all drawing objects created at or after the given bar index.
+     * Called during streaming updates to prevent accumulation when bars are re-processed.
+     */
+    rollbackDrawings(fromBarIdx: number): void {
+        for (const helper of this._drawingHelpers) {
+            helper.rollbackFromBar(fromBarIdx);
+        }
     }
 
     private bindContextObject(instance: any, entries: string[], root: string = '') {

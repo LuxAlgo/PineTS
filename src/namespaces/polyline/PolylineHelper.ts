@@ -3,6 +3,7 @@
 import { Series } from '../../Series';
 import { PolylineObject } from './PolylineObject';
 import { ChartPointObject } from '../chart/ChartPointObject';
+import { NAHelper } from '../Core';
 
 export class PolylineHelper {
     private _polylines: PolylineObject[] = [];
@@ -41,6 +42,8 @@ export class PolylineHelper {
      */
     private _resolve(val: any): any {
         if (val === null || val === undefined) return val;
+        // NAHelper (na) → resolve to NaN
+        if (val instanceof NAHelper) return NaN;
         if (typeof val === 'object' && Array.isArray(val.data) && typeof val.get === 'function') {
             return val.get(0);
         }
@@ -126,6 +129,7 @@ export class PolylineHelper {
             this._resolve(line_width) || 1,
             this._resolve(force_overlay) ?? false,
         );
+        pl._createdAtBar = this.context.idx;
         this._polylines.push(pl);
         this._syncToPlot();
         return pl;
@@ -144,5 +148,14 @@ export class PolylineHelper {
     // polyline.all — all active polyline objects
     get all(): PolylineObject[] {
         return this._polylines.filter((pl) => !pl._deleted);
+    }
+
+    /**
+     * Remove all drawing objects created at or after the given bar index.
+     * Called during streaming rollback to prevent accumulation.
+     */
+    rollbackFromBar(barIdx: number): void {
+        this._polylines = this._polylines.filter((pl) => pl._createdAtBar < barIdx);
+        this._syncToPlot();
     }
 }

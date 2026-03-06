@@ -23,6 +23,8 @@ export class LabelObject {
     public force_overlay: boolean;
     public _deleted: boolean;
     public _helper: any;
+    /** Bar index at which this object was created (for streaming rollback) */
+    public _createdAtBar: number = -1;
 
     constructor(
         x: number,
