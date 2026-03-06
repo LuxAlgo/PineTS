@@ -2,7 +2,7 @@
 
 import { PineTS } from '../../../PineTS.class';
 import { Series } from '../../../Series';
-import { TIMEFRAMES } from '../utils/TIMEFRAMES';
+import { TIMEFRAMES, normalizeTimeframe } from '../utils/TIMEFRAMES';
 
 /**
  * Requests the results of an expression from a specified symbol on a timeframe lower than or equal to the chart's timeframe.
@@ -35,8 +35,8 @@ export function security_lower_tf(context: any) {
             return Array.isArray(_expression) ? [_expression] : _expression;
         }
 
-        const ctxTimeframeIdx = TIMEFRAMES.indexOf(context.timeframe);
-        const reqTimeframeIdx = TIMEFRAMES.indexOf(_timeframe);
+        const ctxTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(context.timeframe));
+        const reqTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(_timeframe));
 
         if (ctxTimeframeIdx === -1 || reqTimeframeIdx === -1) {
             if (_ignore_invalid_timeframe) return NaN;
@@ -56,10 +56,22 @@ export function security_lower_tf(context: any) {
 
         if (!context.cache[cacheKey]) {
             const buffer = 1000 * 60 * 60 * 24 * 30; // 30 days buffer
-            const adjustedSDate = context.sDate ? context.sDate - buffer : undefined;
-            const limit = context.sDate && context.eDate ? undefined : context.limit || 1000;
 
-            const pineTS = new PineTS(context.source, _symbol, _timeframe, limit, adjustedSDate, context.eDate);
+            // Determine start date: use context.sDate if available, otherwise
+            // derive from the earliest bar's openTime (same logic as security.ts)
+            const effectiveSDate = context.sDate
+                || (context.marketData?.length > 0 ? context.marketData[0].openTime : undefined);
+            const adjustedSDate = effectiveSDate ? effectiveSDate - buffer : undefined;
+
+            // Determine end date: cover last bar's intrabars without overshooting
+            const lastBarCloseTime = context.marketData?.length > 0
+                ? context.marketData[context.marketData.length - 1].closeTime
+                : 0;
+            const secEDate = context.eDate
+                ? Math.max(context.eDate, lastBarCloseTime)
+                : (lastBarCloseTime || Date.now()) + buffer;
+
+            const pineTS = new PineTS(context.source, _symbol, _timeframe, undefined, adjustedSDate, secEDate);
             pineTS.markAsSecondary();
 
             const secContext = await pineTS.run(context.pineTSCode);

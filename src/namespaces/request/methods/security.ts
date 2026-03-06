@@ -2,7 +2,7 @@
 
 import { PineTS } from '../../../PineTS.class';
 import { Series } from '../../../Series';
-import { TIMEFRAMES } from '../utils/TIMEFRAMES';
+import { TIMEFRAMES, normalizeTimeframe } from '../utils/TIMEFRAMES';
 import { findSecContextIdx } from '../utils/findSecContextIdx';
 import { findLTFContextIdx } from '../utils/findLTFContextIdx';
 
@@ -24,8 +24,12 @@ export function security(context: any) {
         const _timeframe = timeframe[0];
         const _expression = expression[0];
         const _expression_name = expression[1];
-        const _gaps = Array.isArray(gaps) ? gaps[0] : gaps;
-        const _lookahead = Array.isArray(lookahead) ? lookahead[0] : lookahead;
+        const _gapsRaw = Array.isArray(gaps) ? gaps[0] : gaps;
+        const _lookaheadRaw = Array.isArray(lookahead) ? lookahead[0] : lookahead;
+        // barmerge.gaps_off/on and barmerge.lookahead_off/on are string enums ('gaps_off', 'gaps_on', etc.)
+        // Convert to boolean for correct behavior in findLTFContextIdx/findSecContextIdx
+        const _gaps = _gapsRaw === true || _gapsRaw === 'gaps_on';
+        const _lookahead = _lookaheadRaw === true || _lookaheadRaw === 'lookahead_on';
 
         // CRITICAL: Prevent infinite recursion in secondary contexts
         // If this is a secondary context (created by another request.security),
@@ -34,8 +38,8 @@ export function security(context: any) {
             return Array.isArray(_expression) ? [_expression] : _expression;
         }
 
-        const ctxTimeframeIdx = TIMEFRAMES.indexOf(context.timeframe);
-        const reqTimeframeIdx = TIMEFRAMES.indexOf(_timeframe);
+        const ctxTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(context.timeframe));
+        const reqTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(_timeframe));
 
         if (ctxTimeframeIdx == -1 || reqTimeframeIdx == -1) {
             throw new Error('Invalid timeframe');
@@ -101,15 +105,30 @@ export function security(context: any) {
             return Array.isArray(value) ? [value] : value;
         }
 
-        // Add buffer to sDate to ensure bar start is covered
+        // Buffer to extend date range and ensure bar boundaries are covered
         const buffer = 1000 * 60 * 60 * 24 * 30; // 30 days buffer (generous)
-        const adjustedSDate = context.sDate ? context.sDate - buffer : undefined;
 
-        // If we have a date range, we shouldn't artificially limit the bars to 1000
-        const limit = context.sDate && context.eDate ? undefined : context.limit || 1000;
+        // Determine start date for secondary context.
+        // Use context.sDate if available, otherwise derive from the earliest bar's
+        // openTime to ensure the secondary context covers the same time range as the main chart.
+        const effectiveSDate = context.sDate
+            || (context.marketData?.length > 0 ? context.marketData[0].openTime : undefined);
+        const adjustedSDate = effectiveSDate ? effectiveSDate - buffer : undefined;
 
-        // We pass undefined for eDate to allow loading full history for the security context
-        const pineTS = new PineTS(context.source, _symbol, _timeframe, limit, adjustedSDate, undefined);
+        // Determine end date for secondary context.
+        // The last chart bar's intrabars may extend beyond context.eDate (e.g., a weekly
+        // bar that opens before eDate but whose daily intrabars close after eDate).
+        // Use lastBarCloseTime to cover the full range of the last bar's intrabars.
+        // When eDate is undefined (live/streaming mode), derive from the last bar's
+        // closeTime or current time, adding a buffer for partial/current bars.
+        const lastBarCloseTime = context.marketData?.length > 0
+            ? context.marketData[context.marketData.length - 1].closeTime
+            : 0;
+        const secEDate = context.eDate
+            ? Math.max(context.eDate, lastBarCloseTime)
+            : (lastBarCloseTime || Date.now()) + buffer;
+
+        const pineTS = new PineTS(context.source, _symbol, _timeframe, undefined, adjustedSDate, secEDate);
 
         // Mark as secondary context to prevent infinite recursion
         pineTS.markAsSecondary();
