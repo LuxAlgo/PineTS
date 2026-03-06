@@ -12,6 +12,7 @@ import { Input } from './namespaces/input/input.index';
 import PineMath from './namespaces/math/math.index';
 import { PineRequest } from './namespaces/request/request.index';
 import TechnicalAnalysis from './namespaces/ta/ta.index';
+import { PineTypeObject } from './namespaces/PineTypeObject';
 import { Series } from './Series';
 import { Log } from './namespaces/Log';
 import { Str } from './namespaces/Str';
@@ -533,6 +534,20 @@ export class Context {
         // First bar: evaluate thunk if source is a deferred factory call
         if (typeof src === 'function') {
             src = src();
+        }
+
+        // Resolve thunks inside PineTypeObject fields (UDT instances).
+        // When a `var` declaration initializes a UDT with factory calls like
+        // `MyType.new(line.new(...), label.new(...))`, the factory calls are
+        // wrapped in thunks to prevent orphan objects on bars 1+. Here on bar 0,
+        // we evaluate those thunks to get the actual drawing objects.
+        if (src instanceof PineTypeObject) {
+            const def = src.__def__;
+            for (const key in def) {
+                if (typeof src[key] === 'function') {
+                    src[key] = src[key]();
+                }
+            }
         }
 
         // First bar: Initialize with source value

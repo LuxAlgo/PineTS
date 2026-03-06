@@ -104,6 +104,7 @@ export class LabelHelper {
             this._resolve(text_font_family),
             force_overlay,
         );
+        lbl._helper = this;
         this._labels.push(lbl);
         this._syncToPlot();
         return lbl;
@@ -235,6 +236,7 @@ export class LabelHelper {
     copy(id: LabelObject): LabelObject | undefined {
         if (!id) return undefined;
         const lbl = id.copy();
+        lbl._helper = this;
         this._labels.push(lbl);
         this._syncToPlot();
         return lbl;

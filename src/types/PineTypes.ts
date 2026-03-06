@@ -24,7 +24,7 @@ export type PlotOptions = {
     linewidth?: number;
     style?: string;
     trackprice?: boolean;
-    histbase?: boolean;
+    histbase?: number;
     offset?: number;
     join?: boolean;
     editable?: boolean;

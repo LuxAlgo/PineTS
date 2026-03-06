@@ -512,15 +512,24 @@ function transformOperand(node: any, scopeManager: ScopeManager, namespace: stri
             return getParamFromLogicalExpression(node, scopeManager, namespace);
         }
         case 'MemberExpression': {
+            // For non-computed property access on NAMESPACES_LIKE identifiers (e.g. label.style_label_down),
+            // leave as-is — these are namespace constant accesses, not series values.
+            const isNamespacePropAccess = !node.computed &&
+                node.object.type === 'Identifier' &&
+                NAMESPACES_LIKE.includes(node.object.name) &&
+                scopeManager.isContextBound(node.object.name);
+
             // Handle array access
-            const transformedObject = node.object.type === 'Identifier' ? transformIdentifierForParam(node.object, scopeManager) : node.object;
+            const transformedObject = (node.object.type === 'Identifier' && !isNamespacePropAccess)
+                ? transformIdentifierForParam(node.object, scopeManager)
+                : node.object;
 
             // For non-computed property access on user variables (e.g. get_spt.output),
             // wrap the object in $.get() to extract the current bar's value.
             // Without this, `$.let.glb1_get_spt.output` accesses the Series object itself,
             // not the current bar value's property.
             let finalObject = transformedObject;
-            if (!node.computed && node.object.type === 'Identifier') {
+            if (!node.computed && node.object.type === 'Identifier' && !isNamespacePropAccess) {
                 const [scopedName] = scopeManager.getVariable(node.object.name);
                 const isUserVariable = scopedName !== node.object.name;
                 if (isUserVariable && !scopeManager.isLoopVariable(node.object.name)) {
@@ -650,6 +659,13 @@ function getParamFromConditionalExpression(node: any, scopeManager: ScopeManager
             Identifier(node: any, state: any, c: any) {
                 if (node.name == 'NaN') return;
                 if (NAMESPACES_LIKE.includes(node.name) && scopeManager.isContextBound(node.name)) {
+                    // Skip wrapping when this identifier is the object of a non-computed
+                    // member access (e.g. label.style_label_down) — it's a namespace
+                    // constant access, not a series value.
+                    const isMemberAccess = state.parent && state.parent.type === 'MemberExpression' &&
+                        state.parent.object === node && !state.parent.computed;
+                    if (isMemberAccess) return;
+
                     const originalName = node.name;
                     const valueExpr = {
                         type: 'MemberExpression',

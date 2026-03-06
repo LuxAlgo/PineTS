@@ -1,20 +1,27 @@
 # Change Log
 
-## [0.9.2] - 2026-03-05 - Gradient Fill, Matrix Inverse, Array Optimizations & Plot Fixes
+## [0.9.2] - 2026-03-06 - Drawing Object Method Syntax, Gradient Fill, Matrix & Array Improvements
 
 ### Added
 
-- **Gradient Fill (`fill()`)**: Added support for Pine Script's gradient fill signature — `fill(plot1, plot2, top_value, bottom_value, top_color, bottom_color)`. The `FillHelper` now detects the gradient form by checking whether the third argument is a number (gradient) or a string/color (simple fill), and stores per-bar `top_value`/`bottom_value`/`top_color`/`bottom_color` data for rendering.
+- **Method-Call Syntax on Drawing Instances**: `LineObject`, `LabelObject`, and `BoxObject` now carry delegate setter/getter methods directly on the instance (e.g., `myLine.set_x2(x)`, `myBox.set_right(r)`, `myLabel.set_text(t)`). Each delegate forwards to the owning helper so the plot sync (`_syncToPlot`) fires correctly. Enables Pine Script patterns where drawing objects stored in UDTs or arrays are mutated via method syntax.
+- **Gradient Fill (`fill()`)**: Added support for Pine Script's gradient fill signature — `fill(plot1, plot2, top_value, bottom_value, top_color, bottom_color)`. The `FillHelper` detects the gradient form (third argument is a number) and stores per-bar `top_value`/`bottom_value`/`top_color`/`bottom_color` data for the renderer.
+- **Typed Generic Function Parameters**: The Pine Script parser now correctly handles generic type annotations in function parameter lists (e.g., `array<float> src`, `map<string, float> data`). Previously these caused parse errors.
 
 ### Fixed
 
-- **`matrix.inv()` — Full NxN Support**: Rewrote `matrix.inv()` from a 2×2-only implementation to a general Gauss-Jordan elimination with partial pivoting, supporting any square matrix of arbitrary size. Singular matrices (pivot < 1e-14) correctly return a NaN matrix.
-- **`matrix.pinv()` — Real Pseudoinverse**: Rewrote `matrix.pinv()` from a placeholder stub to a correct Moore-Penrose pseudoinverse: square matrices use `inv()`, tall matrices (m > n) use `(AᵀA)⁻¹Aᵀ`, and wide matrices (m < n) use `Aᵀ(AAᵀ)⁻¹`.
-- **`array.min()` / `array.max()` Performance**: Added an O(N) fast path for the common `nth=0` case (find absolute min/max) instead of always sorting the full array O(N log N). Sorting is still used only when `nth > 0`.
-- **`array.median()` Performance**: Replaced the `for...of` copy + complex sort comparator with a direct index loop and simple numeric sort for faster execution.
-- **`array.percentile_linear_interpolation()` Performance**: Validate and copy the array in a single pass (eliminating the separate `validValues` allocation), then sort once.
-- **`array.percentile_nearest_rank()` Performance**: Same single-pass validate-and-copy optimization as `percentile_linear_interpolation`.
-- **`isPlot()` with Undefined Title**: Fixed the `isPlot()` helper check to accept plots that have no `title` property but do have a `_plotKey` property (e.g., plots created via `fill()` or accessed by callsite ID). Previously these were not recognised as plot objects, causing `fill()` to misidentify its arguments (contribution by @dcaoyuan, [#142](https://github.com/QuantForgeOrg/PineTS/issues/142)).
+- **UDT Thunk Resolution for Drawing Object Fields**: When a `var` UDT instance contains fields initialised with factory calls (e.g., `line.new(...)`, `box.new(...)`), those fields are now correctly resolved as thunks on bar 0 inside `initVar`. Previously the thunk-wrapped factory results were stored as raw functions in the UDT field, causing the drawing object to never be created.
+- **Typed Array Type Inference for Object Types**: `inferValueType()` no longer throws `"Cannot infer type from value"` when called with an object (e.g., a `LineObject` or `BoxObject`). It now returns `PineArrayType.any`, allowing `array<line>` and similar typed arrays to work correctly.
+- **Non-Computed Namespace Property Access in `$.param()`**: Fixed `ExpressionTransformer` incorrectly wrapping namespace constant accesses (e.g., `label.style_label_down`, `line.style_dashed`) in `$.get()` calls when they appeared inside function arguments. The transformer now detects non-computed member access on `NAMESPACES_LIKE` identifiers and leaves them untransformed.
+- **`histbase` Type in `PlotOptions`**: Fixed the `histbase` field in the `PlotOptions` TypeScript type from `boolean` to `number`, matching the actual Pine Script `plot(histbase=50)` signature.
+- **For-Loop `MemberExpression` Recursion**: Fixed user variable identifiers inside method calls in `for` loops (e.g., `lineMatrix.rows()`) not being transformed. The `MemberExpression` visitor in `transformForStatement` now recurses into the object node after transformation so nested identifiers are correctly resolved.
+- **Multiline `and` / Comparison Expressions**: Fixed the Pine Script parser dropping continuation lines in `and`/`&&` chains and comparison expressions spanning multiple lines. `skipNewlines(true)` is now called after the operator.
+- **`matrix.inv()` — Full NxN Support**: Rewrote `matrix.inv()` from a 2×2-only implementation to Gauss-Jordan elimination with partial pivoting, supporting any square matrix. Singular matrices (pivot < 1e-14) return a NaN matrix.
+- **`matrix.pinv()` — Real Pseudoinverse**: Rewrote `matrix.pinv()` from a placeholder stub to a correct Moore-Penrose pseudoinverse: square → `inv()`, tall (m > n) → `(AᵀA)⁻¹Aᵀ`, wide (m < n) → `Aᵀ(AAᵀ)⁻¹`.
+- **`array.min()` / `array.max()` Performance**: Added an O(N) fast path for the common `nth=0` case instead of always sorting O(N log N).
+- **`array.median()`, `percentile_linear_interpolation()`, `percentile_nearest_rank()` Performance**: Single-pass copy-and-validate optimizations.
+- **`isPlot()` with Undefined Title**: Fixed `isPlot()` to accept plot objects that have `_plotKey` but no `title` property (e.g., fill plots created via callsite ID), preventing `fill()` from misidentifying its arguments (contribution by @dcaoyuan, [#142](https://github.com/QuantForgeOrg/PineTS/issues/142)).
+- **Duplicate `map` in `CONTEXT_PINE_VARS`**: Removed an accidental duplicate `'map'` entry from `settings.ts`.
 
 ## [0.9.1] - 2026-03-04 - Enum Values, ATR/DMI/Supertrend Fixes, UDT & Transpiler Improvements
 

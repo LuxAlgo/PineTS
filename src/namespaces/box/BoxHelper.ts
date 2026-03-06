@@ -99,6 +99,7 @@ export class BoxHelper {
             this._resolve(text_formatting) || 'format_none',
             force_overlay,
         );
+        b._helper = this;
         this._boxes.push(b);
         this._syncToPlot();
         return b;
@@ -289,6 +290,7 @@ export class BoxHelper {
     copy(id: BoxObject): BoxObject | undefined {
         if (!id) return undefined;
         const b = id.copy();
+        b._helper = this;
         this._boxes.push(b);
         this._syncToPlot();
         return b;

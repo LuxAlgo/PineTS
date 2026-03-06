@@ -101,6 +101,7 @@ export class LineHelper {
             this._resolve(width) || 1,
             force_overlay,
         );
+        ln._helper = this;
         this._lines.push(ln);
         this._syncToPlot();
         return ln;
@@ -260,6 +261,7 @@ export class LineHelper {
     copy(id: LineObject): LineObject | undefined {
         if (!id) return undefined;
         const ln = id.copy();
+        ln._helper = this;
         this._lines.push(ln);
         this._syncToPlot();
         return ln;
