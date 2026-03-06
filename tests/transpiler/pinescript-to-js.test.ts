@@ -902,6 +902,32 @@ plot(close)
             expect(jsCode).toContain("count: 'int'");
             expect(jsCode).toContain("lookup: 'map<string, int>'");
         });
+
+        it('should handle generic types in function parameters', () => {
+            const code = `
+//@version=6
+indicator("Generic Function Params")
+
+sumArray(array<float> arr) =>
+    float total = 0.0
+    for i = 0 to array.size(arr) - 1
+        total += array.get(arr, i)
+    total
+
+lookupValue(map<string, float> m, string key) =>
+    map.get(m, key)
+
+plot(close)
+            `;
+
+            const result = transpile(code);
+            const jsCode = result.toString();
+            expect(jsCode).toBeDefined();
+            // The function should be transpiled without errors
+            // Generic type annotations in params should not cause parse failures
+            expect(jsCode).toContain('sumArray');
+            expect(jsCode).toContain('lookupValue');
+        });
     });
 
     describe('Dot-Prefix Number Literals', () => {

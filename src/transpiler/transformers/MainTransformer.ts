@@ -10,6 +10,7 @@ import {
     transformReturnStatement,
     transformAssignmentExpression,
     transformForStatement,
+    transformWhileStatement,
     transformIfStatement,
     transformFunctionDeclaration,
 } from './StatementTransformer';
@@ -277,6 +278,9 @@ export function runTransformationPass(
         },
         ForStatement(node: any, state: ScopeManager, c: any) {
             transformForStatement(node, state, c);
+        },
+        WhileStatement(node: any, state: ScopeManager, c: any) {
+            transformWhileStatement(node, state, c);
         },
         IfStatement(node: any, state: ScopeManager, c: any) {
             transformIfStatement(node, state, c);

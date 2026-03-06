@@ -245,7 +245,15 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
         const newName = scopeManager.addVariable(decl.id.name, varNode.kind);
         const kind = varNode.kind; // 'const', 'let', or 'var'
 
-        const isArrayPatternVar = scopeManager.isArrayPatternElement(decl.id.name);
+        // Only treat as an array pattern variable when it actually has the destructured
+        // MemberExpression shape (e.g. _tmp_0[0]) from the AnalysisPass rewrite.
+        // The arrayPatternElements set is global (not scoped), so a same-named variable
+        // inside a function body may be falsely flagged — guard with a shape check.
+        const isArrayPatternVar =
+            scopeManager.isArrayPatternElement(decl.id.name) &&
+            decl.init &&
+            decl.init.type === 'MemberExpression' &&
+            decl.init.computed;
 
         // Transform identifiers in the init expression
         if (decl.init && !isArrowFunction && !isArrayPatternVar) {
@@ -540,7 +548,6 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
             // 1. Use $.get(tempVar, 0) to get the current value from the Series
             // 2. Then access the array element [index]
 
-            // We skipped transformation for decl.init, so it's still a MemberExpression (temp[index])
             const tempVarName = decl.init.object.name;
             const tempVarRef = createScopedVariableReference(tempVarName, scopeManager);
             const arrayIndex = decl.init.property.value;
@@ -692,8 +699,18 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
                     scopeManager.pushScope('for');
                     transformIdentifier(node, state);
                     if (node.type === 'Identifier') {
-                        node.computed = true;
-                        addArrayAccess(node, state);
+                        // Skip $.get() wrapping for namespace objects used as MemberExpression
+                        // objects (e.g. math in math.min(), array in array.size()).
+                        // These are namespace objects, not series variables.
+                        const isNamespaceObject =
+                            scopeManager.isContextBound(node.name) &&
+                            node.parent &&
+                            node.parent.type === 'MemberExpression' &&
+                            node.parent.object === node;
+                        if (!isNamespaceObject) {
+                            node.computed = true;
+                            addArrayAccess(node, state);
+                        }
                     }
                     scopeManager.popScope();
                 }
@@ -705,8 +722,12 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
                 // If still a MemberExpression after transformation, recurse into the
                 // object so user variable identifiers (e.g. lineMatrix in
                 // lineMatrix.rows()) get transformed via the Identifier handler.
+                // Skip recursion for context-bound namespace objects (math, array, ta, etc.)
+                // — they are namespace objects, not series variables, and must not get $.get() wrapping.
                 if (node.type === 'MemberExpression' && node.object) {
-                    c(node.object, state);
+                    if (node.object.type !== 'Identifier' || !scopeManager.isContextBound(node.object.name)) {
+                        c(node.object, state);
+                    }
                 }
             },
             CallExpression(node: any, state: ScopeManager, c: any) {
@@ -750,13 +771,42 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
 }
 
 export function transformWhileStatement(node: any, scopeManager: ScopeManager, c: any): void {
+    // While-loop test conditions must NOT be hoisted — they're re-evaluated each iteration.
+    // Suppress hoisting so namespace calls like array.size() stay inline.
     scopeManager.setSuppressHoisting(true);
-    // Transform the test condition of the while loop
-    walk.simple(node.test, {
-        Identifier(idNode: any) {
-            transformIdentifier(idNode, scopeManager);
-        },
-    });
+
+    // Transform the test condition
+    if (node.test) {
+        walk.recursive(node.test, scopeManager, {
+            Identifier(node: any, state: ScopeManager) {
+                if (!node.computed) {
+                    transformIdentifier(node, state);
+                }
+            },
+            MemberExpression(node: any, state: ScopeManager, c: any) {
+                transformMemberExpression(node, '', scopeManager);
+                // Recurse into non-namespace objects for user variable resolution
+                if (node.type === 'MemberExpression' && node.object) {
+                    if (node.object.type !== 'Identifier' || !scopeManager.isContextBound(node.object.name)) {
+                        c(node.object, state);
+                    }
+                }
+            },
+            CallExpression(node: any, state: ScopeManager, c: any) {
+                // Transform namespace method calls inline (no hoisting)
+                node.callee.parent = node;
+                c(node.callee, state);
+                transformCallExpression(node, state);
+                // Also traverse arguments
+                if (node.arguments) {
+                    for (const arg of node.arguments) {
+                        c(arg, state);
+                    }
+                }
+            },
+        });
+    }
+
     scopeManager.setSuppressHoisting(false);
 
     // Process the body of the while loop

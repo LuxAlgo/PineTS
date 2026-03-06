@@ -10,11 +10,53 @@ export class Str {
         return Series.from(source).get(index);
     }
     tostring(value: any, formatStr?: string) {
-        if (formatStr === 'mintick' && typeof value === 'number') {
+        if (typeof value !== 'number' || isNaN(value) || !formatStr) {
+            return String(value);
+        }
+
+        // Named format: mintick
+        if (formatStr === 'mintick') {
             const mintick = this.context.pine?.syminfo?.mintick || 0.01;
             const decimals = Math.max(0, -Math.floor(Math.log10(mintick)));
             return value.toFixed(decimals);
         }
+
+        // Named format: integer
+        if (formatStr === 'integer') {
+            return String(Math.round(value));
+        }
+
+        // Named format: percent
+        if (formatStr === 'percent') {
+            return (value * 100).toFixed(2) + '%';
+        }
+
+        // Named format: price — same as mintick
+        if (formatStr === 'price') {
+            const mintick = this.context.pine?.syminfo?.mintick || 0.01;
+            const decimals = Math.max(0, -Math.floor(Math.log10(mintick)));
+            return value.toFixed(decimals);
+        }
+
+        // Named format: volume
+        if (formatStr === 'volume') {
+            return String(Math.round(value));
+        }
+
+        // Pattern-based format: "#", "#.#", "#.##", "0.000", etc.
+        // Count decimal places from the pattern
+        const dotIdx = formatStr.indexOf('.');
+        if (dotIdx >= 0) {
+            const decimalPart = formatStr.substring(dotIdx + 1);
+            const decimals = decimalPart.length;
+            return value.toFixed(decimals);
+        }
+
+        // No decimal point in format → integer
+        if (formatStr.includes('#') || formatStr.includes('0')) {
+            return String(Math.round(value));
+        }
+
         return String(value);
     }
     tonumber(value: any) {
@@ -91,6 +133,13 @@ export class Str {
     }
 
     format(message: string, ...args: any[]) {
-        return message.replace(/{(\d+)}/g, (match, index) => args[index]);
+        // Handle both simple {0} and extended {0,number,#.##} patterns
+        return message.replace(/\{(\d+)(?:,number,([^}]+))?\}/g, (match, index, fmt) => {
+            const val = args[index];
+            if (fmt && typeof val === 'number' && !isNaN(val)) {
+                return this.tostring(val, fmt);
+            }
+            return String(val);
+        });
     }
 }

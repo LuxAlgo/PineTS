@@ -95,17 +95,17 @@ parent: API Coverage
 
 | Function       | Status | Description  |
 | -------------- | ------ | ------------ |
-| `extend.both`  |        | Extend both  |
-| `extend.left`  |        | Extend left  |
-| `extend.none`  |        | Extend none  |
-| `extend.right` |        | Extend right |
+| `extend.both`  | ✅     | Extend both  |
+| `extend.left`  | ✅     | Extend left  |
+| `extend.none`  | ✅     | Extend none  |
+| `extend.right` | ✅     | Extend right |
 
 ### Font
 
 | Function                | Status | Description           |
 | ----------------------- | ------ | --------------------- |
-| `font.family_default`   |        | Default font family   |
-| `font.family_monospace` |        | Monospace font family |
+| `font.family_default`   | ✅     | Default font family   |
+| `font.family_monospace` | ✅     | Monospace font family |
 
 ### Format
 
@@ -165,15 +165,15 @@ parent: API Coverage
 
 | Function                 | Status | Description            |
 | ------------------------ | ------ | ---------------------- |
-| `position.bottom_center` |        | Bottom center position |
-| `position.bottom_left`   |        | Bottom left position   |
-| `position.bottom_right`  |        | Bottom right position  |
-| `position.middle_center` |        | Middle center position |
-| `position.middle_left`   |        | Middle left position   |
-| `position.middle_right`  |        | Middle right position  |
-| `position.top_center`    |        | Top center position    |
-| `position.top_left`      |        | Top left position      |
-| `position.top_right`     |        | Top right position     |
+| `position.bottom_center` | ✅     | Bottom center position |
+| `position.bottom_left`   | ✅     | Bottom left position   |
+| `position.bottom_right`  | ✅     | Bottom right position  |
+| `position.middle_center` | ✅     | Middle center position |
+| `position.middle_left`   | ✅     | Middle left position   |
+| `position.middle_right`  | ✅     | Middle right position  |
+| `position.top_center`    | ✅     | Top center position    |
+| `position.top_left`      | ✅     | Top left position      |
+| `position.top_right`     | ✅     | Top right position     |
 
 ### Scale
 
@@ -231,30 +231,30 @@ parent: API Coverage
 | Function             | Status | Description           |
 | -------------------- | ------ | --------------------- |
 | `text.align_bottom`  |        | Bottom text alignment |
-| `text.align_center`  |        | Center text alignment |
-| `text.align_left`    |        | Left text alignment   |
-| `text.align_right`   |        | Right text alignment  |
+| `text.align_center`  | ✅     | Center text alignment |
+| `text.align_left`    | ✅     | Left text alignment   |
+| `text.align_right`   | ✅     | Right text alignment  |
 | `text.align_top`     |        | Top text alignment    |
 | `text.format_bold`   |        | Bold text format      |
 | `text.format_italic` |        | Italic text format    |
 | `text.format_none`   |        | No text format        |
-| `text.wrap_auto`     |        | Auto text wrap        |
-| `text.wrap_none`     |        | No text wrap          |
+| `text.wrap_auto`     | ✅     | Auto text wrap        |
+| `text.wrap_none`     | ✅     | No text wrap          |
 
 ### Xloc
 
 | Function         | Status | Description          |
 | ---------------- | ------ | -------------------- |
-| `xloc.bar_index` |        | Bar index x-location |
-| `xloc.bar_time`  |        | Bar time x-location  |
+| `xloc.bar_index` | ✅     | Bar index x-location |
+| `xloc.bar_time`  | ✅     | Bar time x-location  |
 
 ### Yloc
 
 | Function        | Status | Description          |
 | --------------- | ------ | -------------------- |
-| `yloc.abovebar` |        | Above bar y-location |
-| `yloc.belowbar` |        | Below bar y-location |
-| `yloc.price`    |        | Price y-location     |
+| `yloc.abovebar` | ✅     | Above bar y-location |
+| `yloc.belowbar` | ✅     | Below bar y-location |
+| `yloc.price`    | ✅     | Price y-location     |
 
 ### Dividends
 
@@ -306,7 +306,7 @@ parent: API Coverage
 
 | Function                 | Status | Description   |
 | ------------------------ | ------ | ------------- |
-| `barmerge.gaps_off`      |        | Gaps off      |
-| `barmerge.gaps_on`       |        | Gaps on       |
-| `barmerge.lookahead_off` |        | Lookahead off |
-| `barmerge.lookahead_on`  |        | Lookahead on  |
+| `barmerge.gaps_off`      | ✅     | Gaps off      |
+| `barmerge.gaps_on`       | ✅     | Gaps on       |
+| `barmerge.lookahead_off` | ✅     | Lookahead off |
+| `barmerge.lookahead_on`  | ✅     | Lookahead on  |

@@ -335,8 +335,7 @@ describe('Constants', () => {
     });
 
     // ── barmerge ───────────────────────────────────────────────────────
-    // barmerge is defined in Types.ts but not yet registered in CONTEXT_PINE_VARS
-    it.todo('barmerge.* constants match TradingView values', async () => {
+    it('barmerge.* constants match TradingView values', async () => {
         const pineTS = makePineTS();
 
         const { result } = await pineTS.run((context) => {
@@ -352,6 +351,54 @@ describe('Constants', () => {
         expect(result.gaps_off[0]).toBe('gaps_off');
         expect(result.lookahead_on[0]).toBe('lookahead_on');
         expect(result.lookahead_off[0]).toBe('lookahead_off');
+    });
+
+    // ── extend ────────────────────────────────────────────────────────
+    it('extend.* constants match TradingView values', async () => {
+        const pineTS = makePineTS();
+
+        const { result } = await pineTS.run((context) => {
+            return {
+                left: extend.left,
+                right: extend.right,
+                both: extend.both,
+                none: extend.none,
+            };
+        });
+
+        expect(result.left[0]).toBe('l');
+        expect(result.right[0]).toBe('r');
+        expect(result.both[0]).toBe('b');
+        expect(result.none[0]).toBe('n');
+    });
+
+    // ── position ─────────────────────────────────────────────────────
+    it('position.* constants match TradingView values', async () => {
+        const pineTS = makePineTS();
+
+        const { result } = await pineTS.run((context) => {
+            return {
+                top_left: position.top_left,
+                top_center: position.top_center,
+                top_right: position.top_right,
+                middle_left: position.middle_left,
+                middle_center: position.middle_center,
+                middle_right: position.middle_right,
+                bottom_left: position.bottom_left,
+                bottom_center: position.bottom_center,
+                bottom_right: position.bottom_right,
+            };
+        });
+
+        expect(result.top_left[0]).toBe('top_left');
+        expect(result.top_center[0]).toBe('top_center');
+        expect(result.top_right[0]).toBe('top_right');
+        expect(result.middle_left[0]).toBe('middle_left');
+        expect(result.middle_center[0]).toBe('middle_center');
+        expect(result.middle_right[0]).toBe('middle_right');
+        expect(result.bottom_left[0]).toBe('bottom_left');
+        expect(result.bottom_center[0]).toBe('bottom_center');
+        expect(result.bottom_right[0]).toBe('bottom_right');
     });
 
     // ── plot (style constants) ─────────────────────────────────────────

@@ -31,10 +31,10 @@
         "backadjustment.on": true
     },
     "barmerge": {
-        "barmerge.gaps_off": false,
-        "barmerge.gaps_on": false,
-        "barmerge.lookahead_off": false,
-        "barmerge.lookahead_on": false
+        "barmerge.gaps_off": true,
+        "barmerge.gaps_on": true,
+        "barmerge.lookahead_off": true,
+        "barmerge.lookahead_on": true
     },
     "currency": {
         "currency.AED": true,
@@ -113,14 +113,14 @@
         "display.status_line": true
     },
     "extend": {
-        "extend.both": false,
-        "extend.left": false,
-        "extend.none": false,
-        "extend.right": false
+        "extend.both": true,
+        "extend.left": true,
+        "extend.none": true,
+        "extend.right": true
     },
     "font": {
-        "font.family_default": false,
-        "font.family_monospace": false
+        "font.family_default": true,
+        "font.family_monospace": true
     },
     "format": {
         "format.inherit": true,
@@ -162,15 +162,15 @@
         "plot.style_steplinebr": true
     },
     "position": {
-        "position.bottom_center": false,
-        "position.bottom_left": false,
-        "position.bottom_right": false,
-        "position.middle_center": false,
-        "position.middle_left": false,
-        "position.middle_right": false,
-        "position.top_center": false,
-        "position.top_left": false,
-        "position.top_right": false
+        "position.bottom_center": true,
+        "position.bottom_left": true,
+        "position.bottom_right": true,
+        "position.middle_center": true,
+        "position.middle_left": true,
+        "position.middle_right": true,
+        "position.top_center": true,
+        "position.top_left": true,
+        "position.top_right": true
     },
     "scale": {
         "scale.left": false,
@@ -210,23 +210,23 @@
     },
     "text": {
         "text.align_bottom": false,
-        "text.align_center": false,
-        "text.align_left": false,
-        "text.align_right": false,
+        "text.align_center": true,
+        "text.align_left": true,
+        "text.align_right": true,
         "text.align_top": false,
         "text.format_bold": false,
         "text.format_italic": false,
         "text.format_none": false,
-        "text.wrap_auto": false,
-        "text.wrap_none": false
+        "text.wrap_auto": true,
+        "text.wrap_none": true
     },
     "xloc": {
-        "xloc.bar_index": false,
-        "xloc.bar_time": false
+        "xloc.bar_index": true,
+        "xloc.bar_time": true
     },
     "yloc": {
-        "yloc.abovebar": false,
-        "yloc.belowbar": false,
-        "yloc.price": false
+        "yloc.abovebar": true,
+        "yloc.belowbar": true,
+        "yloc.price": true
     }
 }

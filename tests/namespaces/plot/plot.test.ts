@@ -153,6 +153,33 @@ describe('PLOT Namespace', () => {
         expect(plots[fillEntry.plot2]).toBeDefined();
     });
 
+    it('plot() with histbase option stores numeric value in options', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-01-10').getTime());
+
+        const { plots } = await pineTS.run((context) => {
+            plot(close - open, 'Hist', { style: plot.style_histogram, histbase: 50, color: color.blue });
+            return {};
+        });
+
+        expect(plots['Hist']).toBeDefined();
+        expect(plots['Hist'].options).toBeDefined();
+        expect(plots['Hist'].options.histbase).toBe(50);
+        expect(plots['Hist'].options.style).toBe('style_histogram');
+    });
+
+    it('plot() with histbase=0 stores zero correctly', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-01-10').getTime());
+
+        const { plots } = await pineTS.run((context) => {
+            plot(close - open, 'ZeroBase', { style: plot.style_histogram, histbase: 0 });
+            return {};
+        });
+
+        expect(plots['ZeroBase']).toBeDefined();
+        expect(plots['ZeroBase'].options).toBeDefined();
+        expect(plots['ZeroBase'].options.histbase).toBe(0);
+    });
+
     it('plot() returns a reference that fill() can consume', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-01-10').getTime());
 

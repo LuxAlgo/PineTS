@@ -197,6 +197,79 @@ describe('Transpiler Scope Edge Cases', () => {
         expect(plots['outer'].data[0].value).toBe(60); // 10 + 20 + 30
     });
 
+    it('should handle tuple destructuring where function locals share names with outer vars (Pine Script)', async () => {
+        // Regression test: when a function returns a tuple and the caller destructures into
+        // variables (e.g., [fib236, fib382] = calcFibs()), if the function itself also has
+        // local variables with the same names, the transpiler's arrayPatternElements set
+        // (which is global, not scoped) would falsely flag the function's locals as array
+        // pattern vars, causing a crash ("Cannot read properties of undefined (reading 'name')")
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+        const pineCode = `
+//@version=6
+indicator("Tuple Scope Test")
+
+calcLevels(float highVal, float lowVal) =>
+    float range = highVal - lowVal
+    float level1 = lowVal + range * 0.236
+    float level2 = lowVal + range * 0.382
+    float level3 = lowVal + range * 0.500
+    [level1, level2, level3]
+
+float h = ta.highest(high, 10)
+float l = ta.lowest(low, 10)
+
+// Destructure into variables - these names DON'T collide with function locals
+[level1, level2, level3] = calcLevels(h, l)
+
+plot(level1, "L1")
+plot(level2, "L2")
+plot(level3, "L3")
+`;
+
+        const { plots } = await pineTS.run(pineCode);
+        expect(plots).toBeDefined();
+        expect(plots['L1']).toBeDefined();
+        expect(plots['L2']).toBeDefined();
+        expect(plots['L3']).toBeDefined();
+        expect(Array.isArray(plots['L1'].data)).toBe(true);
+    });
+
+    it('should handle tuple destructuring where caller vars match function locals (Pine Script)', async () => {
+        // More specific regression: the exact pattern that caused the crash - caller
+        // destructures into the SAME variable names used inside the function
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+        const pineCode = `
+//@version=6
+indicator("Tuple Same Names Test")
+
+calcValues(float src) =>
+    float val1 = src * 2
+    float val2 = src * 3
+    [val1, val2]
+
+// Destructure uses the SAME names as the function's locals
+[val1, val2] = calcValues(close)
+
+plot(val1, "V1")
+plot(val2, "V2")
+`;
+
+        const { plots } = await pineTS.run(pineCode);
+        expect(plots).toBeDefined();
+        expect(plots['V1']).toBeDefined();
+        expect(plots['V2']).toBeDefined();
+        // val1 should be close * 2, val2 should be close * 3
+        const v1 = plots['V1'].data[0]?.value;
+        const v2 = plots['V2'].data[0]?.value;
+        expect(typeof v1).toBe('number');
+        expect(typeof v2).toBe('number');
+        if (v1 && v2) {
+            expect(v2 / v1).toBeCloseTo(1.5, 5); // (close * 3) / (close * 2) = 1.5
+        }
+    });
+
     it('should handle block scope in switch statements', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
 

@@ -101,6 +101,9 @@ export const CONTEXT_PINE_VARS = [
     'extend',
     'position',
 
+    // Merge constants (request.security)
+    'barmerge',
+
     // Adjustment constants
     'adjustment',
     'backadjustment',

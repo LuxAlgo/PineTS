@@ -28,12 +28,18 @@ export class Barstate {
     }
 
     public get isconfirmed() {
-        return this.context.data.closeTime[this.context.data.closeTime.length - 1] <= new Date().getTime();
+        // Check if the CURRENT bar (not the last bar) has closed.
+        // Historical bars are always confirmed; only the live bar is unconfirmed.
+        // closeTime is a Series object — access .data[] for raw array indexing.
+        const closeTime = this.context.data.closeTime.data[this.context.idx];
+        return closeTime <= Date.now();
     }
 
     public get islastconfirmedhistory() {
-        //FIXME : this is a temporary solution to get the islastconfirmedhistory value,
-        //we need to implement a better way to handle it based on market data
-        return this.context.data.closeTime[this.context.data.closeTime.length - 1] <= new Date().getTime();
+        // True when this is the last bar whose close time is in the past
+        // (the bar right before the current live bar).
+        const closeTime = this.context.data.closeTime.data[this.context.idx];
+        const nextCloseTime = this.context.data.closeTime.data[this.context.idx + 1];
+        return closeTime <= Date.now() && (nextCloseTime === undefined || nextCloseTime > Date.now());
     }
 }
