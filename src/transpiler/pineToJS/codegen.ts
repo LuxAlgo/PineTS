@@ -4,6 +4,13 @@
 // JavaScript Code Generator for PineScript AST
 // Transforms ESTree-compatible AST into JavaScript code
 
+import { CONTEXT_PINE_VARS } from '../settings';
+
+// Set of names that conflict with Pine context variables/namespaces.
+// Function parameters with these names must be renamed to avoid Phase 2
+// transpiler incorrectly treating them as namespace references (e.g., color.__value()).
+const CONFLICTING_NAMES = new Set(CONTEXT_PINE_VARS);
+
 export class CodeGenerator {
     private indent: number;
     private indentStr: string;
@@ -12,6 +19,10 @@ export class CodeGenerator {
     private sourceLines: string[];
     private lastCommentedLine: number;
     private includeSourceComments: boolean;
+    private paramRenameCounter: number;
+    // Maps user-defined function names to their ordered parameter names.
+    // Used to resolve named arguments to correct positional slots.
+    private functionParams: Map<string, string[]>;
     constructor(options: { indentStr?: string; sourceCode?: string; includeSourceComments?: boolean } = {}) {
         this.indent = 0;
         this.indentStr = options.indentStr || '  ';
@@ -20,20 +31,50 @@ export class CodeGenerator {
         this.sourceLines = this.sourceCode ? this.sourceCode.split('\n') : [];
         this.lastCommentedLine = -1;
         this.includeSourceComments = options.includeSourceComments || false; // default false
+        this.paramRenameCounter = 0;
+        this.functionParams = new Map();
     }
 
     generate(ast) {
         this.output = [];
         this.indent = 0;
         this.lastCommentedLine = -1;
+        this.functionParams = new Map();
 
         if (ast.type === 'Program') {
+            // Pre-scan: collect user-defined function parameter lists and
+            // detect function names that collide with method call names.
+            this.preProcessAST(ast);
             this.generateProgram(ast);
         } else {
             throw new Error(`Expected Program node, got ${ast.type}`);
         }
 
         return this.output.join('');
+    }
+
+    // Pre-scan AST to collect function parameter lists for named-arg resolution.
+    private preProcessAST(ast: any) {
+        this.collectFunctionParams(ast);
+    }
+
+    // Pre-scan AST to collect function parameter names for named-arg resolution.
+    private collectFunctionParams(node: any) {
+        if (!node || typeof node !== 'object') return;
+        if (node.type === 'FunctionDeclaration' && node.id?.name) {
+            const paramNames: string[] = [];
+            for (const p of node.params) {
+                if (p.type === 'Identifier') paramNames.push(p.name);
+                else if (p.type === 'AssignmentPattern' && p.left?.name) paramNames.push(p.left.name);
+            }
+            this.functionParams.set(node.id.name, paramNames);
+        }
+        // Recurse into body
+        if (Array.isArray(node.body)) {
+            for (const child of node.body) this.collectFunctionParams(child);
+        } else if (node.body && typeof node.body === 'object') {
+            this.collectFunctionParams(node.body);
+        }
     }
 
     // Write source code comments
@@ -163,6 +204,38 @@ export class CodeGenerator {
         this.write('});\n');
     }
 
+    // Rename Identifier nodes in an AST subtree.
+    // Walks the pine2js AST and renames all Identifier references that match
+    // the rename map, stopping at nested FunctionDeclaration boundaries
+    // (which have their own parameter scope).
+    private renameIdentifiersInAST(node: any, renameMap: Map<string, string>) {
+        if (!node || typeof node !== 'object') return;
+
+        // Rename matching Identifier nodes
+        if (node.type === 'Identifier' && renameMap.has(node.name)) {
+            node.name = renameMap.get(node.name);
+            return;
+        }
+
+        // Don't recurse into nested function declarations (they have their own scope)
+        if (node.type === 'FunctionDeclaration') return;
+
+        // Walk all properties of the node
+        for (const key of Object.keys(node)) {
+            if (key === 'type') continue;
+            const val = node[key];
+            if (Array.isArray(val)) {
+                for (const child of val) {
+                    if (child && typeof child === 'object') {
+                        this.renameIdentifiersInAST(child, renameMap);
+                    }
+                }
+            } else if (val && typeof val === 'object' && val.type) {
+                this.renameIdentifiersInAST(val, renameMap);
+            }
+        }
+    }
+
     // Generate FunctionDeclaration
     generateFunctionDeclaration(node) {
         this.write(this.indentStr.repeat(this.indent));
@@ -170,6 +243,34 @@ export class CodeGenerator {
         // Don't output methods as standalone functions - they'll be attached to objects at runtime
         // Just generate them as regular functions for now, skipping first 'this' param
         const isMethod = node.id.isMethod;
+
+        // Detect function params that collide with Pine context names (namespaces, builtins, etc.)
+        // and rename them to avoid Phase 2 transpiler misinterpreting them as namespace references.
+        // e.g., parameter 'color' would be renamed to 'color_$0' to avoid color.__value() injection.
+        const renameMap = new Map<string, string>();
+        for (const param of node.params) {
+            const paramName = param.type === 'AssignmentPattern' ? param.left.name : param.name;
+            if (paramName && CONFLICTING_NAMES.has(paramName)) {
+                const newName = `${paramName}_$${this.paramRenameCounter++}`;
+                renameMap.set(paramName, newName);
+            }
+        }
+
+        // Apply renaming to param nodes and function body before generating code
+        if (renameMap.size > 0) {
+            for (const param of node.params) {
+                if (param.type === 'AssignmentPattern') {
+                    if (renameMap.has(param.left.name)) {
+                        param.left.name = renameMap.get(param.left.name);
+                    }
+                    // Also rename identifiers in default value expressions
+                    this.renameIdentifiersInAST(param.right, renameMap);
+                } else if (param.type === 'Identifier' && renameMap.has(param.name)) {
+                    param.name = renameMap.get(param.name);
+                }
+            }
+            this.renameIdentifiersInAST(node.body, renameMap);
+        }
 
         this.write('function ');
         this.write(node.id.name);
@@ -871,20 +972,70 @@ export class CodeGenerator {
 
         this.write('(');
 
-        for (let i = 0; i < node.arguments.length; i++) {
-            const arg = node.arguments[i];
+        // Check if this is a call to a user-defined function with named arguments.
+        // Named args are collected into an ObjectExpression as the last argument by the parser.
+        // For user-defined functions, we need to expand them into the correct positional slots.
+        const calleeName = node.callee?.type === 'Identifier' ? node.callee.name : null;
+        const paramList = calleeName ? this.functionParams.get(calleeName) : null;
+        const lastArg = node.arguments.length > 0 ? node.arguments[node.arguments.length - 1] : null;
+        const hasNamedArgs = lastArg?.type === 'ObjectExpression' && paramList;
 
-            // Handle named arguments (convert to object parameter)
-            if (arg.type === 'AssignmentExpression' && arg.operator === '=') {
-                // For named args, we'll just pass the value
-                // The calling convention would need to be adjusted
-                this.generateExpression(arg.right);
-            } else {
-                this.generateExpression(arg);
+        if (hasNamedArgs) {
+            // Positional args (everything except the last ObjectExpression)
+            const positionalArgs = node.arguments.slice(0, -1);
+            // Named args from the ObjectExpression
+            const namedArgMap = new Map<string, any>();
+            for (const prop of lastArg.properties) {
+                const key = prop.key?.name || prop.key?.value;
+                if (key) namedArgMap.set(key, prop.value);
             }
 
-            if (i < node.arguments.length - 1) {
-                this.write(', ');
+            // Build the full argument list matching the function's parameter order.
+            // Start with positional args, then fill in named args at their correct
+            // parameter positions, using undefined for gaps.
+            const fullArgs: any[] = [];
+            let lastFilledIdx = -1;
+            for (let i = 0; i < paramList.length; i++) {
+                if (i < positionalArgs.length) {
+                    fullArgs.push(positionalArgs[i]);
+                    lastFilledIdx = i;
+                } else if (namedArgMap.has(paramList[i])) {
+                    fullArgs.push(namedArgMap.get(paramList[i]));
+                    lastFilledIdx = i;
+                } else {
+                    fullArgs.push(null); // gap — will emit undefined
+                }
+            }
+
+            // Trim trailing gaps (no need to emit trailing undefined args)
+            const trimmedArgs = fullArgs.slice(0, lastFilledIdx + 1);
+
+            for (let i = 0; i < trimmedArgs.length; i++) {
+                if (trimmedArgs[i] === null) {
+                    this.write('undefined');
+                } else {
+                    this.generateExpression(trimmedArgs[i]);
+                }
+                if (i < trimmedArgs.length - 1) {
+                    this.write(', ');
+                }
+            }
+        } else {
+            for (let i = 0; i < node.arguments.length; i++) {
+                const arg = node.arguments[i];
+
+                // Handle named arguments (convert to object parameter)
+                if (arg.type === 'AssignmentExpression' && arg.operator === '=') {
+                    // For named args, we'll just pass the value
+                    // The calling convention would need to be adjusted
+                    this.generateExpression(arg.right);
+                } else {
+                    this.generateExpression(arg);
+                }
+
+                if (i < node.arguments.length - 1) {
+                    this.write(', ');
+                }
             }
         }
 

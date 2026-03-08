@@ -145,13 +145,21 @@ export class PineColor {
     }
 
     // ── color.from_gradient(value, bottom_value, top_value, bottom_color, top_color) ──
-    from_gradient(value: any, bottom_value: any, top_value: any, bottom_color: any, top_color: any): string {
+    from_gradient(value: any, bottom_value: any, top_value: any, bottom_color: any, top_color: any): any {
         // Resolve Series/functions for all args
         value = resolveColor(value);
         bottom_value = resolveColor(bottom_value);
         top_value = resolveColor(top_value);
         bottom_color = resolveColor(bottom_color);
         top_color = resolveColor(top_color);
+
+        // If any numeric arg is na (NaN/null/undefined), return na
+        if (value == null || (typeof value === 'number' && isNaN(value))) return undefined;
+        if (bottom_value == null || (typeof bottom_value === 'number' && isNaN(bottom_value))) return undefined;
+        if (top_value == null || (typeof top_value === 'number' && isNaN(top_value))) return undefined;
+        // If either color is na, return na
+        if (bottom_color == null || (typeof bottom_color === 'number' && isNaN(bottom_color))) return undefined;
+        if (top_color == null || (typeof top_color === 'number' && isNaN(top_color))) return undefined;
 
         // Clamp position between 0 and 1
         let t = 0;
@@ -211,21 +219,55 @@ export class PineColor {
     // These are methods (not getters) because KNOWN_NAMESPACES transforms
     // `color.white` → `color.white()` in the transpiler. They need to be
     // callable functions, not static values.
-    aqua()    { return COLOR_CONSTANTS.aqua; }
-    black()   { return COLOR_CONSTANTS.black; }
-    blue()    { return COLOR_CONSTANTS.blue; }
-    fuchsia() { return COLOR_CONSTANTS.fuchsia; }
-    gray()    { return COLOR_CONSTANTS.gray; }
-    green()   { return COLOR_CONSTANTS.green; }
-    lime()    { return COLOR_CONSTANTS.lime; }
-    maroon()  { return COLOR_CONSTANTS.maroon; }
-    navy()    { return COLOR_CONSTANTS.navy; }
-    olive()   { return COLOR_CONSTANTS.olive; }
-    orange()  { return COLOR_CONSTANTS.orange; }
-    purple()  { return COLOR_CONSTANTS.purple; }
-    red()     { return COLOR_CONSTANTS.red; }
-    silver()  { return COLOR_CONSTANTS.silver; }
-    teal()    { return COLOR_CONSTANTS.teal; }
-    white()   { return COLOR_CONSTANTS.white; }
-    yellow()  { return COLOR_CONSTANTS.yellow; }
+    aqua() {
+        return COLOR_CONSTANTS.aqua;
+    }
+    black() {
+        return COLOR_CONSTANTS.black;
+    }
+    blue() {
+        return COLOR_CONSTANTS.blue;
+    }
+    fuchsia() {
+        return COLOR_CONSTANTS.fuchsia;
+    }
+    gray() {
+        return COLOR_CONSTANTS.gray;
+    }
+    green() {
+        return COLOR_CONSTANTS.green;
+    }
+    lime() {
+        return COLOR_CONSTANTS.lime;
+    }
+    maroon() {
+        return COLOR_CONSTANTS.maroon;
+    }
+    navy() {
+        return COLOR_CONSTANTS.navy;
+    }
+    olive() {
+        return COLOR_CONSTANTS.olive;
+    }
+    orange() {
+        return COLOR_CONSTANTS.orange;
+    }
+    purple() {
+        return COLOR_CONSTANTS.purple;
+    }
+    red() {
+        return COLOR_CONSTANTS.red;
+    }
+    silver() {
+        return COLOR_CONSTANTS.silver;
+    }
+    teal() {
+        return COLOR_CONSTANTS.teal;
+    }
+    white() {
+        return COLOR_CONSTANTS.white;
+    }
+    yellow() {
+        return COLOR_CONSTANTS.yellow;
+    }
 }

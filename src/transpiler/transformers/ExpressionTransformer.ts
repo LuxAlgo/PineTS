@@ -835,6 +835,12 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                         // It's a data variable like 'close', 'open' - use directly
                         return element;
                     }
+                    // Function parameters should use raw identifier wrapped in $.get()
+                    // (same pattern as non-array function param handling elsewhere)
+                    if (scopeManager.isLocalSeriesVar(element.name)) {
+                        const plainIdentifier = ASTFactory.createIdentifier(element.name);
+                        return ASTFactory.createGetCall(plainIdentifier, 0);
+                    }
                     // It's a user variable - transform to context reference
                     return createScopedVariableAccess(element.name, scopeManager);
                 }

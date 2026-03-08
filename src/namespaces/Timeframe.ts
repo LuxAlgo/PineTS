@@ -74,7 +74,10 @@ export class Timeframe {
 
         return '12M';
     }
-    public in_seconds(timeframe: string) {
+    public in_seconds(timeframe?: string) {
+        if (timeframe === undefined || timeframe === null) {
+            timeframe = this.context.timeframe;
+        }
         const multiplier = parseInt(timeframe);
         const unit = timeframe.slice(-1);
         if (unit === 'S') {

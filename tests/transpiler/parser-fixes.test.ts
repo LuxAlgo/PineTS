@@ -1605,3 +1605,102 @@ plot(val, "Val")
         expect(result.plots).toBeDefined();
     }, 30000);
 });
+
+// ─── 18. Function Parameter Renaming for Namespace Collisions ───────
+describe('Codegen Fix: Function parameter renaming for namespace collisions', () => {
+    it('should rename param "color" to avoid collision with color namespace', () => {
+        const code = `
+//@version=6
+indicator("Param Rename Color")
+myFunc(color = "#FFF") =>
+    color
+plot(0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        // The param should be renamed to color_$<id>
+        expect(pine2js.code).toMatch(/color_\$\d+/);
+        // Original bare 'color' should NOT appear as a parameter name
+        expect(pine2js.code).not.toMatch(/function myFunc\([^)]*\bcolor\b[^_]/);
+    });
+
+    it('should rename param "line" to avoid collision with line namespace', () => {
+        const code = `
+//@version=6
+indicator("Param Rename Line")
+draw(line, int x) =>
+    x + 1
+plot(draw(1, 2))
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        // The param 'line' should be renamed
+        expect(pine2js.code).toMatch(/line_\$\d+/);
+    });
+
+    it('should rename references in function body to match renamed param', () => {
+        const code = `
+//@version=6
+indicator("Param Body Rename")
+cell(string data, color = "#FFF") =>
+    color
+plot(0)
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        // The return expression should use the renamed parameter
+        const match = pine2js.code.match(/color_\$(\d+)/g);
+        // Should appear at least twice: once in param, once in body reference
+        expect(match).not.toBeNull();
+        expect(match.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should NOT rename params that do not collide with known names', () => {
+        const code = `
+//@version=6
+indicator("No Rename")
+myFunc(x, y, z) =>
+    x + y + z
+plot(myFunc(1, 2, 3))
+`;
+        const pine2js = pineToJS(code);
+        expect(pine2js.success).toBe(true);
+        // No _$<digits> param renames should exist
+        expect(pine2js.code).not.toMatch(/_\$\d+/);
+        // Function keeps its original name, params (x, y, z) stay unchanged
+        expect(pine2js.code).toContain('function myFunc(x, y, z)');
+    });
+
+    it('should transpile renamed param through full pipeline without __value error', () => {
+        const code = `
+//@version=6
+indicator("Full Pipeline Param Rename")
+cell(string data, color = "#FFFFFF") =>
+    color
+val = cell("test", "#00FF00")
+plot(0)
+`;
+        const result = transpile(code);
+        const jsCode = result.toString();
+        expect(jsCode).toBeDefined();
+        // Should NOT have color.__value (the bug this fix addresses)
+        expect(jsCode).not.toContain('color.__value');
+        // The renamed param should flow through
+        expect(jsCode).toMatch(/color_\$\d+/);
+    });
+
+    it('should run function with renamed color param at runtime', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+        const code = `
+//@version=6
+indicator("Runtime Param Rename")
+myCell(string data, color = "#FFFFFF") =>
+    color
+val = myCell("test", "#00FF00")
+plot(val == "#00FF00" ? 1 : 0, "Check")
+`;
+        const result = await pineTS.run(code);
+        expect(result).toBeDefined();
+        expect(result.plots).toBeDefined();
+    });
+});

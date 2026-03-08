@@ -173,6 +173,26 @@ export function runAnalysisPass(ast: any, scopeManager: ScopeManager): string | 
                         ],
                     };
 
+                    // If the init is an IIFE (switch/if-else expression), wrap its
+                    // array returns in an extra level so $.init() preserves the tuple.
+                    // Without this, $.init() treats flat arrays as time-series and
+                    // takes only the last element, destroying the tuple values.
+                    const initExpr = tempVarDecl.declarations[0].init;
+                    if (initExpr && initExpr.type === 'CallExpression' &&
+                        (initExpr.callee.type === 'ArrowFunctionExpression' ||
+                         initExpr.callee.type === 'FunctionExpression')) {
+                        walk.simple(initExpr.callee.body, {
+                            ReturnStatement(ret: any) {
+                                if (ret.argument && ret.argument.type === 'ArrayExpression') {
+                                    ret.argument = {
+                                        type: 'ArrayExpression',
+                                        elements: [ret.argument],
+                                    };
+                                }
+                            },
+                        });
+                    }
+
                     decl.id.elements?.forEach((element: any) => {
                         if (element.type === 'Identifier') {
                             scopeManager.addArrayPatternElement(element.name);

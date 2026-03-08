@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { PineTS } from '../../src/PineTS.class';
 import { Provider } from '@pinets/marketData/Provider.class';
+import { transpile } from '../../src/transpiler';
 
 describe('Transpiler Scope Edge Cases', () => {
     it('should handle deeply nested scopes with name collisions', async () => {
@@ -303,6 +304,31 @@ plot(val2, "V2")
         expect(plots).toBeDefined();
         expect(plots['result']).toBeDefined();
         expect(plots['result'].data[0].value).toBe(200);
+    });
+
+    it('should scope function parameters correctly inside array expressions', async () => {
+        // Regression test: function parameters inside ArrayExpression args to namespace
+        // methods were scoped to $.get($.let.output, 0) (global, doesn't exist) instead of
+        // $.get(output, 0) (raw JS parameter). Verify via transpiler output.
+        const indicatorCode = `
+//@version=5
+indicator("Func Param in Array Expr")
+
+gather(float output) =>
+    [secData, secClose] = request.security(syminfo.tickerid, "D", [output, close])
+    secData
+
+result = gather(volume)
+plot(result, "Result")
+`;
+
+        const transpiledFn = transpile(indicatorCode, { debug: false });
+        const code = transpiledFn.toString();
+
+        // Function parameter 'output' inside array arg [output, close] must use
+        // the raw identifier, NOT $.let.output (which would reference a non-existent global).
+        expect(code).toContain('$.get(output, 0)');
+        expect(code).not.toMatch(/\$\.get\(\$\$?\.let\.\w*output/);
     });
 });
 

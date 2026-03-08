@@ -149,6 +149,7 @@ export class Context {
             fixnan: core.fixnan.bind(core),
             alertcondition: core.alertcondition.bind(core),
             alert: core.alert.bind(core),
+            error: core.error.bind(core),
             max_bars_back: core.max_bars_back.bind(core),
             timestamp: core.timestamp.bind(core),
             time: new TimeHelper(this, 'openTime'),

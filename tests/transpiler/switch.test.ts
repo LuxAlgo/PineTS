@@ -168,6 +168,7 @@ plot(result)
             expect(code).toContain('$.let.glb1_length = $.init($.let.glb1_length, 10)');
 
             // Function should use its parameters directly (not transformed)
+            // Function should use its original name
             expect(code).toMatch(/function ma\(source, length, maType\)/);
 
             // Inside function, parameters should be used directly
@@ -804,9 +805,91 @@ plot(result, "Result")
             const { plots } = await pineTS.run(indicatorCode);
 
             expect(plots['Result']).toBeDefined();
-            
+
             const lastValue = plots['Result'].data[plots['Result'].data.length - 1].value;
             expect(lastValue).toBe(100);
+        });
+
+        it('should preserve tuple values from switch expression destructuring', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            // This tests the bug where $.init() treated the flat array returned by
+            // a switch IIFE as time-series data, keeping only the last element.
+            // [a, b, c] = switch x { case: [10, 20, 30] } should destructure correctly.
+            const indicatorCode = `
+//@version=6
+indicator("Switch Tuple Destructuring")
+
+selector = "first"
+[a, b, c] = switch selector
+    "first"  => [10.0, 20.0, 30.0]
+    "second" => [40.0, 50.0, 60.0]
+    => [0.0, 0.0, 0.0]
+
+plot(a, "A")
+plot(b, "B")
+plot(c, "C")
+`;
+
+            const { plots } = await pineTS.run(indicatorCode);
+
+            expect(plots['A']).toBeDefined();
+            expect(plots['B']).toBeDefined();
+            expect(plots['C']).toBeDefined();
+
+            const lastA = plots['A'].data[plots['A'].data.length - 1].value;
+            const lastB = plots['B'].data[plots['B'].data.length - 1].value;
+            const lastC = plots['C'].data[plots['C'].data.length - 1].value;
+
+            // Without the fix, $.init() takes only the last element (30.0),
+            // then string-indexes it, producing undefined for all three.
+            expect(lastA).toBe(10);
+            expect(lastB).toBe(20);
+            expect(lastC).toBe(30);
+        });
+
+        it('should preserve string tuple values from switch (color constants)', async () => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+
+            // Regression test for PTAG grayscale bug: color hex strings from switch
+            // destructuring were reduced to single characters ('#', 'F', '8').
+            const indicatorCode = `
+//@version=6
+indicator("Switch Color Tuple")
+
+COLD    = '#400A53'
+MEDIUM  = '#408E8B'
+HOT     = '#F8E650'
+
+mode = "viridis"
+[cold, medium, hot] = switch mode
+    "viridis" => [COLD, MEDIUM, HOT]
+    => ['#000000', '#888888', '#FFFFFF']
+
+// Use color.r() to extract the red channel — proves the color is a valid hex string
+r_cold   = color.r(cold)
+r_medium = color.r(medium)
+r_hot    = color.r(hot)
+
+plot(r_cold, "R_Cold")
+plot(r_medium, "R_Medium")
+plot(r_hot, "R_Hot")
+`;
+
+            const { plots } = await pineTS.run(indicatorCode);
+
+            expect(plots['R_Cold']).toBeDefined();
+            expect(plots['R_Medium']).toBeDefined();
+            expect(plots['R_Hot']).toBeDefined();
+
+            const rCold = plots['R_Cold'].data[plots['R_Cold'].data.length - 1].value;
+            const rMedium = plots['R_Medium'].data[plots['R_Medium'].data.length - 1].value;
+            const rHot = plots['R_Hot'].data[plots['R_Hot'].data.length - 1].value;
+
+            // #400A53 → R=64, #408E8B → R=64, #F8E650 → R=248
+            expect(rCold).toBe(64);
+            expect(rMedium).toBe(64);
+            expect(rHot).toBe(248);
         });
     });
 });
