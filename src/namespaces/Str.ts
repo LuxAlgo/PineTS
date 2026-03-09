@@ -2,6 +2,7 @@
 
 import { Series } from '../Series';
 import { Context } from '..';
+import { PineArrayObject, PineArrayType } from './array/PineArrayObject';
 
 export class Str {
     constructor(private context: Context) {}
@@ -126,7 +127,7 @@ export class Str {
     }
 
     split(source: string, separator: string) {
-        return [String(source).split(separator)]; //we need to double wrap the array in an array to match the PineTS expected output structure
+        return new PineArrayObject(String(source).split(separator), PineArrayType.string, this.context);
     }
     substring(source: string, begin_pos: number, end_pos: number) {
         return String(source).substring(begin_pos, end_pos);

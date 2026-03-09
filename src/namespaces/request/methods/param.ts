@@ -13,27 +13,20 @@ export function param(context: any) {
         } else if (Array.isArray(source)) {
             // Check if this is a tuple expression vs a time-series array
             //
-            // For request.security, tuples are always passed as arrays of expressions.
-            // Heuristic: If the array contains Series objects OR scalar values (not nested arrays),
-            // and it's NOT a single-element array, treat it as a tuple.
+            // For request.security/security_lower_tf, tuples are always passed as arrays of expressions.
+            // A tuple can contain Series objects, scalars, or a mix (e.g., [open, close, wVolSrc()]).
             //
-            // A time-series array would be a forward chronological array of values,
-            // which would have nested structure like [[a,b], [a,b], ...] OR simple values [1,2,3...]
-            // but NOT a mix of Series objects at the top level.
+            // Detection: If any element is a Series, it's a tuple (time-series arrays don't contain
+            // Series at the top level). If all elements are scalars (no nested arrays), it's also
+            // a tuple of literal values. Only arrays with nested arrays are time-series data.
 
-            const hasOnlySeries = source.every((elem) => elem instanceof Series);
+            const hasAnySeries = source.some((elem) => elem instanceof Series);
             const hasOnlyScalars = source.every((elem) => !(elem instanceof Series) && !Array.isArray(elem));
-            const isTuple = (hasOnlySeries || hasOnlyScalars) && source.length >= 1;
+            const isTuple = (hasAnySeries || hasOnlyScalars) && source.length >= 1;
 
             if (isTuple) {
-                // Preserve the tuple, but extract values from Series
-                if (hasOnlySeries) {
-                    // Extract current value from each Series
-                    val = source.map((s: Series) => s.get(0));
-                } else {
-                    // Already scalar values
-                    val = source;
-                }
+                // Extract current value from each element (Series → .get(0), scalars pass through)
+                val = source.map((elem: any) => elem instanceof Series ? elem.get(0) : elem);
             } else {
                 // Time-series array - extract value at index
                 val = Series.from(source).get(index || 0);

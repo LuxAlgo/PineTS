@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import PineTS from '../../src/PineTS.class';
 import { Provider } from '../../src/marketData/Provider.class';
+import { PineArrayObject } from '../../src/namespaces/array/PineArrayObject';
 
 describe('Str Namespace', () => {
     it('should handle all string operations correctly', async () => {
@@ -99,13 +100,10 @@ describe('Str Namespace', () => {
         expect(last(result.rep_occ)).toBe('a b c b a');
 
         expect(last(result.sub)).toBe('ell');
-        // Split returns an array, but wrapped in Series/array structure?
-        // In PineTS, arrays are usually returned as is if they are not series of arrays?
-        // Let's check what split returns. In Str.ts: String(source).split(separator) -> string[]
-        // The runtime might wrap this or treat it as a value.
-        // If it's a value in the context.result, it might be stored as an array of arrays if it's per bar.
+        // str.split returns a PineArrayObject (array<string>) per Pine Script spec
         const splitRes = last(result.spl);
-        expect(splitRes).toEqual(['a', 'b', 'c']);
+        expect(splitRes).toBeInstanceOf(PineArrayObject);
+        expect(splitRes.array).toEqual(['a', 'b', 'c']);
 
         expect(last(result.has)).toBe(true);
         expect(last(result.starts)).toBe(true);

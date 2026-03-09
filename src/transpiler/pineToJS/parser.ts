@@ -737,6 +737,16 @@ export class Parser {
                 paramType = paramType ? paramType + ' ' + genericType : genericType;
             }
 
+            // Handle array shorthand: int[], float[], line[], label[], etc.
+            if (
+                this.peek().type === TokenType.IDENTIFIER &&
+                this.peek(1).type === TokenType.LBRACKET &&
+                this.peek(2).type === TokenType.RBRACKET
+            ) {
+                const arrayType = this.parseTypeExpression();
+                paramType = paramType ? paramType + ' ' + arrayType : arrayType;
+            }
+
             const paramName = this.expect(TokenType.IDENTIFIER).value;
             const param = new Identifier(paramName);
             if (paramType) param.varType = paramType;
@@ -806,6 +816,16 @@ export class Parser {
             ) {
                 const genericType = this.parseTypeExpression();
                 paramType = paramType ? paramType + ' ' + genericType : genericType;
+            }
+
+            // Handle array shorthand: int[], float[], line[], label[], etc.
+            if (
+                this.peek().type === TokenType.IDENTIFIER &&
+                this.peek(1).type === TokenType.LBRACKET &&
+                this.peek(2).type === TokenType.RBRACKET
+            ) {
+                const arrayType = this.parseTypeExpression();
+                paramType = paramType ? paramType + ' ' + arrayType : arrayType;
             }
 
             const paramName = this.expect(TokenType.IDENTIFIER).value;

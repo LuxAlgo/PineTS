@@ -500,6 +500,10 @@ export class FillHelper {
                 fillKey = callsiteId;
             }
 
+            // Detect if color is a Series (changes per bar) vs a constant
+            const isSeriesColor = color && typeof color === 'object' && Array.isArray((color as any).data);
+            const resolvedColor = Series.from(color).get(0);
+
             if (!this.context.plots[fillKey]) {
                 const p1Key = plot1?._plotKey || plot1?.title;
                 const p2Key = plot2?._plotKey || plot2?.title;
@@ -507,14 +511,24 @@ export class FillHelper {
                     title: title || 'Fill',
                     plot1: p1Key,
                     plot2: p2Key,
+                    ...(isSeriesColor ? { data: [] } : {}),
                     options: {
                         plot1: p1Key,
                         plot2: p2Key,
-                        color, editable, show_last, fillgaps, display, style: 'fill',
+                        color: resolvedColor, editable, show_last, fillgaps, display, style: 'fill',
                     },
                     _plotKey: fillKey,
                     _callsiteId: callsiteId,
                 };
+            }
+
+            // Only push per-bar color data when color is a Series (changes per bar)
+            if (isSeriesColor) {
+                this.context.plots[fillKey].data.push({
+                    time: this.context.marketData[this.context.idx].openTime,
+                    value: null,
+                    options: { color: resolvedColor },
+                });
             }
         }
     }

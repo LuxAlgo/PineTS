@@ -3,6 +3,17 @@
 import { PineTS } from '../../../PineTS.class';
 import { Series } from '../../../Series';
 import { TIMEFRAMES, normalizeTimeframe } from '../utils/TIMEFRAMES';
+import { PineArrayObject, PineArrayType } from '../../array/PineArrayObject';
+
+/**
+ * Detect the PineArrayType from a runtime value.
+ */
+function detectArrayType(value: any): PineArrayType {
+    if (typeof value === 'number') return PineArrayType.float;
+    if (typeof value === 'boolean') return PineArrayType.bool;
+    if (typeof value === 'string') return PineArrayType.string;
+    return PineArrayType.any;
+}
 
 /**
  * Requests the results of an expression from a specified symbol on a timeframe lower than or equal to the chart's timeframe.
@@ -22,8 +33,13 @@ export function security_lower_tf(context: any) {
         ignore_invalid_timeframe: boolean | any[] = false,
         calc_bars_count: number | any[] = 0
     ) => {
-        const _symbol = symbol[0];
-        const _timeframe = timeframe[0];
+        const rawSymbol = symbol[0] instanceof Series ? (symbol[0] as Series).get(0) : symbol[0];
+        // Empty string "" means "use chart's symbol" (Pine Script spec)
+        const resolvedSymbol = rawSymbol === '' ? context.tickerId : rawSymbol;
+        const _symbol = typeof resolvedSymbol === 'string' && resolvedSymbol.includes(':') ? resolvedSymbol.split(':')[1] : resolvedSymbol;
+        const rawTimeframe = timeframe[0] instanceof Series ? (timeframe[0] as Series).get(0) : timeframe[0];
+        // Empty string "" means "use chart's timeframe" (Pine Script spec)
+        const _timeframe = rawTimeframe === '' ? context.timeframe : (typeof rawTimeframe === 'string' ? rawTimeframe : String(rawTimeframe ?? ''));
         const _expression = expression[0];
         const _expression_name = expression[1];
         const _ignore_invalid_symbol = Array.isArray(ignore_invalid_symbol) ? ignore_invalid_symbol[0] : ignore_invalid_symbol;
@@ -31,8 +47,16 @@ export function security_lower_tf(context: any) {
         // const _calc_bars_count = Array.isArray(calc_bars_count) ? calc_bars_count[0] : calc_bars_count;
 
         // CRITICAL: Prevent infinite recursion in secondary contexts
+        // Still wrap in PineArrayObject so array.size() etc. work in the secondary script
         if (context.isSecondaryContext) {
-            return Array.isArray(_expression) ? [_expression] : _expression;
+            if (Array.isArray(_expression)) {
+                const arrays = _expression.map((v: any) =>
+                    new PineArrayObject([v], detectArrayType(v), context)
+                );
+                return [arrays];
+            } else {
+                return new PineArrayObject([_expression], detectArrayType(_expression), context);
+            }
         }
 
         const ctxTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(context.timeframe));
@@ -49,7 +73,15 @@ export function security_lower_tf(context: any) {
         }
 
         if (reqTimeframeIdx === ctxTimeframeIdx) {
-            return [[_expression]];
+            if (Array.isArray(_expression)) {
+                // Tuple: each element becomes a 1-element PineArrayObject
+                const arrays = _expression.map((v: any) =>
+                    new PineArrayObject([v], detectArrayType(v), context)
+                );
+                return [arrays]; // 2D for tuple destructuring
+            } else {
+                return new PineArrayObject([_expression], detectArrayType(_expression), context);
+            }
         }
 
         const cacheKey = `${_symbol}_${_timeframe}_${_expression_name}_lower`;
@@ -96,7 +128,15 @@ export function security_lower_tf(context: any) {
         const secValues = secContext.params[_expression_name];
         
         // If expression was not evaluated in secondary context (e.g. conditional execution), return empty array
-        if (!secValues) return [];
+        if (!secValues) {
+            if (Array.isArray(_expression)) {
+                const arrays = _expression.map(() =>
+                    new PineArrayObject([], PineArrayType.float, context)
+                );
+                return [arrays];
+            }
+            return new PineArrayObject([], PineArrayType.float, context);
+        }
 
         const result: any[] = [];
 
@@ -106,20 +146,37 @@ export function security_lower_tf(context: any) {
 
             // Optimization: skip bars before our window
             if (sClose <= myOpenTime) continue;
-            
+
             // Stop if we passed our window
             if (sOpen >= myCloseTime) break;
 
             // Overlap check: The LTF bar must overlap with the HTF bar interval [myOpenTime, myCloseTime)
             // Pine Script security_lower_tf returns all LTF bars that "belong" to the HTF bar.
             // This typically means any LTF bar whose time is >= HTF openTime and < HTF closeTime.
-            
+
             // If sOpen >= myOpenTime and sOpen < myCloseTime, it belongs to this bar.
             if (sOpen >= myOpenTime && sOpen < myCloseTime) {
                 result.push(secValues[i]);
             }
         }
-        
-        return [result];
+
+        // Detect if expression is a tuple (each bar value is an array)
+        const isTuple = result.length > 0 && Array.isArray(result[0]);
+
+        if (isTuple) {
+            // Transpose: per-bar tuples [[o1,c1],[o2,c2],...] → per-element arrays [PAO([o1,o2,...]), PAO([c1,c2,...])]
+            const numElements = result[0].length;
+            const transposed = [];
+            for (let e = 0; e < numElements; e++) {
+                const columnValues = result.map(barTuple => barTuple[e]);
+                const type = columnValues.length > 0 ? detectArrayType(columnValues[0]) : PineArrayType.float;
+                transposed.push(new PineArrayObject(columnValues, type, context));
+            }
+            return [transposed]; // 2D for tuple destructuring
+        } else {
+            // Scalar: single array of values wrapped in PineArrayObject
+            const type = result.length > 0 ? detectArrayType(result[0]) : PineArrayType.float;
+            return new PineArrayObject(result, type, context);
+        }
     };
 }

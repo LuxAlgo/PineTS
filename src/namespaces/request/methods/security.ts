@@ -19,9 +19,13 @@ export function security(context: any) {
     ) => {
         // Strip exchange prefix (e.g. "BINANCE:BTCUSDC" → "BTCUSDC") so the
         // provider receives a clean ticker when creating a secondary context.
-        const rawSymbol = symbol[0];
-        const _symbol = typeof rawSymbol === 'string' && rawSymbol.includes(':') ? rawSymbol.split(':')[1] : rawSymbol;
-        const _timeframe = timeframe[0];
+        const rawSymbol = symbol[0] instanceof Series ? (symbol[0] as Series).get(0) : symbol[0];
+        // Empty string "" means "use chart's symbol" (Pine Script spec)
+        const resolvedSymbol = rawSymbol === '' ? context.tickerId : rawSymbol;
+        const _symbol = typeof resolvedSymbol === 'string' && resolvedSymbol.includes(':') ? resolvedSymbol.split(':')[1] : resolvedSymbol;
+        const rawTimeframe = timeframe[0] instanceof Series ? (timeframe[0] as Series).get(0) : timeframe[0];
+        // Empty string "" means "use chart's timeframe" (Pine Script spec)
+        const _timeframe = rawTimeframe === '' ? context.timeframe : (typeof rawTimeframe === 'string' ? rawTimeframe : String(rawTimeframe ?? ''));
         const _expression = expression[0];
         const _expression_name = expression[1];
         const _gapsRaw = Array.isArray(gaps) ? gaps[0] : gaps;
