@@ -15,7 +15,7 @@ const LINE_NEW_SIGNATURES = [
 //prettier-ignore
 const LINE_NEW_ARGS_TYPES = {
     x1: 'number', y1: 'number', x2: 'number', y2: 'number',
-    xloc: 'string', extend: 'string', color: 'string', style: 'string',
+    xloc: 'string', extend: 'string', color: 'color', style: 'string',
     width: 'number', force_overlay: 'boolean',
     first_point: 'point', second_point: 'point',
 };

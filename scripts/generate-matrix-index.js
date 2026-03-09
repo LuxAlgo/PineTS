@@ -133,6 +133,11 @@ ${getters.map((g) => `      ${g}: ${g}`).join(',\n')}
             })
             .join('\n');
 
+        // Type-specific aliases for matrix.new<TYPE>() → matrix.new_TYPE()
+        // The transpiler rewrites generic type params to method name suffixes
+        const typeAliases = ['float', 'int', 'string', 'bool', 'color', 'line', 'label', 'box', 'linefill', 'table'];
+        const typeAliasInstall = typeAliases.map(t => `    this.new_${t} = new_fn(context);`).join('\n');
+
         const classCode = `// SPDX-License-Identifier: AGPL-3.0-only
 // This file is auto-generated. Do not edit manually.
 // Run: npm run generate:matrix-index
@@ -146,6 +151,9 @@ export class PineMatrix {
 ${getterInstall}
         // Install methods
 ${methodInstall}
+    // Type-specific aliases — used internally by PineTS to handle strong types.
+    // The transpiler rewrites matrix.new<float>(...) → matrix.new_float(...)
+${typeAliasInstall}
     }
 }
 

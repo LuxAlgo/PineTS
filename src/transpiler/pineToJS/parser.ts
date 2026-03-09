@@ -946,8 +946,41 @@ export class Parser {
 
         // Check for typed variable declaration (series float x = ...)
         // Also handles: type[] name = ... and type<generic> name = ...
+        // Also handles comma-separated typed declarations: float num = 1.0, float den = 1.0
         if (this.peek().type === TokenType.IDENTIFIER && this.isTypedVarDeclaration()) {
-            return this.parseTypedVarDeclaration();
+            const firstDecl = this.parseTypedVarDeclaration();
+
+            // Check for comma-separated typed declarations on the same line
+            if (this.match(TokenType.COMMA) && this.peek(1).type === TokenType.IDENTIFIER) {
+                const declarations: any[] = [firstDecl];
+                while (this.match(TokenType.COMMA)) {
+                    this.advance(); // consume comma
+                    this.skipNewlines(true);
+                    if (this.peek().type === TokenType.IDENTIFIER && this.isTypedVarDeclaration()) {
+                        declarations.push(this.parseTypedVarDeclaration());
+                    } else {
+                        // Not a typed declaration after comma — parse as a regular statement
+                        const expr = this.parseExpression();
+                        if (this.match(TokenType.OPERATOR)) {
+                            const op = this.peek().value;
+                            if (['=', ':='].includes(op)) {
+                                this.advance();
+                                this.skipNewlines(true);
+                                const right = this.parseExpression();
+                                if (op === '=' && expr.type === 'Identifier') {
+                                    declarations.push(new VariableDeclaration([new VariableDeclarator(expr, right)], VariableDeclarationKind.LET));
+                                } else {
+                                    declarations.push(new ExpressionStatement(new AssignmentExpression(op === ':=' ? '=' : op, expr, right)));
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+                return declarations; // Return array of statements
+            }
+
+            return firstDecl;
         }
 
         // Try to parse as sequence (assignment, assignment, ..., expression)
@@ -1399,17 +1432,25 @@ export class Parser {
             // We'll skip them in specific contexts where they're allowed (like after `.`)
 
             // Generic type parameters followed by call: array.new<float>(...)
-            // We need to skip the generic part and parse the call
+            // Capture the generic type and, for known types, rewrite
+            // array.new<float> → array.new_float (same for matrix, etc.)
             if (this.match(TokenType.OPERATOR, '<')) {
                 // Save position in case this isn't a generic
                 const saved = this.pos;
 
-                // Try to parse as generic type
+                // Try to parse as generic type, capturing type name
                 this.advance(); // consume <
                 let depth = 1;
                 let isGeneric = true;
+                let genericType = '';
 
-                // Skip until matching >
+                // Known Pine types that have dedicated new_TYPE methods
+                const KNOWN_GENERIC_TYPES = new Set([
+                    'float', 'int', 'string', 'bool', 'color',
+                    'line', 'label', 'box', 'linefill', 'table',
+                ]);
+
+                // Skip until matching >, capturing type identifiers
                 while (depth > 0 && !this.match(TokenType.EOF)) {
                     if (this.match(TokenType.OPERATOR, '<')) {
                         depth++;
@@ -1418,6 +1459,10 @@ export class Parser {
                         depth--;
                         this.advance();
                     } else if (this.match(TokenType.IDENTIFIER) || this.match(TokenType.COMMA) || this.match(TokenType.DOT)) {
+                        // Capture only top-level, simple type names (depth === 1)
+                        if (depth === 1 && this.match(TokenType.IDENTIFIER) && genericType === '') {
+                            genericType = this.peek().value;
+                        }
                         this.advance();
                     } else {
                         // Not a generic type, restore position
@@ -1425,6 +1470,15 @@ export class Parser {
                         this.pos = saved;
                         break;
                     }
+                }
+
+                // For known types, rewrite callee: array.new<float> → array.new_float
+                // Only for array/matrix (not map, which uses map.new<K,V> with two type params)
+                if (isGeneric && expr.type === 'MemberExpression'
+                    && expr.property.name === 'new'
+                    && (expr.object.name === 'array' || expr.object.name === 'matrix')
+                    && KNOWN_GENERIC_TYPES.has(genericType)) {
+                    expr.property = new Identifier('new_' + genericType);
                 }
 
                 // If we successfully parsed generic and next is (, parse call

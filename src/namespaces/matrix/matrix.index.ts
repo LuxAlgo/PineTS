@@ -64,6 +64,18 @@ export class PineMatrix {
     this.swap_rows = (id: PineMatrixObject, ...args: any[]) => id.swap_rows(...args);
     this.trace = (id: PineMatrixObject, ...args: any[]) => id.trace(...args);
     this.transpose = (id: PineMatrixObject, ...args: any[]) => id.transpose(...args);
+    // Type-specific aliases — used internally by PineTS to handle strong types.
+    // The transpiler rewrites matrix.new<float>(...) → matrix.new_float(...)
+    this.new_float = new_fn(context);
+    this.new_int = new_fn(context);
+    this.new_string = new_fn(context);
+    this.new_bool = new_fn(context);
+    this.new_color = new_fn(context);
+    this.new_line = new_fn(context);
+    this.new_label = new_fn(context);
+    this.new_box = new_fn(context);
+    this.new_linefill = new_fn(context);
+    this.new_table = new_fn(context);
     }
 }
 

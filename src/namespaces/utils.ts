@@ -8,6 +8,9 @@ function isPlot(arg: any) {
 const TYPE_CHECK = {
     series: (arg) => arg instanceof Series || typeof arg === 'number' || typeof arg === 'string' || typeof arg === 'boolean',
     string: (arg) => typeof arg === 'string',
+    // Pine Script color params accept both color strings and `na` (NaN).
+    // Using 'color' instead of 'string' prevents NaN from invalidating the signature.
+    color: (arg) => typeof arg === 'string' || (typeof arg === 'number' && isNaN(arg)),
     number: (arg) => typeof arg === 'number',
     boolean: (arg) => typeof arg === 'boolean',
     array: (arg) => Array.isArray(arg),
