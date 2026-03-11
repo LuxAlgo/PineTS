@@ -1,5 +1,57 @@
 # Change Log
 
+## [0.9.4] - 2026-03-11 - Color Namespace, Transpiler Overhaul, request.security & Drawing Improvements
+
+### Added
+
+- **`color` Namespace Refactor**: Extracted the full color implementation from `Core.ts` into a dedicated `src/namespaces/color/PineColor.ts` module. Adds complete `COLOR_CONSTANTS` (all named palette colors), improved hex/rgb/rgba/`#RRGGBBAA` parsing, `color.from_gradient()` with NaN guard, and a full test suite.
+- **`alert()` Stub**: Added the missing `alert()` function (previously only `alertcondition` existed). Emits to the context event bus so downstream code can subscribe without crashing.
+- **`max_bars_back()` No-Op**: Added `max_bars_back(source, length)` as a compatibility stub. Returns its source argument unchanged (PineTS maintains full history, so there is no lookback cap to configure).
+- **`linefill` Instance Methods**: `LinefillObject` now exposes `get_line1()`, `get_line2()`, and `set_color()` directly on the instance, enabling UDT field-chain patterns like `myStruct.fill.set_color(c)`.
+- **UDT `.new()` Named Arguments**: `MyType.new(field1=val1, field2=val2)` now works correctly. The UDT constructor detects a named-argument object and maps keys to fields instead of positional assignment.
+- **`linefill.new` Thunking**: Added `linefill.new` to `FACTORY_METHODS` so it receives the arrow-function thunk treatment in `var` declarations, preventing orphaned linefill objects from being created on every bar.
+- **`math.__neq()` — Inequality Operator**: Added `math.__neq(a, b)` to handle Pine Script's `!=` / `<>` operator with proper NaN semantics (mirrors `math.__eq`).
+
+### Fixed
+
+#### Transpiler
+
+- **For-Loop Init & Update `$.get()` Wrapping**: The for-loop init and update expressions lacked `addArrayAccess`, `MemberExpression`, and `CallExpression` handlers. Series variables appearing in loop bounds (e.g., `for i = 0 to bar_index - 1`) were left as raw Series objects, causing the update ternary to evaluate to `NaN` and producing infinite loops or bodies that never executed.
+- **While-Loop Test Condition**: `while bar_index > cnt` and similar conditions with Series variables were not wrapped in `$.get()`, so the comparison always evaluated against a raw Series object (→ `NaN`). Fixed by adding missing `addArrayAccess` and namespace-object skip logic to `transformWhileStatement`.
+- **Function-Scoped Variable Resolution**: Added `isVariableInFunctionScope()` to `ScopeManager`. `createScopedVariableReference()` now correctly resolves `var` declarations inside nested `if`/`for` blocks *within* functions to the local context (`$$`) instead of the global context (`$`).
+- **Optional Chaining for `na` UDT Drawing Fields**: `hasGetCallInChain()` now traverses `MemberExpression` *and* intermediate `CallExpression` nodes to detect `$.get()` in deeper chains. Inserts `?.` on the final method call so `myStruct.line?.set_x2(x)` does not crash when the field is `na`/`undefined`.
+- **User Function vs Method Call Disambiguation**: Added `isChainedPropertyMethod` guard — when the callee object is itself a `MemberExpression` (e.g., `myObj.x.set()`), the call is not mistakenly redirected through `$.call()` even if `set` happens to be a user-defined function name. Added `_skipTransformation = true` on function-reference identifiers inside `$.call()` to prevent them from resolving to same-named variables.
+- **`hasGetCallInChain()` Chain Expression Traversal**: Extended to walk through `ChainExpression` wrapper nodes (`?.` optional chains) so already-wrapped intermediate nodes are also checked when determining whether to insert optional chaining.
+- **`ReturnStatement` Walk-Through**: `MainTransformer`'s `ReturnStatement` handler now recurses into complex return arguments when not in function scope, preventing untransformed expressions in nested return statements.
+- **`parseArgsForPineParams` NaN Handling**: Fixed dynamic Pine Script signatures passing `NaN` values through the argument normalizer, which caused downstream `isNaN` checks to misidentify valid numeric `0` values.
+- **Await Propagation in User-Defined Functions**: Functions containing `request.security` calls (which are async internally) now correctly propagate `async`/`await` through the function declaration, preventing unresolved Promise objects from reaching callers.
+- **Tuple Destructuring in User Functions**: Fixed the Pine Script parser emitting single-bracket `[a, b]` returns instead of the required double-bracket `[[a, b]]` tuple form when `=>` arrow functions ended with an `if/else` that returned a tuple.
+- **Function Parameter Namespace Collision Renaming**: Parameters whose names collide with built-in namespaces (e.g., a parameter named `color`) were being looked up as namespace objects instead of local variables. The transpiler now renames such parameters to avoid the collision.
+- **ArrayExpression Function Parameter Scoping**: Function parameters used inside array literal arguments (e.g., `[output, ...]`) were incorrectly resolved to the global scope (`$.let.output`) instead of the local raw identifier (`output`). Added `isLocalSeriesVar` check in `ExpressionTransformer`.
+- **Switch Statement Tuple Destructuring**: IIFE array returns inside switch branches were not wrapped in the required `[[a, b, c]]` double-bracket form, causing `$.init()` to treat the tuple as a time-series and extract only the last element.
+- **Array/Matrix Typed Declarations**: The Pine Script parser now correctly parses `array<float>`, `matrix<int>`, and other generic typed declarations in variable declarations and function signatures. Strong-typing tests cover all primitive and object element types.
+
+#### Runtime
+
+- **`plotcandle` and `barcolor`**: Fixed incorrect argument mapping and color resolution in both functions. `barcolor` now correctly applies per-bar color overrides to the candlestick series, and `plotcandle` produces properly structured OHLC plot data.
+- **`request.security` Expression Handling**: Complex expressions passed as the `expression` argument (not just simple identifiers or plot references) now evaluate correctly in the secondary context. Also fixed user-defined method expressions being passed across context boundaries.
+- **`request.security_lower_tf` Pine Script Behavior**: Rewrote lower-timeframe (LTF) aggregation to match TradingView's behavior — values are collected as intra-bar arrays, and the correct array element (first vs. last vs. all) is returned depending on `lookahead` / `gaps` settings.
+- **Normalized Timeframes**: `timeframe.in_seconds()` and related utilities now correctly handle all non-canonical formats (`'1h'`→`'60'`, `'1d'`→`'D'`, `'1w'`→`'W'`) and return `NaN`/`0` when given `undefined` or an unrecognised string.
+- **Plot Color Change Detection**: Fixed false positives in the plot color-change detector that caused unnecessary re-renders when the color value was numerically identical but represented by different intermediate Series wrappers.
+- **`str.split()` Returns Pine Array**: `str.split()` was returning a plain JavaScript array. It now returns a `PineArrayObject` so array namespace methods (`.get()`, `.size()`, etc.) work on the result.
+- **Label Colors & Backgrounds**: Fixed `label.set_textcolor()` and `label.set_bgcolor()` not applying when called after construction, and resolved parsing inconsistencies in `parseArgsForPineParams` that treated valid color `0` as `na`.
+- **`color.from_gradient` NaN Guard**: Added `null`/`NaN`/`undefined` guards for all five arguments; previously a missing value produced `#NANNANNAN` hex strings.
+- **Improved Color Parsing**: `PineColor` now handles all Pine Script color representations uniformly: 6-digit hex, 8-digit hex (`#RRGGBBAA`), `rgb()`, `rgba()`, named constants, and `color.new()` output.
+- **Polyline Rendering Fixes**: Fixed `polyline.new()` crash when `points` contained `na` entries, incorrect `xloc` handling for bar-index vs. time coordinates, and missing default line/fill colors.
+- **Array `new_*` Capacity Handling**: `array.new<T>(size, initial)` variants now clamp the requested capacity to `MAX_ARRAY_SIZE` and correctly initialise all elements to the provided default (was previously initialising to `undefined` in some typed constructors).
+- **Table Cell Null Guard**: `table.cell()` now guards against `null`/`undefined` row or column indices, preventing a crash when table access patterns involve conditional creation.
+- **`chart.fg_color`**: Fixed `chart.fg_color` returning the wrong value (`bg_color` was returned for both properties due to a copy-paste error).
+- **Default Colors for Polyline and Table**: `polyline.new()` and `table.new()` no longer require explicit color arguments; sensible defaults are applied when colors are omitted or `na`.
+- **User Functions Treated as Native Functions**: Fixed a regression where user-defined functions registered in `settings.ts` were forwarded through the native namespace dispatcher instead of the user function call path.
+- **Sourcemap Generation for Browser Dev Build**: Fixed the rollup sourcemap pipeline for the `build:dev:browser` target so browser DevTools correctly resolve transpiled runtime errors to TypeScript source lines.
+
+---
+
 ## [0.9.3] - 2026-03-06 - Streaming Support, request.security Fixes, Transpiler Robustness
 
 ### Added

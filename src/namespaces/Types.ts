@@ -163,11 +163,16 @@ export enum extend {
 }
 
 export enum text {
+    align_bottom = 'bottom',
+    align_top = 'top',
     align_left = 'left',
     align_center = 'center',
     align_right = 'right',
     wrap_auto = 'auto',
     wrap_none = 'none',
+    format_bold = 'bold',
+    format_italic = 'italic',
+    format_none = 'none',
 }
 
 export enum font {
@@ -222,6 +227,18 @@ export enum position {
     bottom_right = 'bottom_right',
 }
 
+export enum scale {
+    left = 'left',
+    none = 'none',
+    right = 'right',
+}
+
+export enum settlement_as_close {
+    inherit = 'inherit',
+    off = 'off',
+    on = 'on',
+}
+
 const types = {
     order,
     currency,
@@ -243,6 +260,8 @@ const types = {
     dividends,
     splits,
     position,
+    scale,
+    settlement_as_close,
 };
 
 export default types;

@@ -179,17 +179,17 @@ parent: API Coverage
 
 | Function      | Status | Description |
 | ------------- | ------ | ----------- |
-| `scale.left`  |        | Left scale  |
-| `scale.none`  |        | No scale    |
-| `scale.right` |        | Right scale |
+| `scale.left`  | ✅     | Left scale  |
+| `scale.none`  | ✅     | No scale    |
+| `scale.right` | ✅     | Right scale |
 
 ### Settlement_as_close
 
 | Function                      | Status | Description                 |
 | ----------------------------- | ------ | --------------------------- |
-| `settlement_as_close.inherit` |        | Inherit settlement as close |
-| `settlement_as_close.off`     |        | Settlement as close off     |
-| `settlement_as_close.on`      |        | Settlement as close on      |
+| `settlement_as_close.inherit` | ✅     | Inherit settlement as close |
+| `settlement_as_close.off`     | ✅     | Settlement as close off     |
+| `settlement_as_close.on`      | ✅     | Settlement as close on      |
 
 ### Shape
 
@@ -230,14 +230,14 @@ parent: API Coverage
 
 | Function             | Status | Description           |
 | -------------------- | ------ | --------------------- |
-| `text.align_bottom`  |        | Bottom text alignment |
+| `text.align_bottom`  | ✅     | Bottom text alignment |
 | `text.align_center`  | ✅     | Center text alignment |
 | `text.align_left`    | ✅     | Left text alignment   |
 | `text.align_right`   | ✅     | Right text alignment  |
-| `text.align_top`     |        | Top text alignment    |
-| `text.format_bold`   |        | Bold text format      |
-| `text.format_italic` |        | Italic text format    |
-| `text.format_none`   |        | No text format        |
+| `text.align_top`     | ✅     | Top text alignment    |
+| `text.format_bold`   | ✅     | Bold text format      |
+| `text.format_italic` | ✅     | Italic text format    |
+| `text.format_none`   | ✅     | No text format        |
 | `text.wrap_auto`     | ✅     | Auto text wrap        |
 | `text.wrap_none`     | ✅     | No text wrap          |
 
