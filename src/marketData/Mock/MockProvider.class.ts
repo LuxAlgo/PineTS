@@ -230,6 +230,9 @@ export class MockProvider implements IProvider {
             // Filter and limit data
             const filteredData = this.filterData(allData, sDate, eDate, limit);
 
+            // Normalize closeTime to TV convention (nextBar.openTime)
+            this._normalizeCloseTime(filteredData);
+
             return filteredData;
         } catch (error) {
             console.error(`Error in MockProvider.getMarketData:`, error);
@@ -386,6 +389,21 @@ export class MockProvider implements IProvider {
         } catch (error) {
             console.error('Error in MockProvider.getSymbolInfo:', error);
             return null;
+        }
+    }
+
+    /**
+     * Normalize closeTime to TradingView convention: closeTime = next bar's openTime.
+     * Mock data files contain raw Binance data where closeTime = (nextBarOpen - 1ms).
+     * For all bars except the last, we use the next bar's actual openTime. For the
+     * last bar, we add 1ms to the raw value.
+     */
+    private _normalizeCloseTime(data: Kline[]): void {
+        for (let i = 0; i < data.length - 1; i++) {
+            data[i].closeTime = data[i + 1].openTime;
+        }
+        if (data.length > 0) {
+            data[data.length - 1].closeTime = data[data.length - 1].closeTime + 1;
         }
     }
 

@@ -1,5 +1,5 @@
 export class Series {
-    constructor(public data: any[], public offset: number = 0) {}
+    constructor(public data: any[], public offset: number = 0) { }
 
     public get(index: number): any {
         const realIndex = this.data.length - 1 - (this.offset + index);
@@ -27,6 +27,7 @@ export class Series {
     static from(source: any): Series {
         if (source instanceof Series) return source;
         if (Array.isArray(source)) return new Series(source);
+        if (source != null && typeof source === 'object' && '__value' in source && source.__value instanceof Series) return source.__value;
         return new Series([source]); // Treat scalar as single-element array? Or handle differently?
         // Ideally, scalar should be treated as a series where get(0) returns the value, and get(>0) might be undefined or NaN?
         // But for now, let's wrap in array.

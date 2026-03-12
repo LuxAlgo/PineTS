@@ -22,8 +22,8 @@ interface DateParts {
 export function getDatePartsInTimezone(timestamp: number, timezone: string): DateParts {
     const tzNorm = timezone.trim();
 
-    // Fast path: plain UTC / GMT
-    if (tzNorm === 'UTC' || tzNorm === 'GMT') {
+    // Fast path: plain UTC / GMT / Etc/UTC
+    if (tzNorm === 'UTC' || tzNorm === 'GMT' || tzNorm === 'Etc/UTC') {
         const d = new Date(timestamp);
         return {
             year: d.getUTCFullYear(),

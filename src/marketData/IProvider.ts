@@ -55,6 +55,18 @@ export type ISymbolInfo = {
     target_price_low: number;
     target_price_median: number;
 };
+/**
+ * Market data provider interface.
+ *
+ * ## closeTime convention
+ * Providers MUST return `closeTime` following the TradingView convention:
+ * `closeTime` = the timestamp of the **start of the next bar** (not the last
+ * millisecond of the current bar).  For example, a weekly bar opening on
+ * Monday 2019-01-07T00:00Z should have `closeTime = 2019-01-14T00:00Z`.
+ *
+ * If a provider's raw data uses a different convention (e.g., Binance returns
+ * `nextBarOpen - 1ms`), the provider must normalize before returning.
+ */
 export interface IProvider {
     getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<any>;
     getSymbolInfo(tickerId: string): Promise<ISymbolInfo>;

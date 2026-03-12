@@ -6,6 +6,20 @@ import { Context } from './Context.class';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
 
+// ── Timeframe duration utility ──────────────────────────────────────
+//prettier-ignore
+const TIMEFRAME_DURATION_MS: Record<string, number> = {
+    '1': 60_000, '3': 180_000, '5': 300_000, '15': 900_000, '30': 1_800_000,
+    '60': 3_600_000, '120': 7_200_000, '180': 10_800_000, '240': 14_400_000,
+    '4H': 14_400_000, '1D': 86_400_000, 'D': 86_400_000,
+    '1W': 604_800_000, 'W': 604_800_000,
+    '1M': 30 * 86_400_000, 'M': 30 * 86_400_000,
+};
+function getTimeframeDurationMs(timeframe: string | undefined): number {
+    if (!timeframe) return 86_400_000; // default to 1D when timeframe is unknown
+    return TIMEFRAME_DURATION_MS[timeframe] ?? TIMEFRAME_DURATION_MS[timeframe.toUpperCase()] ?? 86_400_000;
+}
+
 /**
  * This class is a wrapper for the Pine Script language, it allows to run Pine Script code in a JavaScript environment
  */
@@ -55,6 +69,18 @@ export class PineTS {
     }
 
     private _syminfo: ISymbolInfo;
+    private _chartTimezone: string | null = null;
+
+    /**
+     * Set the chart display timezone (like TradingView's timezone picker).
+     * This only affects log timestamp formatting — it does NOT change the timezone
+     * used by computation functions (timestamp(), dayofmonth, hour, etc.), which
+     * always use the exchange timezone from syminfo.timezone.
+     * @param timezone IANA timezone name (e.g. 'America/New_York'), UTC offset ('UTC+5'), or 'UTC'
+     */
+    public setTimezone(timezone: string) {
+        this._chartTimezone = timezone;
+    }
 
     constructor(
         private source: IProvider | any[],
@@ -81,7 +107,13 @@ export class PineTS {
                 const _ohlc4 = marketData.map((d) => (d.high + d.low + d.open + d.close) / 4);
                 const _hlcc4 = marketData.map((d) => (d.high + d.low + d.close + d.close) / 4);
                 const _openTime = marketData.map((d) => d.openTime);
-                const _closeTime = marketData.map((d) => d.closeTime);
+                // Providers should supply closeTime in TV convention (= next bar open).
+                // Safety-net for array-based data or providers that omit closeTime:
+                // estimate as openTime + timeframe duration.
+                const tfDurationMs = getTimeframeDurationMs(this.timeframe);
+                const _closeTime = marketData.map((d) =>
+                    d.closeTime != null ? d.closeTime : d.openTime + tfDurationMs
+                );
 
                 this.open = _open;
                 this.close = _close;
@@ -609,6 +641,12 @@ export class PineTS {
         });
 
         context.pine.syminfo = this._syminfo;
+        // Chart timezone only affects display formatting (log timestamps).
+        // It does NOT override syminfo.timezone, which drives computation
+        // (timestamp(), hour, dayofmonth, time_tradingday, etc.).
+        if (this._chartTimezone) {
+            context.chartTimezone = this._chartTimezone;
+        }
 
         context.pineTSCode = pineTSCode;
         context.isSecondaryContext = isSecondary; // Set secondary context flag

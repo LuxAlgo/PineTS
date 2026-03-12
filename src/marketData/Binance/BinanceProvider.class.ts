@@ -93,6 +93,21 @@ export class BinanceProvider implements IProvider {
     }
 
     /**
+     * Normalize closeTime to TradingView convention: closeTime = next bar's openTime.
+     * Binance raw API returns closeTime as (nextBarOpen - 1ms). For all bars except the
+     * last, we use the next bar's actual openTime (exact). For the last bar, we add 1ms
+     * to the raw value.
+     */
+    private _normalizeCloseTime(data: any[]): void {
+        for (let i = 0; i < data.length - 1; i++) {
+            data[i].closeTime = data[i + 1].openTime;
+        }
+        if (data.length > 0) {
+            data[data.length - 1].closeTime = data[data.length - 1].closeTime + 1;
+        }
+    }
+
+    /**
      * Resolves the working Binance API endpoint.
      * Tries default first, then falls back to US endpoint.
      * Caches the working endpoint for future calls.
@@ -135,6 +150,52 @@ export class BinanceProvider implements IProvider {
         return BINANCE_API_URL_DEFAULT;
     }
 
+    /**
+     * Fetch a single chunk of raw kline data from the Binance API (no closeTime normalization).
+     * Used internally by pagination methods that assemble chunks before normalizing.
+     */
+    private async _fetchRawChunk(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<any[]> {
+        const interval = timeframe_to_binance[timeframe.toUpperCase()];
+        if (!interval) {
+            console.error(`Unsupported timeframe: ${timeframe}`);
+            return [];
+        }
+
+        const baseUrl = await this.getBaseUrl();
+        let url = `${baseUrl}/klines?symbol=${tickerId}&interval=${interval}`;
+
+        if (limit) {
+            url += `&limit=${Math.min(limit, 1000)}`;
+        }
+        if (sDate) {
+            url += `&startTime=${sDate}`;
+        }
+        if (eDate) {
+            url += `&endTime=${eDate}`;
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const result = await response.json();
+
+        return result.map((item) => ({
+            openTime: parseInt(item[0]),
+            open: parseFloat(item[1]),
+            high: parseFloat(item[2]),
+            low: parseFloat(item[3]),
+            close: parseFloat(item[4]),
+            volume: parseFloat(item[5]),
+            closeTime: parseInt(item[6]),
+            quoteAssetVolume: parseFloat(item[7]),
+            numberOfTrades: parseInt(item[8]),
+            takerBuyBaseAssetVolume: parseFloat(item[9]),
+            takerBuyQuoteAssetVolume: parseFloat(item[10]),
+            ignore: item[11],
+        }));
+    }
+
     async getMarketDataInterval(tickerId: string, timeframe: string, sDate: number, eDate: number): Promise<any> {
         try {
             const interval = timeframe_to_binance[timeframe.toUpperCase()];
@@ -170,25 +231,18 @@ export class BinanceProvider implements IProvider {
             while (currentStart < endTime) {
                 const chunkEnd = Math.min(currentStart + 1000 * intervalDuration, endTime);
 
-                const data = await this.getMarketData(
-                    tickerId,
-                    timeframe,
-                    1000, // Max allowed by Binance
-                    currentStart,
-                    chunkEnd,
-                );
+                const data = await this._fetchRawChunk(tickerId, timeframe, 1000, currentStart, chunkEnd);
 
                 if (data.length === 0) break;
 
                 allData = allData.concat(data);
 
-                // CORRECTED LINE: Remove *1000 since closeTime is already in milliseconds
+                // Raw closeTime is (nextBarOpen - 1ms), so +1 gives the correct pagination cursor
                 currentStart = data[data.length - 1].closeTime + 1;
-
-                // Keep this safety check to exit when we get less than full page
-                //if (data.length < 1000) break;
             }
 
+            // Normalize closeTime on the fully assembled data
+            this._normalizeCloseTime(allData);
             return allData;
         } catch (error) {
             console.error('Error in getMarketDataInterval:', error);
@@ -209,8 +263,8 @@ export class BinanceProvider implements IProvider {
             iterations++;
             const fetchSize = Math.min(remaining, 1000);
 
-            // Fetch batch
-            const data = await this.getMarketData(tickerId, timeframe, fetchSize, undefined, currentEndTime);
+            // Fetch raw batch (no normalization yet)
+            const data = await this._fetchRawChunk(tickerId, timeframe, fetchSize, undefined, currentEndTime);
 
             if (data.length === 0) break;
 
@@ -219,15 +273,15 @@ export class BinanceProvider implements IProvider {
             remaining -= data.length;
 
             // Update end time for next batch to be just before the oldest candle we got
-            // data[0] is the oldest candle in the batch
             currentEndTime = data[0].openTime - 1;
 
             if (data.length < fetchSize) {
-                // We got less than requested, meaning we reached the beginning of available data
                 break;
             }
         }
 
+        // Normalize closeTime on the fully assembled data
+        this._normalizeCloseTime(allData);
         return allData;
     }
 
@@ -241,7 +295,6 @@ export class BinanceProvider implements IProvider {
             if (shouldCache) {
                 const cachedData = this.cacheManager.get(cacheParams);
                 if (cachedData) {
-                    //console.log('cache hit', tickerId, timeframe, limit, sDate, eDate);
                     return cachedData;
                 }
             }
@@ -257,63 +310,25 @@ export class BinanceProvider implements IProvider {
 
             if (needsPagination) {
                 if (sDate && eDate) {
-                    // Forward pagination: Fetch all data using interval pagination, then apply limit
+                    // Forward pagination — already normalized by getMarketDataInterval
                     const allData = await this.getMarketDataInterval(tickerId, timeframe, sDate, eDate);
                     const result = limit ? allData.slice(0, limit) : allData;
 
-                    // Cache the results with original params
                     this.cacheManager.set(cacheParams, result);
                     return result;
                 } else if (limit && limit > 1000) {
-                    // Backward pagination: Fetch 'limit' candles backwards from eDate (or now)
+                    // Backward pagination — already normalized by getMarketDataBackwards
                     const result = await this.getMarketDataBackwards(tickerId, timeframe, limit, eDate);
 
-                    // Cache the results
                     this.cacheManager.set(cacheParams, result);
                     return result;
                 }
             }
 
-            // Single request for <= 1000 candles
-            const baseUrl = await this.getBaseUrl();
-            let url = `${baseUrl}/klines?symbol=${tickerId}&interval=${interval}`;
+            // Single chunk — fetch raw, then normalize
+            const data = await this._fetchRawChunk(tickerId, timeframe, limit, sDate, eDate);
+            this._normalizeCloseTime(data);
 
-            //example https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=1000
-            if (limit) {
-                url += `&limit=${Math.min(limit, 1000)}`; // Cap at 1000 for single request
-            }
-
-            if (sDate) {
-                url += `&startTime=${sDate}`;
-            }
-            if (eDate) {
-                url += `&endTime=${eDate}`;
-            }
-
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const result = await response.json();
-
-            const data = result.map((item) => {
-                return {
-                    openTime: parseInt(item[0]),
-                    open: parseFloat(item[1]),
-                    high: parseFloat(item[2]),
-                    low: parseFloat(item[3]),
-                    close: parseFloat(item[4]),
-                    volume: parseFloat(item[5]),
-                    closeTime: parseInt(item[6]),
-                    quoteAssetVolume: parseFloat(item[7]),
-                    numberOfTrades: parseInt(item[8]),
-                    takerBuyBaseAssetVolume: parseFloat(item[9]),
-                    takerBuyQuoteAssetVolume: parseFloat(item[10]),
-                    ignore: item[11],
-                };
-            });
-
-            // Cache the results
             if (shouldCache) {
                 this.cacheManager.set(cacheParams, data);
             }

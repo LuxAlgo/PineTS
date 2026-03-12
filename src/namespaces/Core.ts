@@ -189,8 +189,34 @@ export class Core {
         }
 
         // Overload 1: timestamp(dateString)
+        // Parse in exchange timezone (not system local time) to match TradingView behaviour.
         if (parsed.dateString !== undefined) {
-            return new Date(parsed.dateString).getTime();
+            const ds = parsed.dateString.trim();
+            // If the string already carries explicit timezone info, honour it
+            if (/[Zz]$/.test(ds) || /[+-]\d{2}:?\d{2}$/.test(ds)) {
+                return new Date(ds).getTime();
+            }
+            // Force UTC parse (normalize "YYYY-MM-DD HH:MM" → "YYYY-MM-DDTHH:MMZ")
+            // then extract UTC components and reinterpret in exchange timezone.
+            const isoStr = ds.includes('T') ? ds + 'Z' : ds.replace(/\s+/, 'T') + 'Z';
+            const utcDate = new Date(isoStr);
+            if (!isNaN(utcDate.getTime())) {
+                const timezone = this.context.pine?.syminfo?.timezone || 'UTC';
+                return this._timestampFromComponents(
+                    timezone,
+                    utcDate.getUTCFullYear(),
+                    utcDate.getUTCMonth() + 1,
+                    utcDate.getUTCDate(),
+                    utcDate.getUTCHours(),
+                    utcDate.getUTCMinutes(),
+                    utcDate.getUTCSeconds(),
+                );
+            }
+            // Fallback for other formats (RFC 2822, etc.)
+            // RFC 2822 strings always include a timezone offset (e.g. "+0000"),
+            // so they are normally caught by the explicit-TZ check above.
+            // Any remaining string that reaches here is non-standard; parse as-is.
+            return new Date(ds).getTime();
         }
 
         return NaN;
@@ -217,7 +243,7 @@ export class Core {
 
         // For plain UTC, return directly
         const tzNorm = timezone.trim();
-        if (tzNorm === 'UTC' || tzNorm === 'GMT') {
+        if (tzNorm === 'UTC' || tzNorm === 'GMT' || tzNorm === 'Etc/UTC') {
             return utcDate.getTime();
         }
 

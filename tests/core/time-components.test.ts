@@ -374,14 +374,15 @@ plot(y, "year")
 });
 
 describe('time_tradingday', () => {
-    it('returns midnight UTC of trading day', async () => {
+    it('returns midnight UTC of the close date (trading day the bar settles)', async () => {
         const { result } = await pineTS.run(($) => {
             const { time_tradingday } = $.pine;
             let td = time_tradingday;
             return { td };
         });
-        // 2019-01-07 00:00:00 UTC → midnight = 1546819200000
-        expect(result.td[0]).toBe(Date.UTC(2019, 0, 7, 0, 0, 0));
+        // Weekly bar opens 2019-01-07, closes (= next bar open) 2019-01-14.
+        // TradingView returns 00:00 UTC of the close date → 2019-01-14
+        expect(result.td[0]).toBe(Date.UTC(2019, 0, 14, 0, 0, 0));
     });
 
     it('Pine Script string syntax', async () => {
@@ -393,6 +394,7 @@ plot(td, "td")
 `;
         const { plots } = await pineTS.run(code);
         expect(plots['td']).toBeDefined();
-        expect(plots['td'].data[0].value).toBe(Date.UTC(2019, 0, 7, 0, 0, 0));
+        // Weekly bar opens 2019-01-07, closeTime = 2019-01-14 → time_tradingday = midnight 2019-01-14
+        expect(plots['td'].data[0].value).toBe(Date.UTC(2019, 0, 14, 0, 0, 0));
     });
 });

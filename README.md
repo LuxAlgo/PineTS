@@ -29,8 +29,9 @@ PineTS enables algorithmic traders, quant developers and platforms to integrate 
 ---
 
 <p align="center">
-  <b>Sponsored by</b><br />
-  <a href="https://luxalgo.com" target="_blank" rel="noopener noreferrer"><img src="./.github/images/luxalgo.png" alt="PineTS" height="80px" /></a>
+  <b>Sponsors</b><br />
+  <a href="https://luxalgo.com" target="_blank" rel="noopener noreferrer"><img src="./.github/images/luxalgo.png" alt="LuxAlgo" height="80px" /></a> &nbsp; 
+  <a href="https://github.com/sponsors/QuantForgeOrg" target="_blank" rel="noopener noreferrer"><img src="./.github/images/sponsor.png" alt="Sponsor" height="80px" /></a>
 </p>
 
 ## What is PineTS?

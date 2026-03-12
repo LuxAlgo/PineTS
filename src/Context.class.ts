@@ -46,6 +46,7 @@ export class Context {
     public cache: any = {};
     public taState: any = {}; // State for incremental TA calculations
     public isSecondaryContext: boolean = false; // Flag to prevent infinite recursion in request.security
+    public chartTimezone: string | null = null; // Chart display timezone (affects log timestamps only, not computation)
     public dataVersion: number = 0; // Incremented when market data changes (streaming mode)
 
     public NA: any = NaN;
@@ -198,12 +199,13 @@ export class Context {
                 return new Date().getTime();
             },
             get time_tradingday() {
-                //FIXME : this is a temporary solution to get the time_tradingday value,
-                //we need to implement a better way to handle realtime states based on provider's data when available
-                const currentTime = Series.from(_this.data.openTime).get(0);
-                if (isNaN(currentTime)) return NaN;
+                // TradingView returns 00:00 UTC of the trading day the bar belongs to.
+                // For daily+ timeframes on 24/7 markets, this equals the bar's close date
+                // (i.e. the date the bar settles / completes).
+                const closeTime = Series.from(_this.data.closeTime).get(0);
+                if (isNaN(closeTime)) return NaN;
                 const timezone = _this.pine?.syminfo?.timezone || 'UTC';
-                const parts = getDatePartsInTimezone(currentTime, timezone);
+                const parts = getDatePartsInTimezone(closeTime, timezone);
                 return Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0);
             },
             get inputs() {

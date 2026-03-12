@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { getDatePartsInTimezone } from '../../Time';
 
 /**
  * VWAP - Volume Weighted Average Price
@@ -54,9 +55,10 @@ export function vwap(context: any) {
         // Get current bar's open time to detect session changes
         const currentOpenTime = Series.from(context.data.openTime).get(0);
 
-        // Detect new session (new trading day)
-        const currentDate = new Date(currentOpenTime);
-        const currentSessionDate = currentDate.toISOString().slice(0, 10); // YYYY-MM-DD
+        // Detect new session (new trading day) using exchange timezone
+        const timezone = context.pine?.syminfo?.timezone || 'UTC';
+        const parts = getDatePartsInTimezone(currentOpenTime, timezone);
+        const currentSessionDate = `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 
         // Use committed state
         let cumulativePV = state.prevCumulativePV;
