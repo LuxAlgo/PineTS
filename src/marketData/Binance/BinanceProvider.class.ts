@@ -23,12 +23,17 @@ const timeframe_to_binance = {
     M: '1M', // 1 month
 };
 
-import { IProvider, ISymbolInfo } from '@pinets/marketData/IProvider';
+import { ISymbolInfo } from '@pinets/marketData/IProvider';
+import { BaseProvider } from '@pinets/marketData/BaseProvider';
+import { Kline, INTERVAL_DURATION_MS } from '@pinets/marketData/types';
 
 interface CacheEntry<T> {
     data: T;
     timestamp: number;
 }
+
+/** Config for BinanceProvider (no API key needed). */
+export interface BinanceProviderConfig {}
 
 class CacheManager<T> {
     private cache: Map<string, CacheEntry<T>>;
@@ -84,27 +89,13 @@ class CacheManager<T> {
     }
 }
 
-export class BinanceProvider implements IProvider {
-    private cacheManager: CacheManager<any[]>;
+export class BinanceProvider extends BaseProvider<BinanceProviderConfig> {
+    private cacheManager: CacheManager<Kline[]>;
     private activeApiUrl: string | null = null; // Persist the working endpoint
 
     constructor() {
+        super({ requiresApiKey: false, providerName: 'Binance' });
         this.cacheManager = new CacheManager(5 * 60 * 1000); // 5 minutes cache duration
-    }
-
-    /**
-     * Normalize closeTime to TradingView convention: closeTime = next bar's openTime.
-     * Binance raw API returns closeTime as (nextBarOpen - 1ms). For all bars except the
-     * last, we use the next bar's actual openTime (exact). For the last bar, we add 1ms
-     * to the raw value.
-     */
-    private _normalizeCloseTime(data: any[]): void {
-        for (let i = 0; i < data.length - 1; i++) {
-            data[i].closeTime = data[i + 1].openTime;
-        }
-        if (data.length > 0) {
-            data[data.length - 1].closeTime = data[data.length - 1].closeTime + 1;
-        }
     }
 
     /**
@@ -154,7 +145,7 @@ export class BinanceProvider implements IProvider {
      * Fetch a single chunk of raw kline data from the Binance API (no closeTime normalization).
      * Used internally by pagination methods that assemble chunks before normalizing.
      */
-    private async _fetchRawChunk(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<any[]> {
+    private async _fetchRawChunk(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<Kline[]> {
         const interval = timeframe_to_binance[timeframe.toUpperCase()];
         if (!interval) {
             console.error(`Unsupported timeframe: ${timeframe}`);
@@ -196,7 +187,7 @@ export class BinanceProvider implements IProvider {
         }));
     }
 
-    async getMarketDataInterval(tickerId: string, timeframe: string, sDate: number, eDate: number): Promise<any> {
+    async getMarketDataInterval(tickerId: string, timeframe: string, sDate: number, eDate: number): Promise<Kline[]> {
         try {
             const interval = timeframe_to_binance[timeframe.toUpperCase()];
             if (!interval) {
@@ -204,24 +195,10 @@ export class BinanceProvider implements IProvider {
                 return [];
             }
 
-            const timeframeDurations = {
-                '1m': 60 * 1000,
-                '3m': 3 * 60 * 1000,
-                '5m': 5 * 60 * 1000,
-                '15m': 15 * 60 * 1000,
-                '30m': 30 * 60 * 1000,
-                '1h': 60 * 60 * 1000,
-                '2h': 2 * 60 * 60 * 1000,
-                '4h': 4 * 60 * 60 * 1000,
-                '1d': 24 * 60 * 60 * 1000,
-                '1w': 7 * 24 * 60 * 60 * 1000,
-                '1M': 30 * 24 * 60 * 60 * 1000,
-            };
-
-            let allData = [];
+            let allData: Kline[] = [];
             let currentStart = sDate;
             const endTime = eDate;
-            const intervalDuration = timeframeDurations[interval];
+            const intervalDuration = INTERVAL_DURATION_MS[interval];
 
             if (!intervalDuration) {
                 console.error(`Duration not defined for interval: ${interval}`);
@@ -242,7 +219,7 @@ export class BinanceProvider implements IProvider {
             }
 
             // Normalize closeTime on the fully assembled data
-            this._normalizeCloseTime(allData);
+            this.normalizeCloseTime(allData);
             return allData;
         } catch (error) {
             console.error('Error in getMarketDataInterval:', error);
@@ -250,9 +227,9 @@ export class BinanceProvider implements IProvider {
         }
     }
 
-    private async getMarketDataBackwards(tickerId: string, timeframe: string, limit: number, endTime?: number): Promise<any[]> {
+    private async getMarketDataBackwards(tickerId: string, timeframe: string, limit: number, endTime?: number): Promise<Kline[]> {
         let remaining = limit;
-        let allData: any[] = [];
+        let allData: Kline[] = [];
         let currentEndTime = endTime;
 
         // Safety break to prevent infinite loops
@@ -281,11 +258,15 @@ export class BinanceProvider implements IProvider {
         }
 
         // Normalize closeTime on the fully assembled data
-        this._normalizeCloseTime(allData);
+        this.normalizeCloseTime(allData);
         return allData;
     }
 
-    async getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<any> {
+    protected getSupportedTimeframes(): Set<string> {
+        return new Set(['1', '3', '5', '15', '30', '60', '120', '240', 'D', 'W', 'M']);
+    }
+
+    protected async _getMarketDataNative(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<Kline[]> {
         try {
             // Check cache first
             // Skip cache if eDate is undefined (live request) to ensure we get fresh data
@@ -327,7 +308,7 @@ export class BinanceProvider implements IProvider {
 
             // Single chunk — fetch raw, then normalize
             const data = await this._fetchRawChunk(tickerId, timeframe, limit, sDate, eDate);
-            this._normalizeCloseTime(data);
+            this.normalizeCloseTime(data);
 
             if (shouldCache) {
                 this.cacheManager.set(cacheParams, data);
@@ -352,21 +333,8 @@ export class BinanceProvider implements IProvider {
         // If we have both start and end dates, calculate required candles
         if (sDate && eDate) {
             const interval = timeframe_to_binance[timeframe.toUpperCase()];
-            const timeframeDurations = {
-                '1m': 60 * 1000,
-                '3m': 3 * 60 * 1000,
-                '5m': 5 * 60 * 1000,
-                '15m': 15 * 60 * 1000,
-                '30m': 30 * 60 * 1000,
-                '1h': 60 * 60 * 1000,
-                '2h': 2 * 60 * 60 * 1000,
-                '4h': 4 * 60 * 60 * 1000,
-                '1d': 24 * 60 * 60 * 1000,
-                '1w': 7 * 24 * 60 * 60 * 1000,
-                '1M': 30 * 24 * 60 * 60 * 1000,
-            };
 
-            const intervalDuration = timeframeDurations[interval];
+            const intervalDuration = INTERVAL_DURATION_MS[interval];
             if (intervalDuration) {
                 const requiredCandles = Math.ceil((eDate - sDate) / intervalDuration);
                 // Need pagination if date range requires more than 1000 candles
@@ -506,7 +474,4 @@ export class BinanceProvider implements IProvider {
         }
     }
 
-    configure(config: any): void {
-        // Nothing to configure in BinanceProvider
-    }
 }
