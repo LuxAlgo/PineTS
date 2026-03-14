@@ -119,9 +119,9 @@ export class PineTS {
                 const _ohlc4 = marketData.map((d) => (d.high + d.low + d.open + d.close) / 4);
                 const _hlcc4 = marketData.map((d) => (d.high + d.low + d.close + d.close) / 4);
                 const _openTime = marketData.map((d) => d.openTime);
-                // Providers should supply closeTime in TV convention (= next bar open).
+                // Providers should supply closeTime as session close time (TV convention).
                 // Safety-net for array-based data or providers that omit closeTime:
-                // estimate as openTime + timeframe duration.
+                // estimate as openTime + timeframe duration (accurate for 24/7 crypto).
                 const tfDurationMs = getTimeframeDurationMs(this.timeframe);
                 const _closeTime = marketData.map((d) =>
                     d.closeTime != null ? d.closeTime : d.openTime + tfDurationMs

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { IProvider, ISymbolInfo } from '@pinets/marketData/IProvider';
+import { ISymbolInfo } from '@pinets/marketData/IProvider';
+import { BaseProvider } from '@pinets/marketData/BaseProvider';
+import { Kline } from '@pinets/marketData/types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -8,19 +10,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-interface Kline {
-    openTime: number;
-    open: number;
-    high: number;
-    low: number;
-    close: number;
-    volume: number;
-    closeTime: number;
-    quoteAssetVolume: number;
-    numberOfTrades: number;
-    takerBuyBaseAssetVolume: number;
-    takerBuyQuoteAssetVolume: number;
-    ignore: number | string;
+/** Config for MockProvider. */
+export interface MockProviderConfig {
+    dataDirectory?: string;
 }
 
 /**
@@ -40,25 +32,31 @@ interface Kline {
  *
  * Example: BTCUSDC-1h-1704067200000-1763683199000.json
  */
-export class MockProvider implements IProvider {
+export class MockProvider extends BaseProvider<MockProviderConfig> {
     private dataCache: Map<string, Kline[]> = new Map();
     private exchangeInfoCache: { spot?: any; futures?: any } = {};
     private dataDirectory: string;
 
-    constructor(dataDirectory?: string) {
+    constructor(dataDirectoryOrConfig?: string | MockProviderConfig) {
+        super({ requiresApiKey: false, providerName: 'Mock' });
         // Default to tests/compatibility/_data directory
         // Calculate path relative to this file's location
-        if (dataDirectory) {
-            this.dataDirectory = dataDirectory;
+        const dir = typeof dataDirectoryOrConfig === 'string'
+            ? dataDirectoryOrConfig
+            : dataDirectoryOrConfig?.dataDirectory;
+        if (dir) {
+            this.dataDirectory = dir;
         } else {
             // Navigate from src/marketData/Mock to tests/compatibility/_data
             const projectRoot = path.resolve(__dirname, '../../../');
             this.dataDirectory = path.join(projectRoot, 'tests', 'compatibility', '_data');
         }
     }
-    public configure({ dataDirectory }: { dataDirectory?: string }): void {
-        if (dataDirectory) {
-            this.dataDirectory = dataDirectory;
+
+    public configure(config: MockProviderConfig): void {
+        super.configure(config);
+        if (config.dataDirectory) {
+            this.dataDirectory = config.dataDirectory;
         }
     }
 
@@ -201,8 +199,12 @@ export class MockProvider implements IProvider {
         return timeframeMap[timeframe.toUpperCase()] || timeframe.toLowerCase();
     }
 
+    protected getSupportedTimeframes(): Set<string> {
+        return new Set(['1', '3', '5', '15', '30', '45', '60', '120', '180', '240', 'D', 'W', 'M']);
+    }
+
     /**
-     * Implements IProvider.getMarketData
+     * Implements _getMarketDataNative
      *
      * @param tickerId - Symbol (e.g., 'BTCUSDC')
      * @param timeframe - Timeframe (e.g., '1h', '60', 'D')
@@ -211,7 +213,7 @@ export class MockProvider implements IProvider {
      * @param eDate - Optional end date (timestamp in milliseconds)
      * @returns Promise<Kline[]> - Array of candle data
      */
-    async getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<Kline[]> {
+    protected async _getMarketDataNative(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<Kline[]> {
         try {
             // Normalize timeframe
             const normalizedTimeframe = this.normalizeTimeframe(timeframe);
@@ -231,7 +233,7 @@ export class MockProvider implements IProvider {
             const filteredData = this.filterData(allData, sDate, eDate, limit);
 
             // Normalize closeTime to TV convention (nextBar.openTime)
-            this._normalizeCloseTime(filteredData);
+            this.normalizeCloseTime(filteredData);
 
             return filteredData;
         } catch (error) {
@@ -389,21 +391,6 @@ export class MockProvider implements IProvider {
         } catch (error) {
             console.error('Error in MockProvider.getSymbolInfo:', error);
             return null;
-        }
-    }
-
-    /**
-     * Normalize closeTime to TradingView convention: closeTime = next bar's openTime.
-     * Mock data files contain raw Binance data where closeTime = (nextBarOpen - 1ms).
-     * For all bars except the last, we use the next bar's actual openTime. For the
-     * last bar, we add 1ms to the raw value.
-     */
-    private _normalizeCloseTime(data: Kline[]): void {
-        for (let i = 0; i < data.length - 1; i++) {
-            data[i].closeTime = data[i + 1].openTime;
-        }
-        if (data.length > 0) {
-            data[data.length - 1].closeTime = data[data.length - 1].closeTime + 1;
         }
     }
 

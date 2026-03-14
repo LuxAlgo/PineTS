@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { BinanceProvider } from './Binance/BinanceProvider.class';
+import { FMPProvider } from './FMP/FMPProvider.class';
+import { AlpacaProvider } from './Alpaca/AlpacaProvider.class';
 import { IProvider } from './IProvider';
+import { BaseProvider } from './BaseProvider';
 // MockProvider is conditionally imported - excluded from browser builds via rollup plugin
 // In browser builds, it will be replaced with a stub
 import { MockProvider } from './Mock/MockProvider.class';
+
+// Re-export provider classes for direct instantiation
+export { BinanceProvider } from './Binance/BinanceProvider.class';
+export { FMPProvider } from './FMP/FMPProvider.class';
+export { AlpacaProvider } from './Alpaca/AlpacaProvider.class';
+export { BaseProvider } from './BaseProvider';
 
 type TProvider = {
     [key: string]: IProvider;
@@ -29,9 +38,10 @@ if (isNodeEnvironment) {
 
 export const Provider: TProvider = {
     Binance: new BinanceProvider(),
+    FMP: new FMPProvider(),
+    Alpaca: new AlpacaProvider(),
     // Only include Mock provider in Node.js environments (excluded from browser builds)
     ...(MockProviderInstance ? { Mock: MockProviderInstance } : {}),
-    //TODO : add other providers (polygon, etc.)
 };
 
 export function registerProvider(name: string, provider: IProvider) {

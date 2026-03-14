@@ -81,14 +81,13 @@
         "astring": "^1.9.0"
     },
     "devDependencies": {
-        "typescript": "~5.9.3",
         "@rollup/plugin-commonjs": "^29.0.0",
         "@rollup/plugin-json": "^6.1.0",
         "@rollup/plugin-node-resolve": "^16.0.3",
         "@types/react": "^19.2.10",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.2",
-        "@vitest/coverage-v8": "^2.0.0",
+        "@vitest/coverage-v8": "^4.1.0",
         "autoprefixer": "^10.4.23",
         "badgen": "^3.2.3",
         "cross-env": "^7.0.3",
@@ -99,9 +98,10 @@
         "rollup-plugin-typescript-paths": "^1.5.0",
         "tailwindcss": "^4.1.18",
         "tsx": "^4.21.0",
+        "typescript": "~5.9.3",
         "vite": "^7.3.1",
         "vite-tsconfig-paths": "^4.3.2",
-        "vitest": "^2.0.0"
+        "vitest": "^4.1.0"
     },
     "repository": {
         "type": "git",

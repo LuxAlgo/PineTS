@@ -1,5 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import type { Kline } from './types';
+
+// ── Provider configuration types ────────────────────────────────────────
+
+/** Base config — all providers extend this (may be empty for keyless providers). */
+export interface BaseProviderConfig {}
+
+/** Config for providers that require an API key (FMP, Alpaca, etc.). */
+export interface ApiKeyProviderConfig extends BaseProviderConfig {
+    apiKey: string;
+}
+
+// ── Symbol info ─────────────────────────────────────────────────────────
+
 export type ISymbolInfo = {
     //Symbol Identification
     current_contract: string;
@@ -59,16 +73,21 @@ export type ISymbolInfo = {
  * Market data provider interface.
  *
  * ## closeTime convention
- * Providers MUST return `closeTime` following the TradingView convention:
- * `closeTime` = the timestamp of the **start of the next bar** (not the last
- * millisecond of the current bar).  For example, a weekly bar opening on
- * Monday 2019-01-07T00:00Z should have `closeTime = 2019-01-14T00:00Z`.
+ * Providers MUST return `closeTime` as the **session close time** for the bar,
+ * mirroring TradingView's `time_close` built-in variable.
  *
- * If a provider's raw data uses a different convention (e.g., Binance returns
- * `nextBarOpen - 1ms`), the provider must normalize before returning.
+ * - **Stocks / regulated markets**: `closeTime` = the session close time on
+ *   the bar's trading day (e.g., 16:00 ET for NYSE daily bars, 13:00 ET for
+ *   early-close days). For weekly/monthly bars, use the session close of the
+ *   last trading day in the period.
+ * - **24/7 markets (crypto)**: `closeTime` = the start of the next bar
+ *   (equivalent to `openTime + barDuration`), since there are no session gaps.
+ *
+ * Use `computeSessionClose()` from `types.ts` for session-aware computation,
+ * or the Alpaca Calendar API for exact per-day close times including early closes.
  */
 export interface IProvider {
-    getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<any>;
+    getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<Kline[]>;
     getSymbolInfo(tickerId: string): Promise<ISymbolInfo>;
     configure(config: any): void;
 }
