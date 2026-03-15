@@ -25,7 +25,7 @@ export function serialize(value: any): string {
             if (val === undefined) return UNDEFINED_TOKEN;
             return val;
         },
-        2
+        2,
     );
 }
 
@@ -45,7 +45,7 @@ export function deserialize(json: string): any {
 /**
  * Check if two values are equal, handling NaN, Infinity, and -Infinity correctly
  */
-export function deepEqual(a: any, b: any, epsilon: number = 1e-8): boolean {
+export function deepEqual(a: any, b: any, epsilon: number = 1e-9): boolean {
     // Handle NaN
     if (typeof a === 'number' && typeof b === 'number' && isNaN(a) && isNaN(b)) {
         return true;
@@ -90,7 +90,7 @@ export interface DeepDiff {
  * Collect all differences between two values using the same logic as deepEqual.
  * Returns an empty array when the values are equal.
  */
-export function deepDiff(a: any, b: any, epsilon: number = 1e-8, path: string = ''): DeepDiff[] {
+export function deepDiff(a: any, b: any, epsilon: number = 1e-9, path: string = ''): DeepDiff[] {
     // Handle NaN
     if (typeof a === 'number' && typeof b === 'number' && isNaN(a) && isNaN(b)) {
         return [];

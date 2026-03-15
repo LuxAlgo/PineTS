@@ -1,4 +1,4 @@
-const WillVixFix = (context) => {
+var WillVixFix = (context) => {
     const { close, high, low } = context.data;
 
     const ta = context.ta;

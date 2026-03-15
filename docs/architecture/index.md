@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Architecture
-nav_order: 4
+nav_order: 7
 has_children: true
 permalink: /architecture/
 ---
@@ -50,29 +50,29 @@ PineTS bridges the gap between Pine Script's unique time-series semantics and st
 
 ### Core Architecture
 
--   [Transpiler Architecture](./transpiler/index.md): Details on AST parsing, scope analysis, and code transformation.
-    -   [Scope Manager](./transpiler/scope-manager.md): Variable renaming and unique ID generation
-    -   [Transformers](./transpiler/transformers.md): AST transformation logic
-    -   [Real Examples](./transpiler/examples.md): Actual transpilation output examples
--   [Runtime Engine](./runtime/index.md): How the `Context`, `Series`, and execution loop work.
-    -   [Context Class](./runtime/context.md): The global state object
-    -   [Series Class](./runtime/series.md): Forward storage with reverse access
-    -   [Execution Flow](./runtime/execution-flow.md): Run loop and pagination
--   [Namespaces](./namespaces/index.md): Implementation of `ta`, `math`, `request`, etc.
-    -   [Technical Analysis (ta)](./namespaces/ta.md): TA functions implementation
-    -   [Math (math)](./namespaces/math.md): Mathematical operations
-    -   [Array (array)](./namespaces/array.md): Array operations
-    -   [Request (request)](./namespaces/request.md): Multi-timeframe analysis
-    -   [Input (input)](./namespaces/input.md): User input handling
--   [Critical Implementation Details](./specifics/index.md): Deep dives into tuple handling, `request.security`, and other complex features.
-    -   [Tuple Handling](./specifics/tuples.md): Double bracket convention
-    -   [Request Security](./specifics/request-security.md): Secondary context architecture
+- [Transpiler Architecture](./transpiler/index.md): Details on AST parsing, scope analysis, and code transformation.
+    - [Scope Manager](./transpiler/scope-manager.md): Variable renaming and unique ID generation
+    - [Transformers](./transpiler/transformers.md): AST transformation logic
+    - [Real Examples](./transpiler/examples.md): Actual transpilation output examples
+- [Runtime Engine](./runtime/index.md): How the `Context`, `Series`, and execution loop work.
+    - [Context Class](./runtime/context.md): The global state object
+    - [Series Class](./runtime/series.md): Forward storage with reverse access
+    - [Execution Flow](./runtime/execution-flow.md): Run loop and pagination
+- [Namespaces](./namespaces/index.md): Implementation of `ta`, `math`, `request`, etc.
+    - [Technical Analysis (ta)](./namespaces/ta.md): TA functions implementation
+    - [Math (math)](./namespaces/math.md): Mathematical operations
+    - [Array (array)](./namespaces/array.md): Array operations
+    - [Request (request)](./namespaces/request.md): Multi-timeframe analysis
+    - [Input (input)](./namespaces/input.md): User input handling
+- [Critical Implementation Details](./specifics/index.md): Deep dives into tuple handling, `request.security`, and other complex features.
+    - [Tuple Handling](./specifics/tuples.md): Double bracket convention
+    - [Request Security](./specifics/request-security.md): Secondary context architecture
 
 ### Developer Resources
 
--   [Debugging Guide](./debugging.md): Practical debugging techniques and common issues
--   [Best Practices](./best-practices.md): Common pitfalls and recommended patterns
--   [Syntax Evolution](./syntax-evolution.md): Migration from old to new syntax
+- [Debugging Guide](./debugging.md): Practical debugging techniques and common issues
+- [Best Practices](./best-practices.md): Common pitfalls and recommended patterns
+- [Syntax Evolution](./syntax-evolution.md): Migration from old to new syntax
 
 ## Key Design Principles
 

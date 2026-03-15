@@ -210,6 +210,18 @@ When using **PineTS syntax** (Option 2), note these differences from native Pine
 
 When using **Native Pine Script** (Option 1), write code exactly as you would in TradingView - no conversion needed!
 
+## Data Providers
+
+PineTS includes built-in providers for multiple data sources:
+
+| Provider | Market | API Key |
+| --- | --- | --- |
+| `Provider.Binance` | Crypto | Not required |
+| `Provider.FMP` | Stocks, forex, crypto | Required |
+| `Provider.Alpaca` | US stocks, crypto | Required |
+
+You can also pass your own OHLCV data array instead of using a provider. See the **[Data Providers](../data-providers/)** page for configuration details and examples.
+
 ## Core Components
 
 ### PineTS Class

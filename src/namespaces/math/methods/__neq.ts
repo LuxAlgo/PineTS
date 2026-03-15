@@ -25,7 +25,7 @@ export function __neq(context: any) {
             if (isNaN(valA) || isNaN(valB)) return false;
 
             // Use epsilon comparison consistent with __eq
-            return Math.abs(valA - valB) >= 1e-8;
+            return Math.abs(valA - valB) >= 1e-9;
         }
 
         return valA !== valB;

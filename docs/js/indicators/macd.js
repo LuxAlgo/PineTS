@@ -1,4 +1,4 @@
-const macdIndicator = (context) => {
+var macdIndicator = (context) => {
     let fast_length = input.int({ title: 'Fast Length', defval: 12 });
 
     let slow_length = input.int({ title: 'Slow Length', defval: 26 });

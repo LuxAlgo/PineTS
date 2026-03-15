@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Language Coverage
-nav_order: 5
+nav_order: 8
 permalink: /lang-coverage/
 ---
 
@@ -22,9 +22,11 @@ This document lists the features of the PineTS language and their status.
 | Type system            | native      | Uses native JS/TS types                                                 |
 | Builtins               | done        | Implemented open, close, high, low, hl2, hlc3, ohlc4                    |
 | Functions              | done        | Check [api-coverage](api-coverage.md) for details                       |
+| UDT                    | done        | Check [api-coverage](api-coverage.md) for details                       |
 | Objects                | in progress | Check [api-coverage](api-coverage.md) for details                       |
-| Enums                  | in progress | Check [api-coverage](api-coverage.md) for details                       |
+| Enums                  | done        | Check [api-coverage](api-coverage.md) for details                       |
 | Methods                | in progress | Check [api-coverage](api-coverage.md) for details                       |
 | Arrays                 | done        | Check [api-coverage](api-coverage.md) for details                       |
 | Matrices               | done        | Check [api-coverage](api-coverage.md) for details                       |
 | Maps                   | done        | Check [api-coverage](api-coverage.md) for details                       |
+| Imports                | planned     |                                                                         |

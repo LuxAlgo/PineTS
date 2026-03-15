@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Syntax Guide
-nav_order: 3
+nav_order: 6
 ---
 
 # PineTS Syntax Guide

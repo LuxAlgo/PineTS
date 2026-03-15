@@ -12,7 +12,7 @@ export function __eq(context: any) {
             // Pine Script follows IEEE 754: NaN is never equal to anything, including itself
             if (isNaN(valA) || isNaN(valB)) return false;
 
-            return Math.abs(valA - valB) < 1e-8;
+            return Math.abs(valA - valB) < 1e-9;
         }
 
         return valA === valB;

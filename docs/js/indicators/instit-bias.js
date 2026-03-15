@@ -1,4 +1,4 @@
-const institBiasIndicator = (context) => {
+var institBiasIndicator = (context) => {
     const ema9 = ta.ema(close, 9);
     const ema18 = ta.ema(close, 18);
 

@@ -600,7 +600,7 @@ describe('Functions', () => {
                 expect(u).toBeGreaterThan(m);
                 expect(m).toBeGreaterThan(l);
                 // upper - mid should equal mid - lower (symmetry from same stdev * mult)
-                expect(Math.abs((u - m) - (m - l))).toBeLessThan(1e-8);
+                expect(Math.abs(u - m - (m - l))).toBeLessThan(1e-9);
             }
         }
         expect(validBars).toBeGreaterThan(0);
@@ -679,7 +679,7 @@ describe('Functions', () => {
             const mv = modifiedData[i]?.value;
             if (typeof iv === 'number' && !isNaN(iv) && typeof mv === 'number' && !isNaN(mv)) {
                 // _modified should be exactly 2 * _inner_val (scale=2, _inner_val=close)
-                expect(Math.abs(mv - iv * 2)).toBeLessThan(1e-8);
+                expect(Math.abs(mv - iv * 2)).toBeLessThan(1e-9);
             }
         }
     });

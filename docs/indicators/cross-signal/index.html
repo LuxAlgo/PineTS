@@ -40,7 +40,7 @@
 
         <script>
             // Data Loading Helper (Simulating what was in chart.js)
-            const DATA_LENGTH = 500;
+            var DATA_LENGTH = 500;
             async function getIndicatorData(inficatorCode, tickerId, timeframe = '1w', periods = 500, stime, etime) {
                 const pineTS = new PineTS(PineTS.Provider.Binance, tickerId, timeframe, periods, stime, etime);
                 const { result, plots, marketData } = await pineTS.run(inficatorCode);

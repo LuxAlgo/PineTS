@@ -1,4 +1,4 @@
-const sqzmomIndicator = (context) => {
+var sqzmomIndicator = (context) => {
     // This is a PineTS port of "Squeeze Momentum Indicator" indicator by LazyBear
     // List of all his indicators: https://www.tradingview.com/v/4IneGo8h/
     const { close, high, low } = context.data;

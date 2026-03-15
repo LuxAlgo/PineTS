@@ -190,27 +190,17 @@ const pineTSWithDateRange = new PineTS(
 
 #### Available Providers
 
-Currently supported providers:
+| Provider | Usage | API Key | Best For |
+| --- | --- | --- | --- |
+| `Provider.Binance` | Crypto market data | Not required | Cryptocurrency |
+| `Provider.FMP` | Stocks, forex, crypto | Required | US/intl stocks |
+| `Provider.Alpaca` | US stocks, crypto | Required (key + secret) | US equities |
 
--   `Provider.Binance` - Binance exchange data provider
+Providers that require API keys must be configured before use. See the **[Data Providers](../data-providers/)** page for detailed setup instructions, configuration options, and examples for each provider.
 
 #### Supported Timeframes
 
-The following timeframes are supported with Binance provider:
-
-| Timeframe         | Description | Binance Interval |
-| ----------------- | ----------- | ---------------- |
-| `'1'`             | 1 minute    | `1m`             |
-| `'3'`             | 3 minutes   | `3m`             |
-| `'5'`             | 5 minutes   | `5m`             |
-| `'15'`            | 15 minutes  | `15m`            |
-| `'30'`            | 30 minutes  | `30m`            |
-| `'60'`            | 1 hour      | `1h`             |
-| `'120'`           | 2 hours     | `2h`             |
-| `'240'` or `'4H'` | 4 hours     | `4h`             |
-| `'D'` or `'1D'`   | 1 day       | `1d`             |
-| `'W'` or `'1W'`   | 1 week      | `1w`             |
-| `'M'` or `'1M'`   | 1 month     | `1M`             |
+All providers support the standard timeframe strings: `'1'`, `'3'`, `'5'`, `'15'`, `'30'`, `'60'`, `'120'`, `'240'`, `'D'`, `'W'`, `'M'`. Timeframes not natively supported by a provider are automatically aggregated from smaller candles. See the **[Timeframe Reference](../data-providers/#timeframe-reference)** for the full support matrix.
 
 ### Option 2: Using Custom Data
 
