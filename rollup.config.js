@@ -26,21 +26,8 @@ import resolve from '@rollup/plugin-node-resolve';
 const format = process.env.FORMAT || 'es';
 const build = process.env.BUILD || 'dev';
 
-//rollup plugin to add the license header to the code
-function addSPDXHeader() {
-    return {
-        name: 'add-license-header',
-        generateBundle(options, bundle) {
-            for (const fileName in bundle) {
-                const chunk = bundle[fileName];
-                if (chunk.type === 'chunk') {
-                    const code = chunk.code;
-                    chunk.code = `${LicenseHeader}\n${code}`;
-                }
-            }
-        },
-    };
-}
+// License text is applied via Rollup `output.banner` (not a generateBundle hook).
+// Mutating chunk code after the bundle is emitted breaks source maps — breakpoints drift in debuggers.
 
 const CJSConfigDev = {
     input: './src/index.ts',
@@ -49,6 +36,7 @@ const CJSConfigDev = {
         format: 'cjs', // Specify the CommonJS format
         sourcemap: true,
         inlineDynamicImports: true, // Inline all dynamic imports into one file
+        banner: LicenseHeader,
     },
     plugins: [
         resolve({
@@ -71,7 +59,6 @@ const CJSConfigDev = {
             treeShaking: false,
             target: 'node18',
         }),
-        addSPDXHeader(),
         sourcemaps(),
     ],
 };
@@ -111,6 +98,9 @@ const BrowserConfigDev = {
         name: 'PineTSLib',
         exports: 'auto',
         sourcemap: true,
+        banner: LicenseHeader,
+        footer:
+            ';var PineTS = PineTSLib.PineTS;PineTS.Provider = PineTSLib.Provider;PineTS.Context = PineTSLib.Context;',
     },
     plugins: [
         excludeMockProvider(),
@@ -132,20 +122,6 @@ const BrowserConfigDev = {
             target: 'es2020',
         }),
 
-        {
-            name: 'expose-pine-ts',
-            generateBundle(options, bundle) {
-                for (const fileName in bundle) {
-                    const chunk = bundle[fileName];
-                    if (chunk.type === 'chunk') {
-                        const code = chunk.code;
-
-                        chunk.code = `${code};var PineTS = PineTSLib.PineTS;PineTS.Provider = PineTSLib.Provider;PineTS.Context = PineTSLib.Context;`;
-                    }
-                }
-            },
-        },
-        addSPDXHeader(),
         sourcemaps(),
     ],
 };
@@ -158,6 +134,7 @@ const ESConfigDev = {
 
         //Comment this line and uncomment the following lines if you need ES bundle
         file: './dist/pinets.dev.es.js',
+        banner: LicenseHeader,
     },
     plugins: [
         json(),
@@ -178,8 +155,6 @@ const ESConfigDev = {
             treeShaking: false,
         }),
 
-        addSPDXHeader(),
-
         sourcemaps(),
     ],
 };
@@ -191,6 +166,7 @@ const ESBrowserConfigDev = {
         format: 'es',
         sourcemap: true,
         file: './dist/pinets.dev.browser.es.js',
+        banner: LicenseHeader,
     },
     plugins: [
         excludeMockProvider(),
@@ -212,7 +188,6 @@ const ESBrowserConfigDev = {
             treeShaking: false,
             target: 'es2020',
         }),
-        addSPDXHeader(),
         sourcemaps(),
     ],
 };
@@ -224,6 +199,7 @@ const CJSConfigProd = {
         format: 'cjs', // Specify the CommonJS format
         sourcemap: true,
         inlineDynamicImports: true, // Inline all dynamic imports into one file
+        banner: LicenseHeader,
     },
     plugins: [
         resolve({
@@ -246,7 +222,6 @@ const CJSConfigProd = {
             treeShaking: true,
             target: 'node18',
         }),
-        addSPDXHeader(),
         sourcemaps(),
     ],
 };
@@ -259,6 +234,9 @@ const BrowserConfigProd = {
         name: 'PineTSLib',
         exports: 'auto',
         sourcemap: true,
+        banner: LicenseHeader,
+        footer:
+            ';var PineTS = PineTSLib.PineTS;PineTS.Provider = PineTSLib.Provider;PineTS.Context = PineTSLib.Context;',
     },
     plugins: [
         excludeMockProvider(),
@@ -280,20 +258,6 @@ const BrowserConfigProd = {
             target: 'es2020',
         }),
 
-        {
-            name: 'expose-pine-ts',
-            generateBundle(options, bundle) {
-                for (const fileName in bundle) {
-                    const chunk = bundle[fileName];
-                    if (chunk.type === 'chunk') {
-                        const code = chunk.code;
-
-                        chunk.code = `${code};var PineTS = PineTSLib.PineTS;PineTS.Provider = PineTSLib.Provider;PineTS.Context = PineTSLib.Context;`;
-                    }
-                }
-            },
-        },
-        addSPDXHeader(),
         sourcemaps(),
     ],
 };
@@ -306,6 +270,7 @@ const ESConfigProd = {
 
         //Comment this line and uncomment the following lines if you need ES bundle
         file: './dist/pinets.min.es.js',
+        banner: LicenseHeader,
     },
     plugins: [
         json(),
@@ -325,7 +290,6 @@ const ESConfigProd = {
             minify: true,
             treeShaking: true,
         }),
-        addSPDXHeader(),
         sourcemaps(),
     ],
 };
@@ -337,6 +301,7 @@ const ESBrowserConfigProd = {
         format: 'es',
         sourcemap: true,
         file: './dist/pinets.min.browser.es.js',
+        banner: LicenseHeader,
     },
     plugins: [
         excludeMockProvider(),
@@ -358,7 +323,6 @@ const ESBrowserConfigProd = {
             treeShaking: true,
             target: 'es2020',
         }),
-        addSPDXHeader(),
         sourcemaps(),
     ],
 };

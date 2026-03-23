@@ -94,6 +94,19 @@ export class PineTS {
         this._maxLoops = maxLoops;
     }
 
+    private _alertMode: 'realtime' | 'all' = 'realtime';
+
+    /**
+     * Set alert mode.
+     * - 'realtime' (default): alerts only fire on the last (realtime) bar,
+     *   matching TradingView behavior.
+     * - 'all': alerts fire on every bar, useful for backtesting alert strategies.
+     * @param mode Alert firing mode
+     */
+    public setAlertMode(mode: 'realtime' | 'all') {
+        this._alertMode = mode;
+    }
+
     constructor(
         private source: IProvider | any[],
         private tickerId?: string,
@@ -233,7 +246,7 @@ export class PineTS {
     public stream(
         pineTSCode: Indicator | Function | String,
         options: { pageSize?: number; live?: boolean; interval?: number } = {},
-    ): { on: (event: 'data' | 'error' | 'warning', callback: Function) => void; stop: () => void } {
+    ): { on: (event: 'data' | 'error' | 'warning' | 'alert', callback: Function) => void; stop: () => void } {
         const { live = true, interval = 1000 } = options;
         const pageSize = options.pageSize || this.data.length; // Default pageSize to full data if not provided
 
@@ -247,7 +260,7 @@ export class PineTS {
             code = pineTSCode;
         }
 
-        const listeners: { [key: string]: Function[] } = { data: [], error: [], warning: [] };
+        const listeners: { [key: string]: Function[] } = { data: [], error: [], warning: [], alert: [] };
         let stopped = false;
 
         const emit = (event: string, ...args: any[]) => {
@@ -256,7 +269,7 @@ export class PineTS {
             }
         };
 
-        const on = (event: 'data' | 'error' | 'warning', callback: Function) => {
+        const on = (event: 'data' | 'error' | 'warning' | 'alert', callback: Function) => {
             if (!listeners[event]) listeners[event] = [];
             listeners[event].push(callback);
         };
@@ -294,6 +307,13 @@ export class PineTS {
                     if (ctx.warnings && ctx.warnings.length > 0) {
                         for (const w of ctx.warnings) {
                             emit('warning', w);
+                        }
+                    }
+
+                    // Emit any alert events accumulated during this page
+                    if (ctx.alerts && ctx.alerts.length > 0) {
+                        for (const a of ctx.alerts) {
+                            emit('alert', a);
                         }
                     }
 
@@ -475,6 +495,9 @@ export class PineTS {
 
         // Copy runtime warnings
         pageContext.warnings = fullContext.warnings;
+
+        // Copy alert events
+        pageContext.alerts = fullContext.alerts;
 
         return pageContext;
     }
@@ -671,6 +694,7 @@ export class PineTS {
         }
 
         context.__maxLoops = this._maxLoops;
+        context._alertMode = this._alertMode;
 
         context.pineTSCode = pineTSCode;
         context.isSecondaryContext = isSecondary; // Set secondary context flag

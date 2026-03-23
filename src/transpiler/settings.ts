@@ -10,6 +10,7 @@ export const NAMESPACES_LIKE = [
     'label',
     'line',
     'na',
+    'alert',
     'time',
     'time_close',
     'dayofmonth',
@@ -52,7 +53,7 @@ export const NAMESPACE_COLLISION_NAMES = new Set([
     // Drawing/enum namespaces with member access
     'size', 'extend', 'display', 'format', 'location', 'shape', 'text', 'xloc', 'yloc',
     'linefill', 'polyline', 'box', 'table', 'map', 'matrix', 'chart',
-    'barstate', 'syminfo', 'timeframe', 'strategy', 'log', 'str',
+    'alert', 'barstate', 'syminfo', 'timeframe', 'strategy', 'log', 'str',
 ]);
 
 // All known data variables in the context

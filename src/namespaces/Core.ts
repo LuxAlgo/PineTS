@@ -91,6 +91,68 @@ export class NAHelper {
     }
 }
 
+/**
+ * Alert frequency constants (Pine Script alert.freq_* enum values).
+ */
+export const ALERT_FREQ = {
+    freq_all: 'alert.freq_all',
+    freq_once_per_bar: 'alert.freq_once_per_bar',
+    freq_once_per_bar_close: 'alert.freq_once_per_bar_close',
+};
+
+/**
+ * AlertHelper implements the dual-use `alert` identifier.
+ * - `alert(msg, freq)` → `alert.any(msg, freq)` — fires an alert event
+ * - `alert.freq_once_per_bar` → frequency constant
+ */
+export class AlertHelper {
+    /** Track which bars have already fired for freq_once_per_bar gating. */
+    private _firedBars: Set<number> = new Set();
+
+    constructor(private context: any) {}
+
+    // Pine Script alert.freq_* constants
+    get freq_all() { return ALERT_FREQ.freq_all; }
+    get freq_once_per_bar() { return ALERT_FREQ.freq_once_per_bar; }
+    get freq_once_per_bar_close() { return ALERT_FREQ.freq_once_per_bar_close; }
+
+    param(source: any, _index?: number, _id?: string) {
+        return Series.from(source).get(0);
+    }
+
+    any(message: any, freq?: any): void {
+        const msg = Series.from(message).get(0);
+        const f = freq ? Series.from(freq).get(0) : ALERT_FREQ.freq_once_per_bar;
+
+        const barIdx = this.context.idx;
+        const isRealtime = this.context.pine?.barstate?.isrealtime ?? (barIdx === this.context.length - 1);
+        const alertMode = this.context._alertMode || 'realtime';
+
+        // In realtime mode, skip historical bars (matches TradingView behavior)
+        if (alertMode === 'realtime' && !isRealtime) return;
+
+        // Frequency gating
+        if (f === ALERT_FREQ.freq_once_per_bar) {
+            if (this._firedBars.has(barIdx)) return;
+            this._firedBars.add(barIdx);
+        } else if (f === ALERT_FREQ.freq_once_per_bar_close) {
+            const isConfirmed = this.context.pine?.barstate?.isconfirmed ?? true;
+            if (!isConfirmed) return;
+            if (this._firedBars.has(barIdx)) return;
+            this._firedBars.add(barIdx);
+        }
+        // freq_all: no gating, fire every call
+
+        this.context.alerts.push({
+            type: 'alert',
+            message: msg,
+            freq: f,
+            bar_index: barIdx,
+            time: this.context.data.openTime?.data?.[barIdx] ?? 0,
+        });
+    }
+}
+
 export class Core {
     constructor(private context: any) {}
     private extractPlotOptions(options: PlotCharOptions) {
@@ -151,11 +213,27 @@ export class Core {
         return NaN;
     }
 
-    alertcondition(condition, title, message) {
-        //console.warn('alertcondition called but is currently not implemented', condition, title, message);
-    }
-    alert(...args: any[]) {
-        console.warn('alert called but is currently not implemented', args);
+    alertcondition(condition: any, title?: any, message?: any) {
+        const cond = Series.from(condition).get(0);
+        if (!cond) return;
+
+        const barIdx = this.context.idx;
+        const isRealtime = this.context.pine?.barstate?.isrealtime ?? (barIdx === this.context.length - 1);
+        const alertMode = this.context._alertMode || 'realtime';
+
+        // In realtime mode, skip historical bars (matches TradingView behavior)
+        if (alertMode === 'realtime' && !isRealtime) return;
+
+        const t = title ? Series.from(title).get(0) : '';
+        const m = message ? Series.from(message).get(0) : '';
+
+        this.context.alerts.push({
+            type: 'alertcondition',
+            title: t,
+            message: m,
+            bar_index: barIdx,
+            time: this.context.data.openTime?.data?.[barIdx] ?? 0,
+        });
     }
     error(...args: any[]) {
         console.error('error called but is currently not implemented', args);

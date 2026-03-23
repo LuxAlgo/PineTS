@@ -18,6 +18,7 @@ This guide explains how to initialize PineTS and run indicators or strategies wi
 -   [The stream() Method](#the-stream-method)
 -   [Context Object](#context-object)
 -   [Return Values](#return-values)
+-   [Alerts](#alerts)
 -   [Complete Examples](#complete-examples)
 
 ---
@@ -340,6 +341,16 @@ evt.on('data', (context) => {
     console.log('New data:', context.result);
 });
 
+// Handle alert events (from alert() and alertcondition() calls)
+evt.on('alert', (alert) => {
+    console.log('Alert:', alert.message);
+});
+
+// Handle runtime warnings (non-blocking, e.g. array OOB)
+evt.on('warning', (warning) => {
+    console.warn('Warning:', warning.message);
+});
+
 // Handle errors
 evt.on('error', (error) => {
     console.error('Stream error:', error);
@@ -348,6 +359,15 @@ evt.on('error', (error) => {
 // Stop streaming
 // evt.stop();
 ```
+
+**Available events:**
+
+| Event | Payload | Description |
+| --- | --- | --- |
+| `'data'` | `Context` | New bar data processed |
+| `'alert'` | `{ type, message, title?, freq?, bar_index, time }` | Alert or alertcondition fired |
+| `'warning'` | `{ message, method?, bar }` | Non-blocking runtime warning |
+| `'error'` | `Error` | Fatal error (script halted) |
 
 ---
 
@@ -400,6 +420,8 @@ interface Context {
     // Results
     result: any; // Computed results
     plots: any; // Plot data
+    alerts: any[]; // Alert events from alert() and alertcondition()
+    warnings: any[]; // Runtime warnings (e.g. array OOB)
 
     // Market context
     marketData: any[]; // Raw market data
@@ -807,6 +829,44 @@ try {
     console.error('Error running indicator:', error);
 }
 ```
+
+---
+
+## Alerts
+
+PineTS supports `alert()` and `alertcondition()` from Pine Script. Alerts are captured as events that your application can act on — send webhooks, trigger trades, or log signals.
+
+### Quick Example
+
+```typescript
+const pine = new PineTS(Provider.Binance, 'BTCUSDT', 'D', 100);
+
+const code = `
+//@version=6
+indicator("EMA Cross Alert")
+if ta.crossover(ta.ema(close, 9), ta.ema(close, 21))
+    alert("Bullish cross!", alert.freq_once_per_bar)
+plot(close)
+`;
+
+// With run() — alerts on context
+const ctx = await pine.run(code);
+console.log(ctx.alerts); // [{type: 'alert', message: 'Bullish cross!', ...}]
+
+// With stream() — real-time alert events
+const evt = pine.stream(code, { live: true });
+evt.on('alert', (a) => console.log('ALERT:', a.message));
+```
+
+### Backtest Mode
+
+By default, alerts only fire on the last (realtime) bar. For backtesting, enable alerts on all bars:
+
+```typescript
+pine.setAlertMode('all'); // Fire alerts on every bar
+```
+
+For full documentation including frequency constants, alert modes, and complete examples, see the **[Alerts](../alerts/)** page.
 
 ---
 
