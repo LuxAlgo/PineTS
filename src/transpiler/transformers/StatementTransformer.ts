@@ -112,6 +112,13 @@ export function transformAssignmentExpression(node: any, scopeManager: ScopeMana
                 const getCall = ASTFactory.createGetCall(contextVarRef, 0);
                 rootOwner.object = getCall;
             }
+            // Function parameters (local series vars) also need unwrapping for UDT field assignment:
+            // w.val = x  →  $.get(w, 0).val = x
+            else if (scopeManager.isLocalSeriesVar(name)) {
+                const plainId = ASTFactory.createIdentifier(name);
+                plainId._skipTransformation = true;
+                rootOwner.object = ASTFactory.createGetCall(plainId, 0);
+            }
         }
     }
 
@@ -1180,7 +1187,8 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                 node.argument.type === 'LogicalExpression' ||
                 node.argument.type === 'ConditionalExpression' ||
                 node.argument.type === 'CallExpression' ||
-                node.argument.type === 'UnaryExpression'
+                node.argument.type === 'UnaryExpression' ||
+                node.argument.type === 'AssignmentExpression'
             ) {
                 // For complex expressions, walk the AST and transform all identifiers and expressions
                 walk.recursive(node.argument, scopeManager, {

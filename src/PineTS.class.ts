@@ -783,6 +783,13 @@ export class PineTS {
                 context.result.push(result);
             }
 
+            // Sync drawing object plots after all mutations for this bar.
+            // Serializes the current state of labels/lines/boxes/etc. into plain objects
+            // so that context.plots contains safe, JSON-serializable data.
+            for (const helper of context._drawingHelpers) {
+                if (helper.syncToPlot) helper.syncToPlot();
+            }
+
             //shift context
             const shiftVariables = (container: any) => {
                 for (let ctxVarName of contextVarNames) {

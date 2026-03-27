@@ -82,6 +82,28 @@ export class TableObject {
         this._deleted = true;
     }
 
+    toPlotData(): any {
+        // Deep-copy cells to avoid exposing internal mutable state
+        const cellsCopy = this.cells.map(row =>
+            row.map(cell => cell ? { ...cell } : null)
+        );
+        return {
+            id: this.id,
+            position: this.position,
+            columns: this.columns,
+            rows: this.rows,
+            bgcolor: this.bgcolor,
+            frame_color: this.frame_color,
+            frame_width: this.frame_width,
+            border_color: this.border_color,
+            border_width: this.border_width,
+            force_overlay: this.force_overlay,
+            _deleted: this._deleted,
+            cells: cellsCopy,
+            merges: this.merges.map(m => ({ ...m })),
+        };
+    }
+
     setCell(column: number, row: number, props: Partial<TableCell>): void {
         if (row < 0 || row >= this.rows || column < 0 || column >= this.columns) return;
 

@@ -52,4 +52,23 @@ export class LinefillObject {
     delete(): void {
         this._deleted = true;
     }
+
+    toPlotData(): any {
+        // Inline line data so consumers don't need raw LineObject references
+        const serializeLine = (ln: LineObject | null) => {
+            if (!ln) return null;
+            return {
+                id: ln.id, x1: ln.x1, y1: ln.y1, x2: ln.x2, y2: ln.y2,
+                xloc: ln.xloc, extend: ln.extend, color: ln.color,
+                style: ln.style, width: ln.width, _deleted: ln._deleted,
+            };
+        };
+        return {
+            id: this.id,
+            line1: serializeLine(this.line1),
+            line2: serializeLine(this.line2),
+            color: this.color,
+            _deleted: this._deleted,
+        };
+    }
 }
