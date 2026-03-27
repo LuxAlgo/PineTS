@@ -41,7 +41,7 @@ export class LabelHelper {
         }
     }
 
-    private _syncToPlot() {
+    public syncToPlot() {
         this._ensurePlotsEntry();
         // Store ALL labels as a single array value at the first bar's time.
         // Using a live reference so setter mutations are reflected automatically.
@@ -51,7 +51,7 @@ export class LabelHelper {
         const time = this.context.marketData[0]?.openTime || 0;
         this.context.plots['__labels__'].data = [{
             time,
-            value: this._labels,
+            value: this._labels.map(lbl => lbl.toPlotData()),
             options: { style: 'label' },
         }];
     }
@@ -115,7 +115,7 @@ export class LabelHelper {
         lbl._helper = this;
         lbl._createdAtBar = this.context.idx;
         this._labels.push(lbl);
-        this._syncToPlot();
+        this.syncToPlot();
         return lbl;
     }
 
@@ -248,7 +248,7 @@ export class LabelHelper {
         lbl._helper = this;
         lbl._createdAtBar = this.context.idx;
         this._labels.push(lbl);
-        this._syncToPlot();
+        this.syncToPlot();
         return lbl;
     }
 
@@ -268,7 +268,7 @@ export class LabelHelper {
      */
     rollbackFromBar(barIdx: number): void {
         this._labels = this._labels.filter((l) => l._createdAtBar < barIdx);
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     // --- Style constants ---

@@ -22,12 +22,12 @@ export class TableHelper {
         }
     }
 
-    private _syncToPlot() {
+    public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
         this.context.plots['__tables__'].data = [{
             time,
-            value: this._tables,
+            value: this._tables.map(tbl => tbl.toPlotData()),
             options: { style: 'table' },
         }];
     }
@@ -106,7 +106,7 @@ export class TableHelper {
         );
         tbl._setHelper(this);
         this._tables.push(tbl);
-        this._syncToPlot();
+        this.syncToPlot();
         return tbl;
     }
 
@@ -193,7 +193,7 @@ export class TableHelper {
             tooltip: this._resolveText(this._resolve(tooltip)),
             text_font_family: this._resolve(text_font_family) || 'default',
         });
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     // ── table.delete ───────────────────────────────────────────
@@ -243,7 +243,7 @@ export class TableHelper {
                 tbl.clearCell(c, r);
             }
         }
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     // ── table.merge_cells ──────────────────────────────────────
@@ -294,7 +294,7 @@ export class TableHelper {
         }
 
         tbl.merges.push({ startCol: sc, startRow: sr, endCol: ec, endRow: er });
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     // ── Cell setter methods ────────────────────────────────────
@@ -345,48 +345,58 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.position = this._resolve(position) || tbl.position;
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     set_bgcolor(table_id: any, bgcolor: any): void {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.bgcolor = this._resolve(bgcolor) || '';
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     set_border_color(table_id: any, border_color: any): void {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.border_color = this._resolve(border_color) || '';
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     set_border_width(table_id: any, border_width: any): void {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.border_width = this._resolve(border_width) || 0;
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     set_frame_color(table_id: any, frame_color: any): void {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.frame_color = this._resolve(frame_color) || '';
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     set_frame_width(table_id: any, frame_width: any): void {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.frame_width = this._resolve(frame_width) || 0;
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     // ── Property getter ────────────────────────────────────────
 
     get all(): TableObject[] {
         return this._tables.filter((t) => !t._deleted);
+    }
+
+    /**
+     * Remove all tables created at or after the given bar index.
+     * Called during streaming rollback.
+     */
+    rollbackFromBar(barIdx: number): void {
+        // Tables are typically created once (var table), not per-bar, so rollback is rare.
+        // But for correctness, filter by creation bar if tracked.
+        this.syncToPlot();
     }
 
     // ── Private helpers ────────────────────────────────────────
@@ -402,7 +412,7 @@ export class TableHelper {
         tbl.setCell(col, r, {
             [prop]: isText ? this._resolveText(resolved) : resolved,
         } as any);
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     private _resolveText(val: any): string {

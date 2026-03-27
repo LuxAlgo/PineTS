@@ -24,7 +24,7 @@ export class PolylineHelper {
         }
     }
 
-    private _syncToPlot() {
+    public syncToPlot() {
         this._ensurePlotsEntry();
         // Store ALL polylines as a single array value at the first bar's time.
         // Same aggregation pattern as lines and linefills — prevents sparse array
@@ -32,7 +32,7 @@ export class PolylineHelper {
         const time = this.context.marketData[0]?.openTime || 0;
         this.context.plots['__polylines__'].data = [{
             time,
-            value: this._polylines,
+            value: this._polylines.map(pl => pl.toPlotData()),
             options: { style: 'drawing_polyline' },
         }];
     }
@@ -152,7 +152,7 @@ export class PolylineHelper {
         );
         pl._createdAtBar = this.context.idx;
         this._polylines.push(pl);
-        this._syncToPlot();
+        this.syncToPlot();
         return pl;
     }
 
@@ -177,6 +177,6 @@ export class PolylineHelper {
      */
     rollbackFromBar(barIdx: number): void {
         this._polylines = this._polylines.filter((pl) => pl._createdAtBar < barIdx);
-        this._syncToPlot();
+        this.syncToPlot();
     }
 }

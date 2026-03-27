@@ -31,21 +31,22 @@ export function mult(context: Context) {
             }
             return newMatrix;
         } else if (id2 instanceof PineArrayObject || Array.isArray((id2 as any).array || id2)) {
-            // Vector multiplication
+            // Vector multiplication — returns a PineArrayObject (flat vector),
+            // matching TradingView behavior where matrix.mult(vector) → vector.
             const vec = (id2 as any).array || (id2 as any);
             if (cols1 !== vec.length) {
-                return new PineMatrixObject(0, 0, NaN, context);
+                return new PineArrayObject([], 'float' as any, context);
             }
 
-            const newMatrix = new PineMatrixObject(rows1, 1, 0, context);
+            const result: number[] = [];
             for (let i = 0; i < rows1; i++) {
                 let sum = 0;
                 for (let j = 0; j < cols1; j++) {
                     sum += id.matrix[i][j] * vec[j];
                 }
-                newMatrix.matrix[i][0] = sum;
+                result.push(sum);
             }
-            return newMatrix;
+            return new PineArrayObject(result, 'float' as any, context);
         } else {
             // Scalar multiplication
             const scalar = id2 as number;

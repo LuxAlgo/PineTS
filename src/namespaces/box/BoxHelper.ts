@@ -42,12 +42,12 @@ export class BoxHelper {
         }
     }
 
-    private _syncToPlot() {
+    public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
         this.context.plots['__boxes__'].data = [{
             time,
-            value: this._boxes,
+            value: this._boxes.map(bx => bx.toPlotData()),
             options: { style: 'drawing_box' },
         }];
     }
@@ -117,7 +117,7 @@ export class BoxHelper {
         b._helper = this;
         b._createdAtBar = this.context.idx;
         this._boxes.push(b);
-        this._syncToPlot();
+        this.syncToPlot();
         return b;
     }
 
@@ -309,7 +309,7 @@ export class BoxHelper {
         b._helper = this;
         b._createdAtBar = this.context.idx;
         this._boxes.push(b);
-        this._syncToPlot();
+        this.syncToPlot();
         return b;
     }
 
@@ -328,6 +328,6 @@ export class BoxHelper {
      */
     rollbackFromBar(barIdx: number): void {
         this._boxes = this._boxes.filter((b) => b._createdAtBar < barIdx);
-        this._syncToPlot();
+        this.syncToPlot();
     }
 }

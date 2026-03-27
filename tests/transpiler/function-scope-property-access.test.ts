@@ -56,7 +56,7 @@ describe('Function-scope property access in namespace args — transpiler output
     // hoisted line.param() uses the raw parameter, NOT a $.let reference.
     // -----------------------------------------------------------------------
 
-    it('function parameter property access stays as raw identifier', () => {
+    it('function parameter property access is unwrapped via $.get()', () => {
         const code = `
 //@version=5
 indicator("fn param prop access")
@@ -70,9 +70,10 @@ deleteZoneLine(MyZone zone) =>
 plot(close)
 `;
         const output = transpileToString(code);
-        // Function params are NOT renamed — zone.zoneLine stays as raw identifier
-        expect(output).toMatch(/zone\.zoneLine/);
-        // Must NOT be wrapped in $.let or $$.let
+        // Function params need $.get(zone, 0).zoneLine to unwrap the Series wrapper
+        // and access the UDT field correctly
+        expect(output).toMatch(/\$\.get\(zone, 0\)\.zoneLine/);
+        // Must NOT be wrapped in $.let or $$.let (params stay as plain identifiers)
         expect(output).not.toMatch(/\$\.let\.\w*zone/);
         expect(output).not.toMatch(/\$\$\.let\.\w*zone/);
     });

@@ -50,4 +50,17 @@ export class PolylineObject {
     delete(): void {
         this._deleted = true;
     }
+
+    toPlotData(): any {
+        return {
+            id: this.id,
+            points: this.points.map(pt => ({
+                time: pt.time, index: pt.index, price: pt.price,
+            })),
+            curved: this.curved, closed: this.closed, xloc: this.xloc,
+            line_color: this.line_color, fill_color: this.fill_color,
+            line_style: this.line_style, line_width: this.line_width,
+            force_overlay: this.force_overlay, _deleted: this._deleted,
+        };
+    }
 }
