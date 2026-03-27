@@ -9,6 +9,20 @@ const PLOT_SIGNATURE = [
 ];
 
 //prettier-ignore
+const PLOTCHAR_SIGNATURE = [
+    'series', 'title', 'char', 'location', 'color', 'offset', 'text', 'textcolor',
+    'editable', 'size', 'show_last', 'display', 'format', 'precision', 'force_overlay',
+];
+
+//prettier-ignore
+const PLOTCHAR_ARGS_TYPES = {
+    series: 'series', title: 'string', char: 'string', location: 'string',
+    color: 'color', offset: 'number', text: 'string', textcolor: 'color',
+    editable: 'boolean', size: 'string', show_last: 'number', display: 'string',
+    format: 'string', precision: 'number', force_overlay: 'boolean',
+};
+
+//prettier-ignore
 const PLOT_SHAPE_SIGNATURE = [
     'series', 'title', 'style', 'location', 'color', 'offset', 'text', 'textcolor',
     'editable', 'size', 'show_last', 'display', 'format', 'precision', 'force_overlay',
@@ -193,7 +207,7 @@ export class PlotHelper {
     //in the current implementation, plot functions are only used to collect data for the plots array and map it to the market data
     plotchar(...args) {
         const callsiteId = extractCallsiteId(args);
-        const _parsed = parseArgsForPineParams<PlotOptions>(args, PLOT_SIGNATURE, PLOT_ARGS_TYPES);
+        const _parsed = parseArgsForPineParams<PlotCharOptions>(args, PLOTCHAR_SIGNATURE, PLOTCHAR_ARGS_TYPES);
         const { series, title, ...others } = _parsed;
         const options = this.extractPlotOptions(others);
         const plotKey = this._resolvePlotKey(title, callsiteId);
@@ -208,6 +222,14 @@ export class PlotHelper {
             title,
             time: this.context.marketData[this.context.idx].openTime,
             value: value,
+            options: {
+                char: options.char,
+                color: options.color,
+                textcolor: options.textcolor,
+                location: options.location,
+                size: options.size,
+                offset: options.offset,
+            },
         });
         return this.context.plots[plotKey];
     }

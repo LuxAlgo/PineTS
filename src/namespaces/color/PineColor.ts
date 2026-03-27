@@ -115,6 +115,9 @@ export class PineColor {
         // If not a string (e.g. NaN for na), return as-is
         if (!color || typeof color !== 'string') return color;
 
+        // Treat NaN transparency as "no transparency specified" (keep original color)
+        if (typeof a === 'number' && isNaN(a)) a = undefined;
+
         // Handle hexadecimal colors
         if (color.startsWith('#')) {
             const hex = color.slice(1);
@@ -164,6 +167,8 @@ export class PineColor {
 
     // ── color.rgb(r, g, b, a?) ────────────────────────────────────────
     rgb(r: number, g: number, b: number, a?: number) {
+        // Treat NaN transparency as "no transparency" (fully opaque)
+        if (typeof a === 'number' && isNaN(a)) a = undefined;
         return a != null ? `rgba(${r}, ${g}, ${b}, ${(100 - a) / 100})` : `rgb(${r}, ${g}, ${b})`;
     }
 

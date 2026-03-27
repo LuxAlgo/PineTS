@@ -105,6 +105,7 @@ export class LineObject {
             style: this.style,
             width: this.width,
             force_overlay: this.force_overlay,
+            _deleted: this._deleted,
         };
     }
 }

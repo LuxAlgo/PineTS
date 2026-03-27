@@ -18,6 +18,7 @@ export function crossunder(context: any) {
         const prev2 = s2.get(1);
 
         // Check if source1 crossed below source2
-        return prev1 > prev2 && current1 < current2;
+        // TradingView: previous was at or above, current is strictly below
+        return prev1 >= prev2 && current1 < current2;
     };
 }

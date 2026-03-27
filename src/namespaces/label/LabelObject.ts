@@ -119,6 +119,7 @@ export class LabelObject {
             tooltip: this.tooltip,
             text_font_family: this.text_font_family,
             force_overlay: this.force_overlay,
+            _deleted: this._deleted,
         };
     }
 }

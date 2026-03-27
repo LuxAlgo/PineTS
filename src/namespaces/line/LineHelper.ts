@@ -39,7 +39,7 @@ export class LineHelper {
         }
     }
 
-    private _syncToPlot() {
+    public syncToPlot() {
         this._ensurePlotsEntry();
         // Store ALL lines as a single array value at the first bar's time.
         // Using a live reference so setter mutations are reflected automatically.
@@ -48,7 +48,7 @@ export class LineHelper {
         const time = this.context.marketData[0]?.openTime || 0;
         this.context.plots['__lines__'].data = [{
             time,
-            value: this._lines,
+            value: this._lines.map(ln => ln.toPlotData()),
             options: { style: 'drawing_line' },
         }];
     }
@@ -107,7 +107,7 @@ export class LineHelper {
         ln._helper = this;
         ln._createdAtBar = this.context.idx;
         this._lines.push(ln);
-        this._syncToPlot();
+        this.syncToPlot();
         return ln;
     }
 
@@ -268,7 +268,7 @@ export class LineHelper {
         ln._helper = this;
         ln._createdAtBar = this.context.idx;
         this._lines.push(ln);
-        this._syncToPlot();
+        this.syncToPlot();
         return ln;
     }
 
@@ -288,7 +288,7 @@ export class LineHelper {
      */
     rollbackFromBar(barIdx: number): void {
         this._lines = this._lines.filter((l) => l._createdAtBar < barIdx);
-        this._syncToPlot();
+        this.syncToPlot();
     }
 
     // --- Style constants ---

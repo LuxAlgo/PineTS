@@ -387,6 +387,21 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
         }
     }
 
+    // Function parameters (local series vars) with non-computed property access (e.g. w.val)
+    // need unwrapping: w.val → $.get(w, 0).val
+    // The parameter is a Series wrapping a UDT; without $.get(), .val accesses the Series, not the UDT.
+    if (
+        !memberNode.computed &&
+        memberNode.object &&
+        memberNode.object.type === 'Identifier' &&
+        scopeManager.isLocalSeriesVar(memberNode.object.name)
+    ) {
+        const plainId = ASTFactory.createIdentifier(memberNode.object.name);
+        plainId._skipTransformation = true;
+        memberNode.object = ASTFactory.createGetCall(plainId, 0);
+        return;
+    }
+
     //if statment variables always need to be transformed
     const isIfStatement = scopeManager.getCurrentScopeType() == 'if';
     const isElseStatement = scopeManager.getCurrentScopeType() == 'els';
@@ -978,6 +993,12 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                 const contextVarRef = createScopedVariableReference(name, scopeManager);
                 const getCall = ASTFactory.createGetCall(contextVarRef, 0);
                 arg.object = getCall;
+            }
+            // Function parameters (local series vars) need $.get(w, 0).field unwrapping
+            else if (scopeManager.isLocalSeriesVar(name)) {
+                const plainId = ASTFactory.createIdentifier(name);
+                plainId._skipTransformation = true;
+                arg.object = ASTFactory.createGetCall(plainId, 0);
             }
         } else if (arg.object.type === 'MemberExpression') {
             // Recursively handle nested member expressions like obj.prop1.prop2

@@ -1,5 +1,20 @@
 # Change Log
 
+## [0.9.8] - 2026-03-27 - TA Cross/CrossUnder, Matrix·Vector, Plot Serialization & Input Fixes
+
+### Fixed
+
+- **`ta.crossover` / `ta.crossunder`**: Boundary comparison now uses inclusive `<=` / `>=` where TradingView expects equality at the crossing bar (replaces strict `<` / `>`). Verified against TradingView reference logs.
+- **`matrix.mult` (vector operand)**: Multiplying a matrix by a row/column vector now returns a **`PineArrayObject`** instead of a **`PineMatrixObject`**, matching Pine Script semantics and fixing polyline-style indicators (e.g. Spline Quantile Regression).
+- **`plotchar` Signature**: Corrected `PLOTCHAR_SIGNATURE` so the **`char`** argument is in the proper parameter slot for dynamic `plotchar` calls.
+- **`TYPE_CHECK.color`**: Accepts **Series-wrapped** color values so colors passed through variables are not rejected and lost at runtime.
+- **`color.new` / `color.rgb`**: NaN / invalid transparency no longer produces malformed hex strings (e.g. `#787b86NAN00`).
+- **Bool `input`**: Fixed bool input default/coercion edge cases.
+- **UDT Return from User Functions**: Fixed user-defined functions that return a UDT instance.
+- **Drawing Object Serialization / `context.plot`**: Plot serialization avoids **circular references** when drawing objects are present.
+
+---
+
 ## [0.9.7] - 2026-03-23 - Alerts, Fill & Drawing Fixes, OOB Warnings (TV-Aligned)
 
 ### Added

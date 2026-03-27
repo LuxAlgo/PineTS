@@ -24,14 +24,14 @@ export class LinefillHelper {
         }
     }
 
-    private _syncToPlot() {
+    public syncToPlot() {
         this._ensurePlotsEntry();
         // Store ALL linefills as a single array value at the first bar's time.
         // Same aggregation pattern as lines and labels.
         const time = this.context.marketData[0]?.openTime || 0;
         this.context.plots['__linefills__'].data = [{
             time,
-            value: this._linefills,
+            value: this._linefills.map(lf => lf.toPlotData()),
             options: { style: 'linefill' },
         }];
     }
@@ -68,7 +68,7 @@ export class LinefillHelper {
         const lf = new LinefillObject(resolvedLine1, resolvedLine2, resolvedColor);
         lf._createdAtBar = this.context.idx;
         this._linefills.push(lf);
-        this._syncToPlot();
+        this.syncToPlot();
         return lf;
     }
 
@@ -110,6 +110,6 @@ export class LinefillHelper {
      */
     rollbackFromBar(barIdx: number): void {
         this._linefills = this._linefills.filter((lf) => lf._createdAtBar < barIdx);
-        this._syncToPlot();
+        this.syncToPlot();
     }
 }

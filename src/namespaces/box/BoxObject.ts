@@ -117,6 +117,20 @@ export class BoxObject {
         this._deleted = true;
     }
 
+    toPlotData(): any {
+        return {
+            id: this.id,
+            left: this.left, top: this.top, right: this.right, bottom: this.bottom,
+            xloc: this.xloc, extend: this.extend,
+            border_color: this.border_color, border_style: this.border_style, border_width: this.border_width,
+            bgcolor: this.bgcolor,
+            text: this.text, text_color: this.text_color, text_size: this.text_size,
+            text_halign: this.text_halign, text_valign: this.text_valign,
+            text_wrap: this.text_wrap, text_font_family: this.text_font_family, text_formatting: this.text_formatting,
+            force_overlay: this.force_overlay, _deleted: this._deleted,
+        };
+    }
+
     copy(): BoxObject {
         const b = new BoxObject(
             this.left, this.top, this.right, this.bottom,
