@@ -45,11 +45,27 @@ export class BoxHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
+        const allPlotData = this._boxes.map(bx => bx.toPlotData());
+
+        // Split force_overlay objects into a separate overlay plot (renders on main chart pane)
+        const regular = allPlotData.filter((b: any) => !b.force_overlay);
+        const overlay = allPlotData.filter((b: any) => b.force_overlay);
+
         this.context.plots['__boxes__'].data = [{
             time,
-            value: this._boxes.map(bx => bx.toPlotData()),
+            value: regular,
             options: { style: 'drawing_box' },
         }];
+
+        if (overlay.length > 0) {
+            this.context.plots['__boxes_overlay__'] = {
+                title: '__boxes_overlay__',
+                data: [{ time, value: overlay, options: { style: 'drawing_box' } }],
+                options: { style: 'drawing_box', overlay: true },
+            };
+        } else {
+            delete this.context.plots['__boxes_overlay__'];
+        }
     }
 
     private _resolvePoint(point: ChartPointObject): { x: number; xloc: string } {

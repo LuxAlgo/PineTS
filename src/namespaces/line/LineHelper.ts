@@ -41,16 +41,28 @@ export class LineHelper {
 
     public syncToPlot() {
         this._ensurePlotsEntry();
-        // Store ALL lines as a single array value at the first bar's time.
-        // Using a live reference so setter mutations are reflected automatically.
-        // Multiple drawing objects at the same bar would overwrite each other
-        // in QFChart's sparse data array, so we aggregate them into one entry.
         const time = this.context.marketData[0]?.openTime || 0;
+        const allPlotData = this._lines.map(ln => ln.toPlotData());
+
+        // Split force_overlay objects into a separate overlay plot (renders on main chart pane)
+        const regular = allPlotData.filter((l: any) => !l.force_overlay);
+        const overlay = allPlotData.filter((l: any) => l.force_overlay);
+
         this.context.plots['__lines__'].data = [{
             time,
-            value: this._lines.map(ln => ln.toPlotData()),
+            value: regular,
             options: { style: 'drawing_line' },
         }];
+
+        if (overlay.length > 0) {
+            this.context.plots['__lines_overlay__'] = {
+                title: '__lines_overlay__',
+                data: [{ time, value: overlay, options: { style: 'drawing_line' } }],
+                options: { style: 'drawing_line', overlay: true },
+            };
+        } else {
+            delete this.context.plots['__lines_overlay__'];
+        }
     }
 
     private _resolvePoint(point: ChartPointObject): { x: number; xloc: string } {
