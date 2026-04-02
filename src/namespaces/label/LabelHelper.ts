@@ -43,17 +43,28 @@ export class LabelHelper {
 
     public syncToPlot() {
         this._ensurePlotsEntry();
-        // Store ALL labels as a single array value at the first bar's time.
-        // Using a live reference so setter mutations are reflected automatically.
-        // Multiple label objects at the same bar would overwrite each other
-        // in QFChart's sparse data array, so we aggregate them into one entry
-        // (same approach as LineHelper._syncToPlot).
         const time = this.context.marketData[0]?.openTime || 0;
+        const allPlotData = this._labels.map(lbl => lbl.toPlotData());
+
+        // Split force_overlay objects into a separate overlay plot (renders on main chart pane)
+        const regular = allPlotData.filter((l: any) => !l.force_overlay);
+        const overlay = allPlotData.filter((l: any) => l.force_overlay);
+
         this.context.plots['__labels__'].data = [{
             time,
-            value: this._labels.map(lbl => lbl.toPlotData()),
+            value: regular,
             options: { style: 'label' },
         }];
+
+        if (overlay.length > 0) {
+            this.context.plots['__labels_overlay__'] = {
+                title: '__labels_overlay__',
+                data: [{ time, value: overlay, options: { style: 'label' } }],
+                options: { style: 'label', overlay: true },
+            };
+        } else {
+            delete this.context.plots['__labels_overlay__'];
+        }
     }
 
     /**

@@ -549,6 +549,23 @@ function transformOperand(node: any, scopeManager: ScopeManager, namespace: stri
                 NAMESPACES_LIKE.includes(node.object.name) &&
                 scopeManager.isContextBound(node.object.name);
 
+            // For computed access on NAMESPACES_LIKE identifiers (e.g. time[1], close[2]),
+            // produce $.get(identifier.__value, offset) instead of identifier.__value[offset].
+            const isNamespaceSubscript = node.computed &&
+                node.object.type === 'Identifier' &&
+                NAMESPACES_LIKE.includes(node.object.name) &&
+                scopeManager.isContextBound(node.object.name);
+
+            if (isNamespaceSubscript) {
+                const valueExpr = {
+                    type: 'MemberExpression',
+                    object: { type: 'Identifier', name: node.object.name },
+                    property: { type: 'Identifier', name: '__value' },
+                    computed: false,
+                };
+                return ASTFactory.createGetCall(valueExpr, node.property);
+            }
+
             // Handle array access
             const transformedObject = (node.object.type === 'Identifier' && !isNamespacePropAccess)
                 ? transformIdentifierForParam(node.object, scopeManager)

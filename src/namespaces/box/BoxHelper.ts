@@ -45,11 +45,27 @@ export class BoxHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
+        const allPlotData = this._boxes.map(bx => bx.toPlotData());
+
+        // Split force_overlay objects into a separate overlay plot (renders on main chart pane)
+        const regular = allPlotData.filter((b: any) => !b.force_overlay);
+        const overlay = allPlotData.filter((b: any) => b.force_overlay);
+
         this.context.plots['__boxes__'].data = [{
             time,
-            value: this._boxes.map(bx => bx.toPlotData()),
+            value: regular,
             options: { style: 'drawing_box' },
         }];
+
+        if (overlay.length > 0) {
+            this.context.plots['__boxes_overlay__'] = {
+                title: '__boxes_overlay__',
+                data: [{ time, value: overlay, options: { style: 'drawing_box' } }],
+                options: { style: 'drawing_box', overlay: true },
+            };
+        } else {
+            delete this.context.plots['__boxes_overlay__'];
+        }
     }
 
     private _resolvePoint(point: ChartPointObject): { x: number; xloc: string } {
@@ -172,32 +188,32 @@ export class BoxHelper {
     // --- Coordinate setters ---
 
     set_left(id: BoxObject, left: number): void {
-        if (id && !id._deleted) id.left = left;
+        if (id && !id._deleted) id.left = this._resolve(left);
     }
 
     set_right(id: BoxObject, right: number): void {
-        if (id && !id._deleted) id.right = right;
+        if (id && !id._deleted) id.right = this._resolve(right);
     }
 
     set_top(id: BoxObject, top: number): void {
-        if (id && !id._deleted) id.top = top;
+        if (id && !id._deleted) id.top = this._resolve(top);
     }
 
     set_bottom(id: BoxObject, bottom: number): void {
-        if (id && !id._deleted) id.bottom = bottom;
+        if (id && !id._deleted) id.bottom = this._resolve(bottom);
     }
 
     set_lefttop(id: BoxObject, left: number, top: number): void {
         if (id && !id._deleted) {
-            id.left = left;
-            id.top = top;
+            id.left = this._resolve(left);
+            id.top = this._resolve(top);
         }
     }
 
     set_rightbottom(id: BoxObject, right: number, bottom: number): void {
         if (id && !id._deleted) {
-            id.right = right;
-            id.bottom = bottom;
+            id.right = this._resolve(right);
+            id.bottom = this._resolve(bottom);
         }
     }
 
@@ -221,9 +237,9 @@ export class BoxHelper {
 
     set_xloc(id: BoxObject, left: number, right: number, xloc: string): void {
         if (id && !id._deleted) {
-            id.left = left;
-            id.right = right;
-            id.xloc = xloc;
+            id.left = this._resolve(left);
+            id.right = this._resolve(right);
+            id.xloc = this._resolve(xloc);
         }
     }
 
