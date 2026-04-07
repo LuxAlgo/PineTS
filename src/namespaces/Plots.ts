@@ -258,7 +258,9 @@ export class PlotHelper {
         //   - User didn't pass color  → use Pine Script default #2962ff
         //   - User passed a color string → use that value (e.g. '#089981')
         //   - User passed color = na  → undefined (QFChart hides the segment)
-        const rawColor = options.color;
+        let rawColor = options.color;
+        // Resolve bound functions (e.g. chart.fg_color, chart.bg_color)
+        if (typeof rawColor === 'function') rawColor = rawColor();
         const pointColor = hasExplicitColor
             ? (typeof rawColor === 'string' ? rawColor : undefined)
             : (rawColor || '#2962ff');

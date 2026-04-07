@@ -152,8 +152,25 @@ export class PolylineHelper {
         );
         pl._createdAtBar = this.context.idx;
         this._polylines.push(pl);
+        this._enforceMaxCount();
         this.syncToPlot();
         return pl;
+    }
+
+    private _enforceMaxCount(): void {
+        const maxCount = this.context.indicator?.max_polylines_count ?? 50;
+        const active = this._polylines.filter(p => !p._deleted);
+        if (active.length > maxCount) {
+            const toRemove = active.length - maxCount;
+            let removed = 0;
+            for (const p of this._polylines) {
+                if (removed >= toRemove) break;
+                if (!p._deleted) {
+                    p._deleted = true;
+                    removed++;
+                }
+            }
+        }
     }
 
     // polyline() direct call — mapped via NAMESPACES_LIKE → polyline.any()

@@ -133,8 +133,29 @@ export class BoxHelper {
         b._helper = this;
         b._createdAtBar = this.context.idx;
         this._boxes.push(b);
+        this._enforceMaxCount();
         this.syncToPlot();
         return b;
+    }
+
+    /**
+     * Enforce max_boxes_count: auto-delete the oldest non-deleted boxes
+     * when the active count exceeds the limit (FIFO eviction).
+     */
+    private _enforceMaxCount(): void {
+        const maxCount = this.context.indicator?.max_boxes_count ?? 50;
+        const active = this._boxes.filter(b => !b._deleted);
+        if (active.length > maxCount) {
+            const toRemove = active.length - maxCount;
+            let removed = 0;
+            for (const b of this._boxes) {
+                if (removed >= toRemove) break;
+                if (!b._deleted) {
+                    b._deleted = true;
+                    removed++;
+                }
+            }
+        }
     }
 
     // box.new() — supports both chart.point and legacy signatures
@@ -325,6 +346,7 @@ export class BoxHelper {
         b._helper = this;
         b._createdAtBar = this.context.idx;
         this._boxes.push(b);
+        this._enforceMaxCount();
         this.syncToPlot();
         return b;
     }

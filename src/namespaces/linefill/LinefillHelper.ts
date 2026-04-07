@@ -26,14 +26,28 @@ export class LinefillHelper {
 
     public syncToPlot() {
         this._ensurePlotsEntry();
-        // Store ALL linefills as a single array value at the first bar's time.
-        // Same aggregation pattern as lines and labels.
         const time = this.context.marketData[0]?.openTime || 0;
+        const allPlotData = this._linefills.map(lf => lf.toPlotData());
+
+        // Split force_overlay linefills into a separate overlay plot
+        const regular = allPlotData.filter((lf: any) => !lf.force_overlay);
+        const overlay = allPlotData.filter((lf: any) => lf.force_overlay);
+
         this.context.plots['__linefills__'].data = [{
             time,
-            value: this._linefills.map(lf => lf.toPlotData()),
+            value: regular,
             options: { style: 'linefill' },
         }];
+
+        if (overlay.length > 0) {
+            this.context.plots['__linefills_overlay__'] = {
+                title: '__linefills_overlay__',
+                data: [{ time, value: overlay, options: { style: 'linefill' } }],
+                options: { style: 'linefill', overlay: true },
+            };
+        } else {
+            delete this.context.plots['__linefills_overlay__'];
+        }
     }
 
     /**
@@ -55,6 +69,11 @@ export class LinefillHelper {
     // linefill.new(line1, line2, color) → series linefill
     // The transpiler may bundle named args into an object:
     //   linefill.new(line1, line2, {color: '#2196F3'})
+    //
+    // TradingView behavior: if a linefill already exists between the same two
+    // lines (in either order), the existing one is replaced rather than creating
+    // a duplicate. This prevents accumulation when linefill.new() is called
+    // every bar without explicitly deleting the old fill.
     new(line1: LineObject, line2: LineObject, color: any): LinefillObject {
         // Resolve thunks: in `var` UDT declarations, line.new() calls are hoisted
         // as thunks (functions). Resolve them here so LinefillObject stores actual
@@ -65,6 +84,25 @@ export class LinefillHelper {
         const rawColor = color && typeof color === 'object' && !Array.isArray(color) && 'color' in color
             ? color.color : color;
         const resolvedColor = this._resolve(rawColor) || '';
+
+        // Deduplicate: replace existing linefill between the same line pair
+        if (resolvedLine1 && resolvedLine2) {
+            const id1 = resolvedLine1.id;
+            const id2 = resolvedLine2.id;
+            for (const existing of this._linefills) {
+                if (existing._deleted) continue;
+                const eid1 = existing.line1?.id;
+                const eid2 = existing.line2?.id;
+                if ((eid1 === id1 && eid2 === id2) || (eid1 === id2 && eid2 === id1)) {
+                    // Update existing linefill in-place
+                    existing.color = resolvedColor;
+                    existing._createdAtBar = this.context.idx;
+                    this.syncToPlot();
+                    return existing;
+                }
+            }
+        }
+
         const lf = new LinefillObject(resolvedLine1, resolvedLine2, resolvedColor);
         lf._createdAtBar = this.context.idx;
         this._linefills.push(lf);

@@ -126,8 +126,25 @@ export class LabelHelper {
         lbl._helper = this;
         lbl._createdAtBar = this.context.idx;
         this._labels.push(lbl);
+        this._enforceMaxCount();
         this.syncToPlot();
         return lbl;
+    }
+
+    private _enforceMaxCount(): void {
+        const maxCount = this.context.indicator?.max_labels_count ?? 50;
+        const active = this._labels.filter(l => !l._deleted);
+        if (active.length > maxCount) {
+            const toRemove = active.length - maxCount;
+            let removed = 0;
+            for (const l of this._labels) {
+                if (removed >= toRemove) break;
+                if (!l._deleted) {
+                    l._deleted = true;
+                    removed++;
+                }
+            }
+        }
     }
 
     // label.new() — explicit Pine Script factory method
@@ -259,6 +276,7 @@ export class LabelHelper {
         lbl._helper = this;
         lbl._createdAtBar = this.context.idx;
         this._labels.push(lbl);
+        this._enforceMaxCount();
         this.syncToPlot();
         return lbl;
     }

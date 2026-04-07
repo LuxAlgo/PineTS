@@ -119,8 +119,25 @@ export class LineHelper {
         ln._helper = this;
         ln._createdAtBar = this.context.idx;
         this._lines.push(ln);
+        this._enforceMaxCount();
         this.syncToPlot();
         return ln;
+    }
+
+    private _enforceMaxCount(): void {
+        const maxCount = this.context.indicator?.max_lines_count ?? 50;
+        const active = this._lines.filter(l => !l._deleted);
+        if (active.length > maxCount) {
+            const toRemove = active.length - maxCount;
+            let removed = 0;
+            for (const l of this._lines) {
+                if (removed >= toRemove) break;
+                if (!l._deleted) {
+                    l._deleted = true;
+                    removed++;
+                }
+            }
+        }
     }
 
     // line.new() — explicit Pine Script factory method
@@ -280,6 +297,7 @@ export class LineHelper {
         ln._helper = this;
         ln._createdAtBar = this.context.idx;
         this._lines.push(ln);
+        this._enforceMaxCount();
         this.syncToPlot();
         return ln;
     }

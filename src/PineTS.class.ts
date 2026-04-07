@@ -326,8 +326,11 @@ export class PineTS {
                     if (enableLiveStream && !stopped) {
                         const currentCandle = ctx.marketData[ctx.idx];
                         const isHistorical = currentCandle && currentCandle.closeTime < Date.now();
+                        const isLastBar = ctx.idx >= ctx.marketData.length - 1;
 
-                        if (!isHistorical) {
+                        // Always throttle when on the last bar (caught up to current data).
+                        // For mid-stream historical pages, skip the delay so initial load is fast.
+                        if (!isHistorical || isLastBar) {
                             await new Promise((resolve) => setTimeout(resolve, interval));
                         }
                     }
@@ -406,12 +409,21 @@ export class PineTS {
             }
 
             // #3: Fetch new data, always starting from last candle's openTime
+            // Throttle: minimum 1 second between API fetches to prevent hammering
+            const fetchStart = Date.now();
             const { newCandles, updatedLastCandle } = await this._updateMarketData();
+            const fetchDuration = Date.now() - fetchStart;
 
             if (newCandles === 0 && !updatedLastCandle) {
                 // No new data available, yield null to signal caller
                 yield null as any;
                 continue;
+            }
+
+            // If only the last candle was updated (no new bars), throttle to avoid
+            // rapid-fire fetching when the market is closed or candle is still forming
+            if (newCandles === 0 && updatedLastCandle && fetchDuration < 1000) {
+                await new Promise((resolve) => setTimeout(resolve, 1000 - fetchDuration));
             }
 
             // #4: Data changed — bump version so secondary contexts know to refresh

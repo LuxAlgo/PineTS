@@ -63,11 +63,14 @@ export class LinefillObject {
                 style: ln.style, width: ln.width, _deleted: ln._deleted,
             };
         };
+        // Inherit force_overlay from lines: if either line is force_overlay, the fill is too
+        const forceOverlay = !!(this.line1?.force_overlay || this.line2?.force_overlay);
         return {
             id: this.id,
             line1: serializeLine(this.line1),
             line2: serializeLine(this.line2),
             color: this.color,
+            force_overlay: forceOverlay,
             _deleted: this._deleted,
         };
     }
