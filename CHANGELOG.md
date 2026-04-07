@@ -1,5 +1,20 @@
 # Change Log
 
+## [0.9.10] - 2026-04-07 - Drawing Caps, Linefill Dedupe & Live-Stream Throttle
+
+### Added
+
+- **`max_*_count` for drawing objects**: **Box**, **label**, **line**, and **polyline** helpers enforce **`max_boxes_count`**, **`max_labels_count`**, **`max_lines_count`**, and **`max_polylines_count`** from **`context.indicator`** (defaults **50**). When the active count exceeds the limit, the **oldest non-deleted** objects are marked deleted (**FIFO**), matching TradingView-style caps and avoiding unbounded growth.
+- **`linefill.new()` pair deduplication**: If a **linefill** already exists between the **same two lines** (either order), the existing object is **updated in place** (color, bar) instead of appending another — same behavior as TradingView when `linefill.new()` runs every bar without deleting the previous fill.
+- **`force_overlay` for linefills**: **`LinefillObject.toPlotData()`** sets **`force_overlay`** when **either** referenced line uses it; **`syncToPlot()`** emits **`__linefills_overlay__`** as a separate overlay plot (aligned with box/line/label splitting).
+- **Plot colors from chart theme getters**: **`plot()`** resolves **`options.color`** when it is a **bound function** (e.g. **`chart.fg_color`**, **`chart.bg_color`**) by calling it, so theme-driven colors work like on TradingView.
+
+### Fixed
+
+- **Live stream / pagination loop**: When **`runLive`** is on the **last bar** (caught up to the feed), the per-iteration delay now **always runs**, even if **`closeTime`** is still in the past — avoids tight loops that ignore **`interval`**. When a fetch **only updates the last candle** (no new bars), adds a **minimum ~1 s** spacing between API calls after the request completes, reducing provider hammering while a candle is forming or the market is quiet.
+
+---
+
 ## [0.9.9] - 2026-04-02 - Drawing Setters, NAMESPACES_LIKE Subscripts & force_overlay Sync
 
 ### Fixed
