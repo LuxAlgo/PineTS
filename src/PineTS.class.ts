@@ -380,6 +380,7 @@ export class PineTS {
 
         const startIdx = this.data.length - periods;
         let processedUpToIdx = startIdx; // Track what we've fully processed
+        let varSnapshot: any = null; // Snapshot of var state before last bar processing
 
         // Unified loop handles both historical and live data
         while (true) {
@@ -391,7 +392,23 @@ export class PineTS {
                 const toProcess = Math.min(unprocessedCount, pageSize);
                 const previousResultLength = this._getResultLength(context.result);
 
-                await this._executeIterations(context, this._transpiledCode, processedUpToIdx, processedUpToIdx + toProcess);
+                // If this batch includes the last bar AND live streaming is enabled,
+                // snapshot the state BEFORE processing the last bar so we can restore
+                // it cleanly on streaming re-execution.
+                const batchEnd = processedUpToIdx + toProcess;
+                if (enableLiveStream && batchEnd >= availableData && toProcess > 1) {
+                    // Process all bars except the last one
+                    await this._executeIterations(context, this._transpiledCode, processedUpToIdx, batchEnd - 1);
+                    // Snapshot state before the last bar
+                    varSnapshot = this._snapshotVarState(context);
+                    // Now process the last bar
+                    await this._executeIterations(context, this._transpiledCode, batchEnd - 1, batchEnd);
+                } else if (enableLiveStream && batchEnd >= availableData && toProcess === 1) {
+                    // Only 1 bar to process (the last one) — snapshot is already set from previous batch
+                    await this._executeIterations(context, this._transpiledCode, processedUpToIdx, batchEnd);
+                } else {
+                    await this._executeIterations(context, this._transpiledCode, processedUpToIdx, batchEnd);
+                }
 
                 processedUpToIdx += toProcess;
 
@@ -400,6 +417,8 @@ export class PineTS {
                 yield pageContext;
                 continue;
             }
+
+            // UNUSED — snapshot is now taken in #1 before processing the last bar
 
             // #2: Caught up to current data (processedUpToIdx === this.data.length)
 
@@ -435,9 +454,37 @@ export class PineTS {
             // and any `if barstate.islast` drawing logic never executes.
             context.length = this.data.length;
 
-            // Always recalculate last candle + new ones
-            // Remove last result (will be recalculated with fresh data)
-            this._removeLastResult(context);
+            // Restore variable state to the snapshot (before last bar was processed).
+            // This is more reliable than _removeLastResult's pop-based approach for
+            // var variables, which can drift when re-executing modifies values in-place.
+            // _restoreVarState handles var/let/const/params Series truncation,
+            // so we skip _removeLastResult (which would double-pop).
+            this._restoreVarState(context, varSnapshot);
+
+            // Still need to remove last result and market data series entries
+            // (these are not covered by _restoreVarState)
+            if (Array.isArray(context.result)) {
+                context.result.pop();
+            } else if (typeof context.result === 'object' && context.result !== null) {
+                for (let key in context.result) {
+                    if (Array.isArray(context.result[key])) {
+                        context.result[key].pop();
+                    }
+                }
+            }
+            // Pop market data series (close, open, high, low, volume, etc.)
+            context.data.close.data.pop();
+            context.data.open.data.pop();
+            context.data.high.data.pop();
+            context.data.low.data.pop();
+            context.data.volume.data.pop();
+            context.data.hl2.data.pop();
+            context.data.hlc3.data.pop();
+            context.data.ohlc4.data.pop();
+            context.data.hlcc4.data.pop();
+            context.data.openTime.data.pop();
+            if (context.data.closeTime) context.data.closeTime.data.pop();
+            context.data.bar_index.data.pop();
 
             // Step back one position to reprocess last candle
             processedUpToIdx = this.data.length - (newCandles + 1);
@@ -445,6 +492,11 @@ export class PineTS {
             // Roll back drawing objects created during the previous processing of
             // these bars so they don't accumulate on each streaming tick.
             context.rollbackDrawings(processedUpToIdx);
+
+            // If new candles arrived, invalidate snapshot (will re-snapshot after next full process)
+            if (newCandles > 0) {
+                varSnapshot = null;
+            }
 
             // Next iteration of loop will process from updated position (#1)
 
@@ -682,6 +734,87 @@ export class PineTS {
         rollbackVariables(context);
         if (context.lctx) {
             context.lctx.forEach((lctx: any) => rollbackVariables(lctx));
+        }
+    }
+
+    /**
+     * Snapshot the var/let/const/params Series state for streaming rollback.
+     * Captures the data array length and last value for each variable so we can
+     * restore to this exact state before re-executing the last bar.
+     * @private
+     */
+    private _snapshotVarState(context: Context): any {
+        const contextVarNames = ['const', 'var', 'let', 'params'];
+        const snapshot: any = { main: {}, lctx: [] };
+
+        const snapContainer = (container: any) => {
+            const snap: any = {};
+            for (const ctxVarName of contextVarNames) {
+                if (!container[ctxVarName]) continue;
+                snap[ctxVarName] = {};
+                for (const key in container[ctxVarName]) {
+                    const item = container[ctxVarName][key];
+                    if (item instanceof Series) {
+                        // Save length AND the last value so we can restore both
+                        const len = item.data.length;
+                        const lastVal = len > 0 ? item.data[len - 1] : undefined;
+                        snap[ctxVarName][key] = { len, lastVal };
+                    }
+                }
+            }
+            return snap;
+        };
+
+        snapshot.main = snapContainer(context);
+        if (context.lctx) {
+            const lctxSnaps: any[] = [];
+            context.lctx.forEach((lctx: any) => lctxSnaps.push(snapContainer(lctx)));
+            snapshot.lctx = lctxSnaps;
+        }
+
+        // Also snapshot result and data array lengths
+        snapshot.resultLength = this._getResultLength(context.result);
+        snapshot.dataLength = context.data.close?.data?.length ?? 0;
+
+        return snapshot;
+    }
+
+    /**
+     * Restore var/let/const/params Series state from a snapshot.
+     * Truncates each Series' data array back to the snapshotted length.
+     * @private
+     */
+    private _restoreVarState(context: Context, snapshot: any): void {
+        if (!snapshot) return;
+        const contextVarNames = ['const', 'var', 'let', 'params'];
+
+        const restoreContainer = (container: any, snap: any) => {
+            for (const ctxVarName of contextVarNames) {
+                if (!snap[ctxVarName] || !container[ctxVarName]) continue;
+                for (const key in snap[ctxVarName]) {
+                    const item = container[ctxVarName][key];
+                    const snapInfo = snap[ctxVarName][key];
+                    if (item instanceof Series && snapInfo && typeof snapInfo.len === 'number') {
+                        // Truncate back to snapshot length
+                        if (item.data.length > snapInfo.len) {
+                            item.data.length = snapInfo.len;
+                        }
+                        // Restore the last value (which may have been modified in-place)
+                        if (snapInfo.len > 0 && snapInfo.lastVal !== undefined) {
+                            item.data[snapInfo.len - 1] = snapInfo.lastVal;
+                        }
+                    }
+                }
+            }
+        };
+
+        restoreContainer(context, snapshot.main);
+        if (context.lctx && snapshot.lctx) {
+            let i = 0;
+            context.lctx.forEach((lctx: any) => {
+                if (snapshot.lctx[i]) restoreContainer(lctx, snapshot.lctx[i]);
+                i++;
+            });
         }
     }
 
