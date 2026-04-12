@@ -741,6 +741,21 @@ export class PineTS {
      * Snapshot the var/let/const/params Series state for streaming rollback.
      * Captures the data array length and last value for each variable so we can
      * restore to this exact state before re-executing the last bar.
+     *
+     * PERF NOTE: This currently snapshots ALL scopes (const, var, let, params).
+     * In practice, only `var` variables need snapshot/restore because:
+     *   - `let` variables are re-initialized every bar via $.init() — they reset naturally
+     *   - `const` variables are set once and never modified
+     *   - `params` are function parameters, not modified across bars
+     * Only `var` variables persist and get modified in-place by $.set() (e.g. n += 1),
+     * which causes drift on streaming re-execution.
+     * If this becomes a bottleneck, narrow to `['var']` only.
+     *
+     * An even lighter alternative: make $.set() on var Series append-only (push
+     * instead of in-place modify). Then the existing pop-based _removeLastResult
+     * would correctly revert var state without any snapshot. This would require
+     * changes to the core Series/set mechanics.
+     *
      * @private
      */
     private _snapshotVarState(context: Context): any {
