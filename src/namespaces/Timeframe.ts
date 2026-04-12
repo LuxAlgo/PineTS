@@ -1,4 +1,5 @@
 import { Series } from '../Series';
+import { alignToTimeframe, normalizeTimeframe as normalizeTFFromTime } from './Time';
 const TF_UNITS = ['S', 'D', 'W', 'M'];
 
 /**
@@ -101,11 +102,29 @@ export class Timeframe {
         return !this.isdwm;
     }
 
-    // public change(timeframe: string) {
-    //     const prevOpenTime = this.context.data.openTime.get(this.context.data.openTime.length - 2);
-    //     const currentOpenTime = this.context.data.openTime.get(this.context.data.openTime.length - 1);
+    /**
+     * Detects changes in the specified timeframe.
+     * Returns true on the first bar of a new HTF period, false otherwise.
+     *
+     * Works by aligning current and previous bar timestamps to the target
+     * timeframe and comparing — if they differ, a new period has started.
+     */
+    public change(timeframe: any): boolean {
+        const tf = typeof timeframe === 'function' ? timeframe() : timeframe;
+        const resolved = tf instanceof Series ? tf.get(0) : tf;
+        const normalizedTarget = normalizeTFFromTime(resolved || '');
+        if (!normalizedTarget) return false;
 
-    // }
+        const currentTime = Series.from(this.context.data.openTime).get(0);
+        const prevTime = Series.from(this.context.data.openTime).get(1);
+
+        if (isNaN(currentTime) || isNaN(prevTime)) return false;
+
+        const currentAligned = alignToTimeframe(currentTime, normalizedTarget);
+        const prevAligned = alignToTimeframe(prevTime, normalizedTarget);
+
+        return currentAligned !== prevAligned;
+    }
     public from_seconds(seconds: number) {
         if (seconds < 60) {
             //valid seconds timeframes are 1, 5, 15, 30, 45, everything in between should be rounded to the next valid timeframe

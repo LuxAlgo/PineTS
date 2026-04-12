@@ -3,6 +3,77 @@
 import { Series } from '../Series';
 import { parseArgsForPineParams } from './utils';
 
+// ── Timeframe alignment utilities ───────────────────────────────────
+
+/**
+ * Normalize a Pine Script timeframe string to a canonical form.
+ * e.g. "1D" → "D", "60" → "60", "1W" → "W", "" → ""
+ */
+export function normalizeTimeframe(tf: string): string {
+    if (!tf) return '';
+    const s = tf.trim().toUpperCase();
+    if (s === '1D' || s === 'D') return 'D';
+    if (s === '1W' || s === 'W') return 'W';
+    if (s === '1M' || s === 'M') return 'M';
+    // Strip leading "1" from minute timeframes only if it's just "1" (1 minute)
+    return s;
+}
+
+/**
+ * Compute the opening timestamp of the higher-timeframe bar that contains the given timestamp.
+ *
+ * For intraday TFs (minutes): floor to the nearest multiple of the TF duration within the day.
+ * For daily: floor to UTC day start (00:00 UTC).
+ * For weekly: floor to Monday 00:00 UTC.
+ * For monthly: floor to 1st of month 00:00 UTC.
+ */
+export function alignToTimeframe(timestamp: number, tf: string): number {
+    const MS_MIN = 60_000;
+    const MS_DAY = 86_400_000;
+
+    // Parse timeframe to minutes
+    const tfMinutes = parseTimeframeMinutes(tf);
+
+    if (tf === 'M') {
+        // Monthly: floor to 1st of month 00:00 UTC
+        const d = new Date(timestamp);
+        return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+    }
+
+    if (tf === 'W') {
+        // Weekly: floor to Monday 00:00 UTC
+        const d = new Date(timestamp);
+        const day = d.getUTCDay(); // 0=Sun, 1=Mon, ...
+        const daysToMonday = day === 0 ? 6 : day - 1;
+        return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - daysToMonday);
+    }
+
+    if (tf === 'D' || tfMinutes >= 1440) {
+        // Daily: floor to 00:00 UTC
+        return Math.floor(timestamp / MS_DAY) * MS_DAY;
+    }
+
+    // Intraday: floor to the nearest multiple of the TF duration
+    // Align relative to the start of the UTC day
+    const tfMs = tfMinutes * MS_MIN;
+    const dayStart = Math.floor(timestamp / MS_DAY) * MS_DAY;
+    const elapsed = timestamp - dayStart;
+    const alignedElapsed = Math.floor(elapsed / tfMs) * tfMs;
+    return dayStart + alignedElapsed;
+}
+
+/**
+ * Parse a Pine Script timeframe string to minutes.
+ * "5" → 5, "60" → 60, "240" → 240, "D" → 1440, "W" → 10080, "M" → 43200
+ */
+function parseTimeframeMinutes(tf: string): number {
+    if (tf === 'D') return 1440;
+    if (tf === 'W') return 10080;
+    if (tf === 'M') return 43200;
+    const n = parseInt(tf, 10);
+    return isNaN(n) ? 1440 : n;
+}
+
 // ── Shared timezone utility ──────────────────────────────────────────
 
 interface DateParts {
@@ -170,20 +241,33 @@ export class TimeHelper {
         const parsed = parseArgsForPineParams<any>(unwrapped, TIME_SIGNATURES, TIME_ARGS_TYPES);
 
         const barsBack = parsed.bars_back ?? 0;
-        const tfBarsBack = parsed.timeframe_bars_back ?? 0;
-        const totalOffset = barsBack + tfBarsBack;
+        const timeframe = parsed.timeframe || '';
 
+        // Get the current bar's timestamp (with bars_back offset on the chart TF)
         const timeSeries = this.context.data[this.dataField];
-        const currentTime = Series.from(timeSeries).get(totalOffset);
+        const currentTime = Series.from(timeSeries).get(barsBack);
+        if (isNaN(currentTime) || currentTime == null) return NaN;
 
-        // TODO: implement proper timeframe filtering
-        // For now, return the bar's time at the computed offset regardless of timeframe
-        if (parsed.session !== undefined) {
-            const timezone = parsed.timezone || this.context.pine?.syminfo?.timezone || 'UTC';
-            return this._isInSession(currentTime, parsed.session, timezone) ? currentTime : NaN;
+        // If timeframe is empty or matches the chart timeframe, return the bar's own time
+        const chartTF = this.context.timeframe || '';
+        const normalizedTF = normalizeTimeframe(timeframe);
+        const normalizedChartTF = normalizeTimeframe(chartTF);
+
+        let htfBarTime: number;
+        if (!normalizedTF || normalizedTF === normalizedChartTF) {
+            htfBarTime = currentTime;
+        } else {
+            // Compute the opening timestamp of the higher-timeframe bar that contains this bar
+            htfBarTime = alignToTimeframe(currentTime, normalizedTF);
         }
 
-        return currentTime;
+        // Session filtering
+        if (parsed.session !== undefined && parsed.session !== '') {
+            const timezone = parsed.timezone || this.context.pine?.syminfo?.timezone || 'UTC';
+            return this._isInSession(htfBarTime, parsed.session, timezone) ? htfBarTime : NaN;
+        }
+
+        return htfBarTime;
     }
 
     /**
