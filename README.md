@@ -14,25 +14,17 @@ PineTS enables algorithmic traders, quant developers and platforms to integrate 
   <a href="#license"><img src="https://img.shields.io/badge/License-AGPL--3.0%20%2F%20Commercial-blue.svg?style=flat-square" alt="License"></a>
   <a href="./.github/badges/coverage.svg"><img src="./.github/badges/coverage.svg" alt="Coverage"></a>
   <a href="https://quantforgeorg.github.io/PineTS/"><img src="https://img.shields.io/badge/docs-github--pages-blue?style=flat-square" alt="Documentation"></a>
-  <a href="https://www.reddit.com/r/QuantForge/"><img src="https://img.shields.io/reddit/subreddit-subscribers/QuantForge?style=flat-square&logo=reddit" alt="Reddit"></a>
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
   <a href="#features">Features</a> •
-  <a href="#live-demos">Live Demos</a> •
   <a href="#usage">Usage</a> •
   <a href="#api-coverage">API Coverage</a> •
   <a href="#documentation">Docs</a>
 </p>
 
 ---
-
-<p align="center">
-  <b>Sponsors</b><br />
-  <a href="https://luxalgo.com" target="_blank" rel="noopener noreferrer"><img src="./.github/images/luxalgo.png" alt="LuxAlgo" height="80px" /></a> &nbsp; 
-  <a href="https://github.com/sponsors/QuantForgeOrg" target="_blank" rel="noopener noreferrer"><img src="./.github/images/sponsor.png" alt="Sponsor" height="80px" /></a>
-</p>
 
 ## What is PineTS?
 
@@ -151,18 +143,6 @@ plot(sma, 'Signal');
 </td>
 </tr>
 </table>
-
----
-
-## Live Demos
-
-See PineTS in action with these browser-based examples:
-
-- **[Williams Vix Fix](https://quantforgeorg.github.io/PineTS/indicators/willvixfix/)** : Volatility-based indicator
-- **[Squeeze Momentum](https://quantforgeorg.github.io/PineTS/indicators/sqzmom/)** : Momentum oscillator
-- **[Playground](https://quantforge.org/playground/)** : Test your own Pine Script code
-
-_Demos are Built with PineTS + [QFChart](https://github.com/QuantForgeOrg/QFChart)_
 
 ---
 
@@ -375,12 +355,6 @@ PineTS aims for complete Pine Script API compatibility. Current status:
 
 ---
 
-## Related Projects
-
-- **[QFChart](https://github.com/QuantForgeOrg/QFChart)** : Charting library optimized for PineTS visualization
-
----
-
 ## Contributing
 
 Contributions are welcome! Whether it's:
@@ -416,10 +390,10 @@ PineTS is dual-licensed:
 
 - **[AGPL-3.0](./LICENSE)** — Free for everyone. You can use PineTS for personal projects, research, and internal tools without any obligation. The copyleft terms only apply if you **distribute** your application to others or **provide it as a network service** (e.g., SaaS, public API) — in that case, your full source code must also be released under AGPL-3.0.
 
-- **[Commercial License](./LICENSE-COMMERCIAL.md)** — For companies and individuals who want to use PineTS in proprietary or closed-source software without AGPL-3.0 obligations. [Contact us for licensing](https://quantforge.org/contact/).
+- **[Commercial License](./LICENSE-COMMERCIAL.md)** — For companies and individuals who want to use PineTS in proprietary or closed-source software without AGPL-3.0 obligations. [Contact us for licensing](business@luxalgo.com).
 
 ---
 
 <p align="center">
-  <sub>Built with passion by <a href="https://quantforge.org">QuantForge</a></sub>
+  <sub>Built with passion by <a href="https://www.luxalgo.com">LuxAlgo</a></sub>
 </p>
