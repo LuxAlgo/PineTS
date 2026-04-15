@@ -1,5 +1,20 @@
 # Change Log
 
+## [0.9.12] - 2026-04-15 - FMP Provider: `mintick`, Forex vs Crypto & Resilient `getSymbolInfo`
+
+### Added
+
+- **FMP `mintick` estimation**: After fetching candles, **`FMPProvider`** derives **`mintick`** from OHLC / close-to-close diffs (bucketed to a sensible tick size) and caches it; **`pricescale`** / **`minmove`** are computed from **`mintick`** instead of hardcoded **`0.01` / 100 / 1**.
+- **`mintick` cache & conditional `symbolInfo` cache**: Estimated **`mintick`** is stored per ticker after the first successful candle fetch; **`getSymbolInfo`** reuses a cached **`ISymbolInfo`** when **`mintick`** was derived from that data, avoiding redundant profile assembly with the same precision.
+
+### Fixed
+
+- **Forex vs crypto classification**: **Forex** is detected **before** crypto using a **6-letter pair** heuristic plus a **currency whitelist**, so pairs like **EURUSD** are no longer misclassified as crypto. Crypto suffix matching **excludes** known forex pairs and allows slightly longer tickers.
+- **`getSymbolInfo` without a profile**: If the FMP profile call fails or returns nothing, **`getSymbolInfo`** still builds **`ISymbolInfo`** from the **ticker** (exchange / type / session / timezone heuristics) instead of returning **`null`**.
+- **Forex session & timezone**: Forex symbols use **`Etc/UTC`** and session **`0000-0000`**; **base** / **quote** currency are parsed from the pair (**`EURUSD`** → EUR / USD).
+
+---
+
 ## [0.9.11] - 2026-04-12 - `time()` HTF Semantics, `timeframe.change()` & Live-Stream `var` Snapshots
 
 ### Added
