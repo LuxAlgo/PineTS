@@ -8,6 +8,14 @@ import { Kline, PeriodType, computeNextPeriodStart, computeSessionClose } from '
 
 const FMP_BASE_URL = 'https://financialmodelingprep.com';
 
+// Common ISO 4217 currency codes for forex pair detection
+const FOREX_CURRENCIES = new Set([
+    'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD',
+    'SEK', 'NOK', 'DKK', 'SGD', 'HKD', 'KRW', 'MXN', 'ZAR',
+    'TRY', 'BRL', 'INR', 'CNY', 'PLN', 'CZK', 'HUF', 'ILS',
+    'THB', 'TWD', 'PHP', 'IDR', 'MYR', 'RUB', 'CLP', 'COP',
+]);
+
 /**
  * Maps PineTS timeframes to FMP endpoint paths.
  *
@@ -197,6 +205,8 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
     private _apiKey: string | null = null;
     private _baseUrl: string = FMP_BASE_URL;
     private _profileCache: Map<string, FMPProfile> = new Map();
+    private _symbolInfoCache: Map<string, ISymbolInfo> = new Map();
+    private _mintickCache: Map<string, number> = new Map();
 
     constructor(config?: FMPProviderConfig) {
         super({ requiresApiKey: true, providerName: 'FMP' });
@@ -237,11 +247,22 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
                 return [];
             }
 
+            let klines: Kline[];
             if (mapping.type === 'intraday') {
-                return this._fetchIntradayData(tickerId, mapping.endpoint, mapping.interval!, sDate, eDate, limit);
+                klines = await this._fetchIntradayData(tickerId, mapping.endpoint, mapping.interval!, sDate, eDate, limit);
+            } else {
+                klines = await this._fetchDailyData(tickerId, sDate, eDate, limit);
             }
 
-            return this._fetchDailyData(tickerId, sDate, eDate, limit);
+            // Compute and cache mintick from historical data if not already cached
+            if (klines.length > 0 && !this._mintickCache.has(tickerId)) {
+                const mintick = this._estimateMintick(klines);
+                if (mintick !== undefined) {
+                    this._mintickCache.set(tickerId, mintick);
+                }
+            }
+
+            return klines;
         } catch (error) {
             console.error('Error in FMPProvider.getMarketData:', error);
             return [];
@@ -382,58 +403,69 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
     async getSymbolInfo(tickerId: string): Promise<ISymbolInfo> {
         this.ensureConfigured();
 
+        // Return cached symbolInfo if available
+        if (this._symbolInfoCache.has(tickerId)) {
+            return this._symbolInfoCache.get(tickerId)!;
+        }
+
         try {
             const profile = await this._fetchProfile(tickerId);
-            if (!profile) {
-                console.error(`FMP: Symbol ${tickerId} not found`);
-                return null;
-            }
 
-            const exchange = profile.exchange || '';
-            const timezone = EXCHANGE_TIMEZONE[exchange] || 'America/New_York';
-            const session = EXCHANGE_SESSION[exchange] || '0930-1600';
-
-            // Determine asset type
+            // Determine asset type from profile or ticker heuristics
+            // Check forex BEFORE crypto since EURUSD matches both patterns
             let type = 'stock';
-            if (profile.isEtf) type = 'etf';
-            else if (profile.isFund) type = 'fund';
-            else if (this._isCrypto(tickerId)) type = 'crypto';
+            if (profile?.isEtf) type = 'etf';
+            else if (profile?.isFund) type = 'fund';
             else if (this._isForex(tickerId)) type = 'forex';
+            else if (this._isCrypto(tickerId)) type = 'crypto';
+
+            const exchange = profile?.exchange || (type === 'crypto' ? 'CRYPTO' : type === 'forex' ? 'FX' : '');
+            const timezone = type === 'crypto' ? 'Etc/UTC' : type === 'forex' ? 'Etc/UTC' : (EXCHANGE_TIMEZONE[exchange] || 'America/New_York');
+            const session = type === 'crypto' ? '24x7' : type === 'forex' ? '0000-0000' : (EXCHANGE_SESSION[exchange] || '0930-1600');
+
+            // Derive currency from ticker for forex (e.g. EURUSD → quote = USD)
+            const currency = profile?.currency || (this._isForex(tickerId) ? tickerId.slice(3, 6) : 'USD');
+            const basecurrency = this._isForex(tickerId) ? tickerId.slice(0, 3) : (profile?.currency || 'USD');
+
+            // Use estimated mintick from historical data if available
+            const mintick = this._mintickCache.get(tickerId) ?? 0.01;
+            const pricescale = Math.round(1 / mintick);
+            const minmove = Math.round(mintick * pricescale);
 
             const symbolInfo: ISymbolInfo = {
                 // Symbol Identification
-                ticker: profile.symbol,
-                tickerid: `${exchange}:${profile.symbol}`,
+                ticker: profile?.symbol || tickerId,
+                tickerid: `${exchange}:${profile?.symbol || tickerId}`,
                 prefix: exchange,
-                root: profile.symbol,
-                description: profile.companyName || profile.symbol,
+                root: profile?.symbol || tickerId,
+                description: profile?.companyName || tickerId,
                 type,
-                main_tickerid: `${exchange}:${profile.symbol}`,
+                main_tickerid: `${exchange}:${profile?.symbol || tickerId}`,
                 current_contract: '',
-                isin: profile.isin || '',
+                isin: profile?.isin || '',
 
                 // Currency & Location
-                basecurrency: profile.currency || 'USD',
-                currency: profile.currency || 'USD',
-                timezone: type === 'crypto' ? 'Etc/UTC' : timezone,
-                country: profile.country || '',
+                basecurrency,
+                currency,
+                timezone,
+                country: profile?.country || '',
 
                 // Price & Contract Info
-                mintick: 0.01,
-                pricescale: 100,
-                minmove: 1,
+                mintick,
+                pricescale,
+                minmove,
                 pointvalue: 1,
                 mincontract: 0,
 
                 // Session & Market
-                session: type === 'crypto' ? '24x7' : session,
+                session,
                 volumetype: 'base',
                 expiration_date: 0,
 
                 // Company Data
-                employees: parseInt(profile.fullTimeEmployees) || 0,
-                industry: profile.industry || '',
-                sector: profile.sector || '',
+                employees: profile ? (parseInt(profile.fullTimeEmployees) || 0) : 0,
+                industry: profile?.industry || '',
+                sector: profile?.sector || '',
                 shareholders: 0,
                 shares_outstanding_float: 0,
                 shares_outstanding_total: 0,
@@ -456,6 +488,11 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
                 target_price_median: 0,
             };
 
+            // Cache when mintick was computed from real data
+            if (this._mintickCache.has(tickerId)) {
+                this._symbolInfoCache.set(tickerId, symbolInfo);
+            }
+
             return symbolInfo;
         } catch (error) {
             console.error('Error in FMPProvider.getSymbolInfo:', error);
@@ -464,6 +501,44 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
     }
 
     // ── Private helpers ──────────────────────────────────────────────────
+
+    /**
+     * Estimate mintick from historical OHLC data.
+     * Computes the smallest non-zero |close - open| and |high - low| diff,
+     * then rounds to the nearest power-of-10 bucket.
+     * Returns undefined if no valid diffs found.
+     */
+    private _estimateMintick(klines: Kline[]): number | undefined {
+        const diffs: number[] = [];
+        for (let i = 0; i < klines.length; i++) {
+            const k = klines[i];
+            const co = Math.abs(k.close - k.open);
+            const hl = Math.abs(k.high - k.low);
+            if (co > 0) diffs.push(co);
+            if (hl > 0) diffs.push(hl);
+            // Consecutive close-to-close diffs capture finer granularity
+            if (i > 0) {
+                const cc = Math.abs(k.close - klines[i - 1].close);
+                if (cc > 0) diffs.push(cc);
+            }
+        }
+
+        if (diffs.length === 0) return undefined;
+
+        const raw = Math.min(...diffs);
+
+        // Bucket by first significant digit: round to 1×10^k or 10×10^k
+        const k = Math.floor(Math.log10(raw));
+        const y = raw / (10 ** k);
+        const leading = Math.floor(y + 1e-12);
+        const bucketed = (leading < 5 ? 1 : 10) * (10 ** k);
+
+        // If bucketed >= 1, the data granularity is too coarse to determine
+        // the real tick size (e.g. BTC daily bars). Fall back to 0.01.
+        if (bucketed >= 1) return 0.01;
+
+        return bucketed;
+    }
 
     private async _fetchProfile(tickerId: string): Promise<FMPProfile | null> {
         // Check cache
@@ -519,13 +594,14 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
         return new Date(dateTimeStr.replace(' ', 'T') + 'Z').getTime();
     }
 
-    /** Heuristic: crypto tickers end with USD/USDT/BTC/ETH. */
-    private _isCrypto(tickerId: string): boolean {
-        return /^[A-Z]+(USD|USDT|BTC|ETH)$/.test(tickerId) && tickerId.length <= 10;
+    /** Heuristic: forex pairs are exactly 6 uppercase chars (two 3-letter currency codes). */
+    private _isForex(tickerId: string): boolean {
+        return /^[A-Z]{6}$/.test(tickerId) && FOREX_CURRENCIES.has(tickerId.slice(0, 3)) && FOREX_CURRENCIES.has(tickerId.slice(3, 6));
     }
 
-    /** Heuristic: forex pairs are 6 chars, two 3-letter currency codes. */
-    private _isForex(tickerId: string): boolean {
-        return /^[A-Z]{6}$/.test(tickerId) && !this._isCrypto(tickerId);
+    /** Heuristic: crypto tickers end with USD/USDT/BTC/ETH and are not forex pairs. */
+    private _isCrypto(tickerId: string): boolean {
+        if (this._isForex(tickerId)) return false;
+        return /^[A-Z]+(USD|USDT|BTC|ETH)$/.test(tickerId) && tickerId.length <= 15;
     }
 }
