@@ -13,35 +13,8 @@ With PineTS, you can create, test and visualize technical indicators using moder
 
 <div class="cta-container" style="text-align: center; margin: 2rem 0;">
   <a href="getting-started/" class="btn btn-primary fs-5 mb-4 mb-md-0 mr-2">Get Started →</a>
-  <a href="https://github.com/alaa-eddine/PineTS" class="btn btn-outline fs-5 mb-4 mb-md-0">View on GitHub</a>
+  <a href="https://github.com/LuxAlgo/PineTS" class="btn btn-outline fs-5 mb-4 mb-md-0">View on GitHub</a>
 </div>
-
-# Demo
-
-This is a BTCUSDT chart with the Williams Vix Fix indicator applied.
-The chart data and indicator are generated using PineTS, showcasing the capabilities of the library in creating interactive and dynamic charts.
-
-The visualization is done using the [QFChart](https://github.com/QuantForgeOrg/QFChart) library.
-
-<div id="container">
-    <p>
-        This is demo uses <a href="https://github.com/QuantForgeOrg/QFChart" target="_blank">QFChart</a> for visualization and 
-        <a href="https://github.com/QuantForgeOrg/PineTS" target="_blank">PineTS</a> library for market data loading and indicators processing.
-    </p>
-    <hr />
-    <div id="main-chart"></div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
-<!-- QFChart Library (Bundled with ECharts) -->
-<script src="./js/qfchart.min.browser.js"></script>
-
-<!-- Dependencies for Data Loading -->
-<script src="./js/pinets.dev.browser.js"></script>
-<script src="./js/indicators/sqzmom.js"></script>
-<script src="./js/indicators/macd.js"></script>
-<script src="./js/indicators/instit-bias.js"></script>
-<script src="./js/chart-script.js"></script>
 
 ---
 
@@ -66,18 +39,6 @@ Click here to [explore](lang-coverage.md) the [Pine Script language](lang-covera
 ### [API Coverage](api-coverage.md)
 
 Click [here](api-coverage.md) to check the implementation status of [Pine Script API](api-coverage.md) functions and methods in PineTS.
-
-## Demo Indicators
-
-### [WillVixFix Indicator](indicators/willvixfix/index.html)
-
-WillVixFix is a volatility-based indicator that helps identify potential reversal points in the market.
-Click [here](indicators/willvixfix/index.html) to see the demo.
-
-### [Squeeze Momentum Indicator](indicators/sqzmom/index.html)
-
-The Squeeze Momentum indicator identifies when the market is "squeezing" (low volatility) and about to break out with increased momentum.
-Click [here](indicators/sqzmom/index.html) to see the demo.
 
 ---
 
