@@ -3,24 +3,23 @@
 </p>
 
 <p align="center">
-  <strong>Run Pine Script Anywhere</strong><br>
-  Execute TradingView indicators in Node.js, browsers, and any JavaScript runtime<br />
-PineTS enables algorithmic traders, quant developers and platforms to integrate Pine Script logic directly into their infrastructure.  
+  <strong>Run Pine Script® Anywhere</strong><br>
+  Execute TradingView® indicators in Node.js, browsers, and any JavaScript runtime<br />
+PineTS enables algorithmic traders, quant developers, and platforms to integrate Pine Script® logic directly into their infrastructure.  
   
 </p>
 
 <p align="center">
+  <a href="https://www.luxalgo.com"><img src="https://img.shields.io/badge/Backed_by-LuxAlgo-4185DD.svg?style=flat-square" alt="Backed by LuxAlgo"></a>
   <a href="https://www.npmjs.com/package/pinets"><img src="https://img.shields.io/npm/v/pinets.svg?style=flat-square" alt="npm version"></a>
   <a href="#license"><img src="https://img.shields.io/badge/License-AGPL--3.0%20%2F%20Commercial-blue.svg?style=flat-square" alt="License"></a>
   <a href="./.github/badges/coverage.svg"><img src="./.github/badges/coverage.svg" alt="Coverage"></a>
   <a href="https://quantforgeorg.github.io/PineTS/"><img src="https://img.shields.io/badge/docs-github--pages-blue?style=flat-square" alt="Documentation"></a>
-  <a href="https://www.reddit.com/r/QuantForge/"><img src="https://img.shields.io/reddit/subreddit-subscribers/QuantForge?style=flat-square&logo=reddit" alt="Reddit"></a>
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
   <a href="#features">Features</a> •
-  <a href="#live-demos">Live Demos</a> •
   <a href="#usage">Usage</a> •
   <a href="#api-coverage">API Coverage</a> •
   <a href="#documentation">Docs</a>
@@ -28,22 +27,16 @@ PineTS enables algorithmic traders, quant developers and platforms to integrate 
 
 ---
 
-<p align="center">
-  <b>Sponsors</b><br />
-  <a href="https://luxalgo.com" target="_blank" rel="noopener noreferrer"><img src="./.github/images/luxalgo.png" alt="LuxAlgo" height="80px" /></a> &nbsp; 
-  <a href="https://github.com/sponsors/QuantForgeOrg" target="_blank" rel="noopener noreferrer"><img src="./.github/images/sponsor.png" alt="Sponsor" height="80px" /></a>
-</p>
-
 ## What is PineTS?
 
-**PineTS** is an open-source transpiler and runtime that seamlessly bridges Pine Script and the JavaScript ecosystem. Develop your indicators once and deploy them everywhere : on your servers, in the browser, or fully integrated into your trading platforms.
+**PineTS** is an open-source transpiler and runtime that seamlessly bridges Pine Script® and the JavaScript ecosystem. Develop your indicators once and deploy them everywhere: on your servers, in the browser, or fully integrated into your trading platforms.
 
 ```javascript
 import { PineTS, Provider } from 'pinets';
 
 const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', '1h', 100);
 
-// Run native Pine Script directly
+// Run native Pine Script® directly
 const { plots } = await pineTS.run(`
 //@version=5
 indicator("EMA Cross")
@@ -52,10 +45,12 @@ plot(ta.ema(close, 21), "Slow", color.red)
 `);
 ```
 
-> **About Pine Script™?**  
-> [Pine Script™](https://www.tradingview.com/pine-script-docs/welcome/) is a domain-specific programming language created by TradingView for writing custom technical analysis indicators and strategies.
+> **What is Pine Script®?**  
+> [Pine Script®](https://www.TradingView.com/pine-script-docs/welcome/) is a domain-specific programming language created by TradingView® for writing custom technical analysis indicators and strategies.
 
-> _**Disclaimer** : PineTS is an independent project and is not affiliated with, endorsed by, or associated with TradingView or Pine Script™. All trademarks and registered trademarks mentioned belong to their respective owners._
+> _**Disclaimer**: PineTS is an independently developed open-source compiler and runtime engine. LuxAlgo Global, LLC and the PineTS project are NOT affiliated with, sponsored by, endorsed by, or in any way officially associated with TradingView, Inc. "Pine Script®" and "TradingView®" are registered trademarks of TradingView, Inc._
+
+> ⭐ **If you find PineTS useful, please consider starring the repository to support the project!**
 
 ---
 
@@ -63,9 +58,9 @@ plot(ta.ema(close, 21), "Slow", color.red)
 
 | Challenge                                   | PineTS Solution                                      |
 | ------------------------------------------- | ---------------------------------------------------- |
-| Pine Script only runs on TradingView        | Run indicators on your own infrastructure            |
+| Pine Script® only runs on TradingView®        | Run indicators on your own infrastructure            |
 | Can't integrate indicators with custom apps | Full JavaScript/TypeScript integration               |
-| Limited to TradingView's data sources       | Use any data source (Binance, custom APIs, CSV)      |
+| Limited to TradingView®'s data sources       | Use any data source (Binance, custom APIs, CSV)      |
 | No programmatic access to indicator values  | Get raw values for backtesting, alerts, ML pipelines |
 | Can't run indicators server-side            | Works in Node.js, Deno, Bun, browsers                |
 
@@ -98,7 +93,7 @@ plot(sma20, "SMA 20")
 console.log('SMA values:', plots['SMA 20'].data);
 ```
 
-**That's it!** You're running Pine Script in JavaScript.
+**That's it!** You're running Pine Script® in JavaScript.
 
 ---
 
@@ -106,18 +101,18 @@ console.log('SMA values:', plots['SMA 20'].data);
 
 ### Core Capabilities
 
-- **Native Pine Script v5/v6** : Run original TradingView code directly _(experimental)_
+- **Native Pine Script® v5/v6** : Run original TradingView® code directly _(experimental)_
 - **60+ Technical Indicators** : SMA, EMA, RSI, MACD, Bollinger Bands, and more
-- **Time-Series Processing** : Full Pine Script semantics with lookback support
+- **Time-Series Processing** : Full Pine Script® semantics with lookback support
 - **Real-time Streaming** : Live data processing with event-based updates
 - **Multi-Timeframe Analysis** : `request.security()` for MTF indicators
-- **High Precision** : Matches TradingView's calculation precision
+- **High Precision** : Matches TradingView®'s calculation precision
 
 ### Two Ways to Write Indicators
 
 <table width="100%">
 <tr>
-<th>Native Pine Script</th>
+<th>Native Pine Script®</th>
 <th>PineTS Syntax (JavaScript)</th>
 </tr>
 <tr>
@@ -154,21 +149,9 @@ plot(sma, 'Signal');
 
 ---
 
-## Live Demos
-
-See PineTS in action with these browser-based examples:
-
-- **[Williams Vix Fix](https://quantforgeorg.github.io/PineTS/indicators/willvixfix/)** : Volatility-based indicator
-- **[Squeeze Momentum](https://quantforgeorg.github.io/PineTS/indicators/sqzmom/)** : Momentum oscillator
-- **[Playground](https://quantforge.org/playground/)** : Test your own Pine Script code
-
-_Demos are Built with PineTS + [QFChart](https://github.com/QuantForgeOrg/QFChart)_
-
----
-
 ## Usage
 
-### Running Native Pine Script
+### Running Native Pine Script®
 
 ```javascript
 import { PineTS, Provider } from 'pinets';
@@ -273,7 +256,7 @@ plot(ta.sma(close, 10))
 
 ## API Coverage
 
-PineTS aims for complete Pine Script API compatibility. Current status:
+PineTS aims for complete Pine Script® API compatibility. Current status:
 
 ### Data & Context
 
@@ -333,12 +316,12 @@ PineTS aims for complete Pine Script API compatibility. Current status:
 
 **Algorithmic Trading**
 
-- Build custom trading bots using Pine Script strategies
+- Build custom trading bots using Pine Script® strategies
 - Integrate indicators with your execution systems
 
 **Backtesting**
 
-- Test Pine Script strategies against historical data
+- Test Pine Script® strategies against historical data
 - Export indicator values for analysis in Python/R
 
 **Alert Systems**
@@ -348,7 +331,7 @@ PineTS aims for complete Pine Script API compatibility. Current status:
 
 **Research & Analysis**
 
-- Process large datasets with Pine Script indicators
+- Process large datasets with Pine Script® indicators
 - Feed indicator outputs into machine learning models
 
 **Custom Dashboards**
@@ -362,22 +345,16 @@ PineTS aims for complete Pine Script API compatibility. Current status:
 
 | Status | Feature                                   |
 | ------ | ----------------------------------------- |
-| ✅     | Native Pine Script v5/v6 support          |
+| ✅     | Native Pine Script® v5/v6 support          |
 | ✅     | 60+ technical analysis functions          |
 | ✅     | Arrays, matrices, and maps                |
 | ✅     | Real-time streaming                       |
 | ✅     | Multi-timeframe with `request.security()` |
 | 🚧     | Strategy backtesting engine               |
 | 🚧     | Additional data providers                 |
-| 🎯     | Pine Script v6 full compatibility         |
+| 🎯     | Pine Script® v6 full compatibility         |
 | 🎯     | Market data Providers                     |
 | 🎯     | Trading Connectors                        |
-
----
-
-## Related Projects
-
-- **[QFChart](https://github.com/QuantForgeOrg/QFChart)** : Charting library optimized for PineTS visualization
 
 ---
 
@@ -385,7 +362,7 @@ PineTS aims for complete Pine Script API compatibility. Current status:
 
 Contributions are welcome! Whether it's:
 
-- Adding missing Pine Script functions
+- Adding missing Pine Script® functions
 - Improving documentation
 - Fixing bugs
 - Suggesting features
@@ -416,10 +393,10 @@ PineTS is dual-licensed:
 
 - **[AGPL-3.0](./LICENSE)** — Free for everyone. You can use PineTS for personal projects, research, and internal tools without any obligation. The copyleft terms only apply if you **distribute** your application to others or **provide it as a network service** (e.g., SaaS, public API) — in that case, your full source code must also be released under AGPL-3.0.
 
-- **[Commercial License](./LICENSE-COMMERCIAL.md)** — For companies and individuals who want to use PineTS in proprietary or closed-source software without AGPL-3.0 obligations. [Contact us for licensing](https://quantforge.org/contact/).
+- **[Commercial License](./LICENSE-COMMERCIAL.md)** — For companies and individuals who want to use PineTS in proprietary or closed-source software without AGPL-3.0 obligations. [Contact us for licensing](mailto:business@luxalgo.com).
 
 ---
 
 <p align="center">
-  <sub>Built with passion by <a href="https://quantforge.org">QuantForge</a></sub>
+  <sub>Built with passion by <a href="https://www.luxalgo.com">LuxAlgo</a></sub>
 </p>
