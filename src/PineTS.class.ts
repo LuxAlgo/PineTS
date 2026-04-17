@@ -281,8 +281,14 @@ export class PineTS {
         // Start execution
         (async () => {
             try {
+                // When live streaming is requested with an eDate, clamp eDate to now
+                // to avoid gaps between historical data end and live data start
+                if (live && typeof this.eDate !== 'undefined') {
+                    this.eDate = Math.max(this.eDate, Date.now());
+                }
+
                 // Determine if live streaming is possible and requested
-                const isLiveCapable = typeof this.eDate === 'undefined' && !Array.isArray(this.source);
+                const isLiveCapable = !Array.isArray(this.source);
                 const enableLiveStream = isLiveCapable && live;
 
                 // Pass undefined for periods to include all data
