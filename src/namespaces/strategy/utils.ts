@@ -92,24 +92,29 @@ export function processStrategyOrders(context: any): void {
 
     // Per-trade peak adverse / favorable excursion (max-drawdown / max-runup
     // on each open trade) using INTRA-BAR high/low rather than close-only.
-    // This matches TV's accounting: the worst dip and best rally a trade saw
-    // during a bar are remembered, even if the trade entered AND exited within
-    // that same bar (via tick-fast TP/SL).
+    // Both excursions are commission-netted (entry leg charged on fill):
+    //   - max_drawdown includes the entry commission as a baseline cost.
+    //   - max_runup is the favorable price gain net of that same cost.
+    // This matches TV's per-trade reporting.
     for (const trade of strategy.opentrades) {
         const tradeQty = Math.abs(trade.size);
         const isLongTrade = trade.size > 0;
-        const advExcursion = isLongTrade
+        const entryComm = trade.commission ?? 0;
+        const advPrice = isLongTrade
             ? (trade.entry_price - lowPrice) * tradeQty
             : (highPrice - trade.entry_price) * tradeQty;
-        const favExcursion = isLongTrade
+        const favPrice = isLongTrade
             ? (highPrice - trade.entry_price) * tradeQty
             : (trade.entry_price - lowPrice) * tradeQty;
-        if (advExcursion > (trade.max_drawdown ?? 0)) trade.max_drawdown = advExcursion;
-        if (favExcursion > (trade.max_runup ?? 0)) trade.max_runup = favExcursion;
+        const advNet = Math.max(0, advPrice) + entryComm;
+        const favNet = Math.max(0, favPrice - entryComm);
+        if (advNet > (trade.max_drawdown ?? 0)) trade.max_drawdown = advNet;
+        if (favNet > (trade.max_runup    ?? 0)) trade.max_runup    = favNet;
     }
 
-    // Update unrealized P&L for open trades using OPEN price (for accurate equity at order execution time)
-    updateUnrealizedPnL(context, openPrice);
+    // Mark-to-market at OPEN price so fill logic / risk checks see accurate equity.
+    // Peaks are NOT latched here; updateEquityPeaks runs once at the bar's end.
+    markToMarket(context, openPrice);
 
     // Process each pending order that was placed on a previous bar
     for (const order of pending_orders) {
@@ -192,8 +197,9 @@ export function processStrategyOrders(context: any): void {
     // Remove filled and cancelled orders
     strategy.pending_orders = pending_orders.filter((o) => o.status === 'pending');
 
-    // Update strategy metrics using CLOSE price (for script access)
-    updateUnrealizedPnL(context, closePrice);
+    // Refresh equity at CLOSE for processExitOrders' opening read.
+    // Peaks are latched at the bar's end inside processExitOrders.
+    markToMarket(context, closePrice);
     updateStrategyMetrics(context);
 }
 
@@ -376,6 +382,61 @@ export function openTrade(context: any, entryId: string, direction: number, qty:
 
     strategy.opentrades.push(trade);
 
+    // Per-trade fill-bar excursion: capture this bar's intra-bar H/L against
+    // the just-filled trade. Without this, the per-trade loop at the top of
+    // processStrategyOrders misses the fill bar (it ran before this trade
+    // existed in opentrades), and the bar's adverse / favorable excursion is
+    // lost from trade.max_drawdown / trade.max_runup.
+    //
+    // Clamp at pending SL/TP trigger prices: a trade with an attached stop
+    // can't actually experience price excursions past the stop — once price
+    // touches the stop, the trade closes there. Without clamping, a same-bar
+    // entry+SL trade records the bar's full low (a phantom excursion that
+    // never happened to this trade).
+    const highPrice = Series.from(context.data.high).get(0);
+    const lowPrice  = Series.from(context.data.low).get(0);
+    const mintick   = context.pine?.syminfo?.mintick ?? 0.01;
+
+    let worstPrice = direction === 1 ? lowPrice  : highPrice;
+    let bestPrice  = direction === 1 ? highPrice : lowPrice;
+    for (const exitOrder of strategy.pending_orders) {
+        if ((exitOrder.category ?? 'entry') !== 'exit') continue;
+        if (exitOrder.from_entry && exitOrder.from_entry !== entryId) continue;
+
+        // SL trigger price (stop=absolute, loss=ticks-from-entry).
+        let sl: number | undefined;
+        if (exitOrder.stop !== undefined) sl = exitOrder.stop;
+        else if (exitOrder.loss !== undefined) {
+            sl = direction === 1 ? price - exitOrder.loss * mintick : price + exitOrder.loss * mintick;
+        }
+        // TP trigger price (limit=absolute, profit=ticks-from-entry).
+        let tp: number | undefined;
+        if (exitOrder.limit !== undefined) tp = exitOrder.limit;
+        else if (exitOrder.profit !== undefined) {
+            tp = direction === 1 ? price + exitOrder.profit * mintick : price - exitOrder.profit * mintick;
+        }
+
+        if (direction === 1) {
+            // Long: worst is low (cap upward by sl), best is high (cap downward by tp).
+            if (sl !== undefined && sl > worstPrice) worstPrice = sl;
+            if (tp !== undefined && tp < bestPrice)  bestPrice  = tp;
+        } else {
+            // Short: worst is high (cap downward by sl), best is low (cap upward by tp).
+            if (sl !== undefined && sl < worstPrice) worstPrice = sl;
+            if (tp !== undefined && tp > bestPrice)  bestPrice  = tp;
+        }
+    }
+
+    const adv = direction === 1 ? (price - worstPrice) * qty : (worstPrice - price) * qty;
+    const fav = direction === 1 ? (bestPrice  - price) * qty : (price - bestPrice)  * qty;
+    // Fold entry-leg commission into BOTH excursions: a trade is "down" by
+    // the entry commission the moment it fills (so the adverse excursion
+    // includes that cost), and the favorable excursion is the price gain NET
+    // of that same cost (the trade has to overcome the commission first
+    // before showing any runup). TV reports both metrics commission-netted.
+    trade.max_drawdown = Math.max(0, adv) + entryCommission;
+    trade.max_runup    = Math.max(0, fav - entryCommission);
+
     // Update flat position scalars
     const oldSize = strategy.position_size;
     const newSize = oldSize + trade.size;
@@ -433,7 +494,13 @@ function executeOrder(context: any, order: Order, fillPrice: number, fillTime: n
  * FIFO accounting: closes oldest open trades first. Splits a trade if the
  * close qty is smaller than the trade's remaining qty.
  */
-export function closePartialPosition(context: any, qtyToClose: number, exitPrice: number, exitTime: number): void {
+export function closePartialPosition(
+    context: any,
+    qtyToClose: number,
+    exitPrice: number,
+    exitTime: number,
+    triggerKind?: 'profit' | 'loss' | 'trailing' | null,
+): void {
     const strategy: StrategyState = context.strategy;
     let remainingQty = qtyToClose;
 
@@ -463,10 +530,25 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
             const priceChange = tradeDirection === 1 ? exitPrice - trade.entry_price : trade.entry_price - exitPrice;
             const grossPnL = priceChange * tradeQty;
 
+            // Capture entry-only commission BEFORE adding the exit leg — used
+            // below for the TP-override on max_drawdown.
+            const entryOnlyComm = trade.commission ?? 0;
+
             // Charge entry + exit commission legs and bank them on the trade.
             // trade.commission already holds the entry leg charged in openTrade().
             const exitCommission = computeLegCommission(strategy, tradeQty, exitPrice);
-            trade.commission = (trade.commission ?? 0) + exitCommission;
+            trade.commission = entryOnlyComm + exitCommission;
+
+            // Override per-trade peaks based on which exit leg actually fired
+            // (TV semantic for SL/TP closes — TV assumes worst-case ordering
+            // and reports excursion only on the side that triggered):
+            //   loss     (SL fired)  → no favorable movement happened → mfe = 0
+            //   profit   (TP fired)  → no adverse movement happened, only the
+            //                          entry-commission baseline cost remains.
+            // Reversal / close()/close_all() leave triggerKind undefined and
+            // the trade's accumulated excursions stand.
+            if (triggerKind === 'loss')   trade.max_runup    = 0;
+            if (triggerKind === 'profit') trade.max_drawdown = entryOnlyComm;
 
             // Profit on the trade is NET of all commission.
             trade.profit = grossPnL - trade.commission;
@@ -570,16 +652,15 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
 }
 
 /**
- * Update unrealized P&L for open trades + the openprofit / equity scalars,
- * then update equity-curve peaks for max_drawdown / max_runup.
- *
- * Per-trade peak excursion (trade.max_drawdown / trade.max_runup) is updated
- * in processStrategyOrders using INTRA-BAR high/low — close-only here would
- * miss the bar's worst-case path.
+ * Mark-to-market the open positions to `currentPrice`, updating
+ * `strategy.openprofit` and `strategy.equity`. Does NOT touch the
+ * max_drawdown / max_runup peaks — those are latched once per bar by
+ * `updateEquityPeaks` AFTER all entry+exit fills have settled, so that
+ * trades closed mid-bar by TP / SL are reflected as realized P&L (rather
+ * than as a phantom intra-bar excursion against the bar's raw H/L).
  */
-function updateUnrealizedPnL(context: any, currentPrice: number): void {
+function markToMarket(context: any, currentPrice: number): void {
     const strategy: StrategyState = context.strategy;
-
     let unrealizedPnL = 0;
     for (const trade of strategy.opentrades) {
         const tradeQty = Math.abs(trade.size);
@@ -587,23 +668,70 @@ function updateUnrealizedPnL(context: any, currentPrice: number): void {
         const priceChange = tradeDirection === 1 ? currentPrice - trade.entry_price : trade.entry_price - currentPrice;
         unrealizedPnL += priceChange * tradeQty;
     }
-
     strategy.openprofit = unrealizedPnL;
     strategy.equity = strategy.initial_capital + strategy.netprofit + unrealizedPnL;
+}
 
-    // Equity-curve peaks. equity_peak is the running high-water mark of equity.
-    // equity_trough is the lowest equity seen since the last new peak — together
-    // they yield the worst peak-to-trough drawdown of the run.
-    if (strategy.equity > strategy.equity_peak) {
-        strategy.equity_peak = strategy.equity;
-        strategy.equity_trough = strategy.equity; // reset trough after a new high
-    } else if (strategy.equity < strategy.equity_trough) {
-        strategy.equity_trough = strategy.equity;
+/**
+ * Latch `strategy.max_drawdown` and `strategy.max_runup` using INTRA-BAR
+ * high/low excursions of the CURRENT open position (after all fills have
+ * settled for the bar).
+ *
+ * Algorithm:
+ *   1. `equity_peak` / `equity_trough` track the running high/low of
+ *      REALIZED equity (initial_capital + netprofit). They step only on
+ *      closed-trade P&L.
+ *   2. For the still-open position (single weighted-avg via position_size /
+ *      position_avg_price), compute worst- and best-case unrealized excursion
+ *      against the bar's adverse / favorable extreme:
+ *        long:  worstPrice = low,   bestPrice = high
+ *        short: worstPrice = high,  bestPrice = low
+ *   3. drawdown_this_bar = (equity_peak  − realized_equity) + worst_excursion
+ *      runup_this_bar    = (realized_equity − equity_trough) + best_excursion
+ *   4. Latch the running maxima.
+ *
+ * Why latch only after fills: a trade closed by TP / SL during the bar
+ * realizes exactly its stop/target P&L. Computing drawdown against the bar's
+ * raw low BEFORE the fill would overcount — the trade never actually marked
+ * to that low because the stop fired first. Running this only after fills
+ * means closed trades contribute via `realizedEquity` (their actual close
+ * price), and only positions that survived the bar contribute via H/L.
+ *
+ * Per-trade excursions (trade.max_drawdown / trade.max_runup) are tracked
+ * separately at the top of processStrategyOrders against the same bar H/L.
+ */
+function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): void {
+    const strategy: StrategyState = context.strategy;
+
+    const realizedEquity = strategy.initial_capital + strategy.netprofit;
+    if (realizedEquity > strategy.equity_peak)   strategy.equity_peak   = realizedEquity;
+    if (realizedEquity < strategy.equity_trough) strategy.equity_trough = realizedEquity;
+
+    const posSize = strategy.position_size;
+    const avgPrice = strategy.position_avg_price;
+
+    let worstExcursion = 0;
+    let bestExcursion = 0;
+    if (posSize !== 0 && Number.isFinite(avgPrice)) {
+        const worstPrice = posSize > 0 ? lowPrice  : highPrice;
+        const bestPrice  = posSize > 0 ? highPrice : lowPrice;
+        // posSize * (avg - worstPrice) is always >= 0 (a loss):
+        //   long  (posSize > 0): low <  avg → avg - low > 0  → product > 0
+        //   short (posSize < 0): high > avg → avg - high < 0 → product = neg * neg > 0
+        worstExcursion = posSize * (avgPrice - worstPrice);
+        // posSize * (bestPrice - avg) is always >= 0 (a gain), symmetric to above.
+        bestExcursion  = posSize * (bestPrice - avgPrice);
     }
-    const drawdown = strategy.equity_peak - strategy.equity_trough;
-    if (drawdown > strategy.max_drawdown) strategy.max_drawdown = drawdown;
-    const runup = strategy.equity_peak - strategy.initial_capital;
-    if (runup > strategy.max_runup) strategy.max_runup = runup;
+
+    const drawDown = (strategy.equity_peak   - realizedEquity) + worstExcursion;
+    if (drawDown > strategy.max_drawdown) strategy.max_drawdown = drawDown;
+
+    const runUp   = (realizedEquity - strategy.equity_trough) + bestExcursion;
+    if (runUp > strategy.max_runup) {
+        strategy.max_runup = runUp;
+        // Snapshot the total equity at this peak — denominator for max_runup_percent.
+        strategy.equity_at_runup_peak = realizedEquity + bestExcursion;
+    }
 }
 
 /**
@@ -620,12 +748,13 @@ export function closeMatching(
     qtyToClose: number,
     exitPrice: number,
     exitTime: number,
+    triggerKind?: 'profit' | 'loss' | 'trailing' | null,
 ): void {
     const strategy: StrategyState = context.strategy;
 
     if (!fromEntry || fromEntry === '') {
         // No filter — close FIFO across all open trades.
-        closePartialPosition(context, qtyToClose, exitPrice, exitTime);
+        closePartialPosition(context, qtyToClose, exitPrice, exitTime, triggerKind);
         return;
     }
 
@@ -643,7 +772,7 @@ export function closeMatching(
     const effectiveClose = Math.min(qtyToClose, matchingQty);
 
     strategy.opentrades = [...matching, ...others];
-    closePartialPosition(context, effectiveClose, exitPrice, exitTime);
+    closePartialPosition(context, effectiveClose, exitPrice, exitTime, triggerKind);
 }
 
 /**
@@ -817,21 +946,35 @@ export function processExitOrders(context: any): void {
                 qtyToClose = matchingQty * (order.qty_percent / 100);
             }
 
-            closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime);
+            closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime, triggerKind);
             order.status = 'filled';
             order.fill_price = fillPrice;
             order.fill_bar = context.idx;
             order.fill_time = currentTime;
-            // triggerKind retained on order for future alert/comment routing
-            void triggerKind;
         }
     }
 
     // Remove filled/cancelled exit orders.
     strategy.pending_orders = strategy.pending_orders.filter((o) => o.status === 'pending');
 
-    // Refresh metrics after any closes.
-    updateUnrealizedPnL(context, closePrice);
+    // Refresh equity for any caller reading metrics between processExitOrders
+    // and the bar-finalize step. Peaks are latched in finalizeBar().
+    markToMarket(context, closePrice);
+}
+
+/**
+ * End-of-bar finalize: refresh equity at CLOSE and latch
+ * `strategy.max_drawdown` / `strategy.max_runup` using the bar's H/L. Runs
+ * UNCONDITIONALLY once per bar (after entry+exit fills are done), regardless
+ * of whether the strategy uses exit orders.
+ */
+export function finalizeStrategyBar(context: any): void {
+    if (!context.strategy) return;
+    const highPrice  = Series.from(context.data.high).get(0);
+    const lowPrice   = Series.from(context.data.low).get(0);
+    const closePrice = Series.from(context.data.close).get(0);
+    markToMarket(context, closePrice);
+    updateEquityPeaks(context, highPrice, lowPrice);
 }
 
 /**
@@ -913,6 +1056,7 @@ export function initializeStrategy(context: any, config: any): void {
         max_runup: 0,
         equity_peak: initialCapital,
         equity_trough: initialCapital,
+        equity_at_runup_peak: initialCapital,
 
         // Trade-stat counters
         wintrades: 0,

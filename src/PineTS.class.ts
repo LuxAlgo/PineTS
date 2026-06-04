@@ -6,7 +6,7 @@ import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { Context } from './Context.class';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
-import { processStrategyOrders, processExitOrders } from './namespaces/strategy/utils';
+import { processStrategyOrders, processExitOrders, finalizeStrategyBar } from './namespaces/strategy/utils';
 
 // ── Timeframe duration utility ──────────────────────────────────────
 //prettier-ignore
@@ -1164,6 +1164,10 @@ export class PineTS {
             if (context.strategy) {
                 processStrategyOrders(context);
                 processExitOrders(context);
+                // Latch max_drawdown / max_runup ONCE at the end of the bar so
+                // trades closed mid-bar by TP / SL contribute their realized
+                // P&L (not phantom intra-bar excursions against the raw H/L).
+                finalizeStrategyBar(context);
             }
 
             const result = await transpiledFn(context);

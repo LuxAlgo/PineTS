@@ -34,12 +34,23 @@ export function closedtrades(context: any) {
             [Symbol.toPrimitive]() { return list.length; },
         };
 
+        // Cost-basis denominator: entry notional + entry commission.
+        // For closed trades, trade.commission already contains BOTH entry
+        // and exit legs, so we approximate the entry leg as half. (For the
+        // percent='percent' commission type both legs are roughly equal at
+        // entry vs exit price — close enough; matches TV within epsilon.)
+        const costBasis = (t: Trade): number => {
+            const notional = Math.abs(t.size) * t.entry_price;
+            const entryCommApprox = (t.commission ?? 0) / 2;
+            return notional + entryCommApprox;
+        };
+
         result.profit = (i: any) => at(i)?.profit ?? NaN;
         result.profit_percent = (i: any) => {
             const t = at(i);
             if (!t || t.profit === undefined) return NaN;
-            const notional = Math.abs(t.size) * t.entry_price;
-            return notional > 0 ? (100 * t.profit) / notional : NaN;
+            const basis = costBasis(t);
+            return basis > 0 ? (100 * t.profit) / basis : NaN;
         };
         result.size = (i: any) => at(i)?.size ?? NaN;
         result.commission = (i: any) => at(i)?.commission ?? NaN;
@@ -57,15 +68,15 @@ export function closedtrades(context: any) {
         result.max_drawdown_percent = (i: any) => {
             const t = at(i);
             if (!t || !t.max_drawdown) return 0;
-            const notional = Math.abs(t.size) * t.entry_price;
-            return notional > 0 ? (100 * t.max_drawdown) / notional : 0;
+            const basis = costBasis(t);
+            return basis > 0 ? (100 * t.max_drawdown) / basis : 0;
         };
         result.max_runup = (i: any) => at(i)?.max_runup ?? 0;
         result.max_runup_percent = (i: any) => {
             const t = at(i);
             if (!t || !t.max_runup) return 0;
-            const notional = Math.abs(t.size) * t.entry_price;
-            return notional > 0 ? (100 * t.max_runup) / notional : 0;
+            const basis = costBasis(t);
+            return basis > 0 ? (100 * t.max_runup) / basis : 0;
         };
         // v6 property: index of oldest still-listed trade. Always 0 unless we
         // ever start trimming the buffer (we don't).

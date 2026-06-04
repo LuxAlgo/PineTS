@@ -168,9 +168,18 @@ export interface StrategyState {
     // Peaks — used by strategy.max_drawdown / strategy.max_runup
     max_drawdown: number;
     max_runup: number;
-    // Internal trackers for the peak calculations above
-    equity_peak: number;              // running high-water mark
-    equity_trough: number;            // running low-water mark since last peak
+    // Internal: running high-/low-water marks of REALIZED equity
+    // (initial_capital + netprofit). Used symmetrically:
+    //   max_drawdown reference is equity_peak  (worst dip below the high)
+    //   max_runup    reference is equity_trough (best rise above the low)
+    // equity_peak also serves as the denominator of max_drawdown_percent.
+    equity_peak: number;
+    equity_trough: number;
+    // Total equity at the moment max_runup was last bumped — i.e. the
+    // intra-bar high-water of (realized + best_unrealized_excursion). Used
+    // as the denominator of max_runup_percent (TV reports runup as a
+    // percentage of the equity AT the peak, not of initial_capital).
+    equity_at_runup_peak: number;
 
     // Trade-stat counters — updated each time a trade closes
     wintrades: number;                // count of closed trades with profit > 0
