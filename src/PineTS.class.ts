@@ -7,6 +7,13 @@ import { Context } from './Context.class';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
 import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar } from './namespaces/strategy/utils';
+import { parseInputOptions } from './namespaces/input/utils';
+import {
+    PineInputDeclaration,
+    PineInputType,
+    IntrospectInputsOptions,
+    IntrospectInputsResult,
+} from './introspection/types';
 
 // ── Timeframe duration utility ──────────────────────────────────────
 //prettier-ignore
@@ -1239,6 +1246,121 @@ export class PineTS {
             }
         }
     }
+
+    /**
+     * Enumerate the `input.*(...)` declarations a Pine source makes,
+     * without needing the host to provide its own override map.
+     *
+     * Approach: instrument each method on `context.pine.input` to
+     * record `(args, type)` on call, then execute the script for one
+     * bar so top-level declarations fire. Returns the captured list
+     * plus any error messages from the dry-run.
+     *
+     * Coverage caveat: inputs declared at the script's top level (the
+     * Pine convention) are always captured. Inputs declared inside
+     * user functions, conditionals, or loops are captured only when
+     * the dry-run reaches their site — same behavior as TradingView's
+     * own Settings dialog.
+     *
+     * The instance's own market data is used. Callers who only have
+     * the source string can pass a synthetic 1-bar dataset when
+     * constructing the `PineTS` instance.
+     */
+    public async introspectInputs(
+        source: Function | String,
+        options: IntrospectInputsOptions = {},
+    ): Promise<IntrospectInputsResult> {
+        await this.ready();
+
+        const inputs: PineInputDeclaration[] = [];
+        const errors: string[] = [];
+        let inputIndex = 0;
+
+        const context = this._initializeContext(source, {}, false);
+        const pineInput = (context as any)?.pine?.input;
+
+        if (pineInput && typeof pineInput === 'object') {
+            for (const type of INTROSPECTION_INPUT_TYPES) {
+                const original = pineInput[type];
+                if (typeof original !== 'function') continue;
+                pineInput[type] = (...callArgs: any[]) => {
+                    try {
+                        inputs.push(recordInputCallAsDeclaration(callArgs, type, inputIndex++));
+                    } catch (err) {
+                        errors.push(`record(${type}): ${err instanceof Error ? err.message : String(err)}`);
+                    }
+                    return original(...callArgs);
+                };
+            }
+        }
+
+        try {
+            this._transpiledCode = this._transpileCode(source);
+            // One-bar execution is enough for top-level input declarations
+            // to fire; running every bar would be wasted work.
+            const periods = Math.min(this.data.length, 1);
+            const startIdx = this.data.length - periods;
+            const endIdx = this.data.length;
+            await this._executeIterations(context, this._transpiledCode, startIdx, endIdx);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            errors.push(msg);
+            if (options.throwOnError) throw err;
+        }
+
+        return { inputs, errors };
+    }
+}
+
+/**
+ * Input types the introspection helper recognizes as user-facing
+ * declarations. Kept in sync with `src/namespaces/input/input.index.ts`
+ * — adding a new input type upstream means appending it here so
+ * introspection records it.
+ *
+ * `input.param` is intentionally excluded: it's a Series-history
+ * primitive used internally by other input methods, not a user-facing
+ * input declaration, so recording it would surface noise.
+ */
+const INTROSPECTION_INPUT_TYPES: readonly PineInputType[] = [
+    'any',
+    'bool',
+    'color',
+    'enum',
+    'float',
+    'int',
+    'price',
+    'session',
+    'source',
+    'string',
+    'symbol',
+    'text_area',
+    'time',
+    'timeframe',
+] as const;
+
+/**
+ * Convert an `input.<type>(...args)` call into a typed declaration.
+ * Delegates to `parseInputOptions` so the positional→named mapping
+ * matches the real runtime exactly (type-aware signature selection).
+ */
+function recordInputCallAsDeclaration(args: any[], type: PineInputType, index: number): PineInputDeclaration {
+    const parsed = parseInputOptions(args);
+    const title = typeof parsed.title === 'string' ? parsed.title : undefined;
+    const declaration: PineInputDeclaration = {
+        name: title ?? `input_${index}`,
+        type,
+        defval: parsed.defval,
+    };
+    if (title !== undefined) declaration.title = title;
+    if (typeof parsed.tooltip === 'string') declaration.tooltip = parsed.tooltip;
+    if (typeof parsed.group === 'string') declaration.group = parsed.group;
+    if (typeof parsed.inline === 'string') declaration.inline = parsed.inline;
+    if (Array.isArray(parsed.options)) declaration.options = parsed.options;
+    if (typeof parsed.minval === 'number') declaration.minval = parsed.minval;
+    if (typeof parsed.maxval === 'number') declaration.maxval = parsed.maxval;
+    if (typeof parsed.step === 'number') declaration.step = parsed.step;
+    return declaration;
 }
 
 export default PineTS;

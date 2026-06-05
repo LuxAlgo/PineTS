@@ -20,3 +20,11 @@ export { computeNextPeriodStart, localTimeToUTC, computeSessionClose, TIMEFRAME_
 export { aggregateCandles, selectSubTimeframe, getAggregationRatio } from './marketData/aggregation';
 
 export { PineTS, Context, Provider, Indicator, PineRuntimeError };
+
+// Input introspection
+export type {
+    PineInputDeclaration,
+    PineInputType,
+    IntrospectInputsOptions,
+    IntrospectInputsResult,
+} from './introspection/types';
