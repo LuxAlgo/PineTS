@@ -140,18 +140,12 @@ export function calculateOrderQty(context: any, specifiedQty: number | undefined
         qtyValue = (qtyValue as Function)();
     }
 
-    // TV truncates qty to 6 decimal places after computing the raw value.
-    // Empirically verified against the QA Sizing_Cash_Test and
-    // Sizing_Constants_Test xlsx exports: floor(raw_qty × 1e6) / 1e6
-    // matches TV's reported Size (qty) on 42/42 trades across both
-    // strategy.cash and strategy.percent_of_equity. The sub-microscopic
-    // qty delta vs PT's full-precision float (~10⁻⁷) is what caused the
-    // observed equity drift (0.001–0.006) on the sizing oracles via
-    // many bars of mark-to-market accumulation.
-    //
-    // Hardcoded 6 decimals — NOT derived from syminfo.mincontract
-    // (Binance BTCUSDC has mincontract=0.00001 = 5 decimals). TV uses
-    // its own internal qty precision independent of lot size.
+    // Pine's broker emulator truncates the computed qty to 6 decimal
+    // places. The precision is hardcoded — independent of the symbol's
+    // mincontract or pricescale. Truncation applies to every code path
+    // (specifiedQty, fixed, cash, percent_of_equity) so a downstream
+    // mark-to-market loop doesn't accumulate the sub-microscopic delta
+    // between the raw float and TV's reported size over many bars.
     const QTY_PRECISION = 1e6;
     const truncateQty = (q: number) => Math.floor(q * QTY_PRECISION) / QTY_PRECISION;
 
@@ -301,16 +295,13 @@ export function processStrategyOrders(context: any): void {
             const direction = parseDirection(order.direction);
             fillPrice = applySlippage(context, direction, fillPrice);
 
-            // Pre-trade margin check (TV broker emulator). If the required
-            // margin for the NEW position would exceed available equity at
-            // fill time, TV silently drops the order — no trade record, no
-            // log. Verified against QA #10's xlsx:
-            //   PT #1 rejected: required $10,010.30 > available $10,000
-            //   PT #2 rejected: required $10,014.07 > available $10,000
-            //   PT #3 accepted: required  $9,977.65 < available $10,000
-            // For reversals, the close leg always succeeds (frees margin);
-            // we check the NEW open leg only. For pyramiding (same-direction
-            // adds), held margin from existing positions stays locked.
+            // Pre-trade margin check (Pine broker emulator). When the
+            // required margin for the new position would exceed available
+            // equity at fill time, the order is silently dropped — no
+            // trade record, no log. For reversals the close leg always
+            // succeeds (frees its prior margin) and only the new open leg
+            // is checked. For pyramiding (same-direction adds), held
+            // margin from existing positions stays locked.
             const marginPct = direction === 1
                 ? (strategy.config.margin_long  ?? 100)
                 : (strategy.config.margin_short ?? 100);
@@ -1183,12 +1174,10 @@ export function processExitOrders(context: any): void {
         //
         // For PERSISTENT exits (every-bar refresh, main-scope variable),
         // TV trusts the captured value and lets gap-fill produce the
-        // actual reachable price. E.g. QA #5b trade #100: stale
-        // shortTpPrice = long_avg(52666) - 5000 = 47666 sits ABOVE the
-        // new short's entry (46868) — wrong-sided geometrically — but
-        // TV keeps it; the bar's open (46868) ≤ TP (47666) triggers
-        // gap-fill at the open for a zero-PnL exit. Dropping here would
-        // miss that.
+        // actual reachable price — a stale TP sitting on the wrong side
+        // of entry will still fire at the bar's open via gap-fill when
+        // the open is past the trigger. Dropping wrong-sided legs here
+        // would miss that.
         if (!order._isPersistent) {
             if (slPrice !== undefined) {
                 const slValid = isLong ? slPrice < avgEntry : slPrice > avgEntry;
@@ -1208,13 +1197,13 @@ export function processExitOrders(context: any): void {
         // on non-trigger bars), TV doesn't fire; if the variable is in
         // main scope (always-defined value), TV fires the captured value.
         //
-        // PT detects this via call-cadence at queue time (see
-        // [exit.ts](../methods/exit.ts)) — a `_isPersistent` flag set
-        // when the user called this same call site on the prior bar
-        // (i.e., the strategy.exit line is being re-executed every bar).
-        // Persistent capture → trust the value (mirrors TV's main-scope
-        // path). Ephemeral capture → drop the absolute legs (mirrors
-        // TV's NA-on-non-trigger-bar path for if-block-scoped vars).
+        // Cadence detection runs at queue time (see exit.ts): the
+        // `_isPersistent` flag is set when the user called this same
+        // call site on the prior bar (i.e. the strategy.exit line is
+        // being re-executed every bar). Persistent capture → trust the
+        // value (mirrors TV's main-scope path). Ephemeral capture →
+        // drop the absolute legs (mirrors TV's NA-on-non-trigger-bar
+        // path for if-block-scoped vars).
         if (order._attachedAtReversal && !order._isPersistent) {
             if (order.limit !== undefined) tpPrice = undefined;
             if (order.stop  !== undefined) slPrice = undefined;
@@ -1226,11 +1215,10 @@ export function processExitOrders(context: any): void {
         //   trail_points: armed when market moves N ticks in favor from entry
         // After arming, ride at trail_offset ticks behind the running peak.
         //
-        // TV semantic — verified by probe scripts in
-        // .scratchpad/trail-probes/probe1-bar-state.pine and probe2: the trail
-        // CANNOT arm and trigger on the same bar. The arming bar establishes
-        // the peak; the trigger check is suppressed for that bar only. SL and
-        // TP triggers are independent and still fire on the arming bar.
+        // Pine semantic: the trail cannot arm and trigger on the same
+        // bar. The arming bar establishes the running peak; the trigger
+        // check is suppressed for that bar only. SL and TP triggers are
+        // independent and still fire on the arming bar.
         let trailArmedThisBar = false;
         if (!order.trail_armed && (order.trail_price !== undefined || order.trail_points !== undefined)) {
             let armPrice: number | undefined;
@@ -1383,15 +1371,10 @@ export function processExitOrders(context: any): void {
  * account equity below required maintenance margin. If yes, FORCE LIQUIDATE
  * all open positions at the bar's adverse extreme with exit_id="Margin call".
  *
- * Verified against QA #10's xlsx — trade #3 short at $3796.62, qty=13.14,
- * 20% margin on $10k account:
- *   bar 2019-01-06 H=$4080 → equity_at_H = $6,274.93,
- *   required_margin_at_H = $10,722.70 → equity < margin → liquidate at $4080.
- *
- * TV reports the exit price as the bar's adverse extreme even though the
- * theoretical threshold (where equity == margin) is closer ($3,798). This
- * is the pessimistic broker model — the trader is assumed to be liquidated
- * at the worst intra-bar price.
+ * The exit price is the bar's adverse extreme itself, NOT the theoretical
+ * threshold where equity would exactly equal required margin. This is the
+ * pessimistic broker model — the trader is assumed to be liquidated at
+ * the worst intra-bar price, since intra-bar tick order is unknown.
  *
  * Skipped entirely when the position's `margin_pct >= 100` (no leverage)
  * or when there are no open positions.

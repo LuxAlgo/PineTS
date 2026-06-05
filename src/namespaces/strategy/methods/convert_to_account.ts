@@ -4,13 +4,12 @@
 /**
  * Convert a value from the symbol's currency to the account currency.
  *
- * TV behavior — verified against `conversion.pine` on BTCUSDC (symbol
- * currency = USDC) with account currency = USD:
+ * Pine semantics:
  *   - same currency string → return the value unchanged (identity)
- *   - different currency strings → return `na` (NaN), since there's no
- *     FX rate available. This is TV's behavior even for nominally
- *     pegged pairs like USDC vs USD — string equality, not economic
- *     equivalence.
+ *   - different currency strings → return `na` (NaN), since no FX
+ *     rate is available. String equality is used, not economic
+ *     equivalence — so nominally pegged pairs like USDC vs USD still
+ *     return NaN when their currency strings differ.
  *
  * When `syminfo.currency` is undefined we fall back to identity rather
  * than NaN, so synthetic / array-fed datasets without a syminfo block

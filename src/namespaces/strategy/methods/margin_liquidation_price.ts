@@ -22,12 +22,6 @@
  *   Direction                  = +1 for long, −1 for short
  *   EntryPrice                 = strategy.position_avg_price
  *   MarginPercent              = margin_long for longs, margin_short for shorts
- *
- * Verified at margin_long ∈ {30, 50} against TV on BTCUSDC weekly via probes
- * in .scratchpad/liq-probes (since cleaned up). A long-only reverse-
- * -engineered closed form happened to match both probes, but extrapolated
- * incorrectly to shorts; this is the canonical TV formula and covers both
- * directions correctly.
  */
 export function margin_liquidation_price(context: any) {
     return () => {

@@ -96,11 +96,10 @@ export function exit(context: any) {
 
         // Snap limit/stop/trail_price to the mintick grid AWAY from the
         // current bar's close (broker-emulator convention — see
-        // roundToMintick in utils.ts). For QA #3 / #5b values like
-        // position_avg_price + 5000 the inputs are already mintick-aligned,
-        // so the helper is a no-op there. For tests like stop_orders that
-        // multiply close × 0.95 etc., it produces the same adverse rounding
-        // TV applies on order placement.
+        // roundToMintick in utils.ts). Already-aligned inputs (e.g. an
+        // exact `position_avg_price + N`) round to themselves; arbitrary
+        // multiplications like `close * 0.95` get the same adverse
+        // rounding Pine applies at order placement.
         const mintick = context.pine?.syminfo?.mintick ?? 0;
         const currentClose = Series.from(context.data.close).get(0);
         const limit       = limitRaw      !== undefined ? roundToMintick(limitRaw,      currentClose, mintick) : undefined;

@@ -217,13 +217,13 @@ export interface StrategyState {
 
     // Running max of `(latched_drawdown / equity_at_that_latch) × 100` and
     // `(latched_runup / equity_at_that_latch) × 100` across the strategy's
-    // lifetime. TV's max_drawdown_percent / max_runup_percent are NOT
-    // derived from the current max_drawdown / current equity_at_peak —
-    // they're the HIGHEST RATIO ever observed across all latch events.
-    // The two interpretations diverge when a later latch produces a larger
-    // ABSOLUTE drawdown but a smaller PERCENTAGE (because equity grew
-    // faster than the drawdown). See [qa-issues-todo.md] #1 for the
-    // empirical evidence on BTCUSDC weekly 2020-05-04 vs 2021-05-10.
+    // lifetime. Pine's max_drawdown_percent / max_runup_percent are the
+    // HIGHEST RATIO observed across all latch events — NOT
+    // (current_max_value / current_equity_at_peak). The two interpretations
+    // diverge when a later latch produces a larger absolute value but a
+    // smaller percentage (because equity grew faster than the latched
+    // metric), so the running-max formulation is the only one that
+    // matches the spec.
     max_drawdown_percent_value: number;
     max_runup_percent_value: number;
 
