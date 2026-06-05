@@ -140,28 +140,48 @@ export function calculateOrderQty(context: any, specifiedQty: number | undefined
         qtyValue = (qtyValue as Function)();
     }
 
+    // TV truncates qty to 6 decimal places after computing the raw value.
+    // Empirically verified against the QA Sizing_Cash_Test and
+    // Sizing_Constants_Test xlsx exports: floor(raw_qty × 1e6) / 1e6
+    // matches TV's reported Size (qty) on 42/42 trades across both
+    // strategy.cash and strategy.percent_of_equity. The sub-microscopic
+    // qty delta vs PT's full-precision float (~10⁻⁷) is what caused the
+    // observed equity drift (0.001–0.006) on the sizing oracles via
+    // many bars of mark-to-market accumulation.
+    //
+    // Hardcoded 6 decimals — NOT derived from syminfo.mincontract
+    // (Binance BTCUSDC has mincontract=0.00001 = 5 decimals). TV uses
+    // its own internal qty precision independent of lot size.
+    const QTY_PRECISION = 1e6;
+    const truncateQty = (q: number) => Math.floor(q * QTY_PRECISION) / QTY_PRECISION;
+
     if (specifiedQty !== undefined && specifiedQty !== null) {
-        return Math.abs(specifiedQty);
+        return truncateQty(Math.abs(specifiedQty));
     }
 
+    let rawQty: number;
     switch (qtyType) {
         case 'fixed':
-            return qtyValue;
+            rawQty = qtyValue;
+            break;
 
         case 'cash':
             // Calculate how many units we can buy with the cash amount
-            return qtyValue / fillPrice;
+            rawQty = qtyValue / fillPrice;
+            break;
 
-        case 'percent_of_equity':
+        case 'percent_of_equity': {
             // Calculate quantity based on percentage of equity
             // qty_value=10 means 10% of equity
             const positionValue = (strategy.equity * qtyValue) / 100;
-            const equityQty = positionValue / fillPrice;
-            return equityQty;
+            rawQty = positionValue / fillPrice;
+            break;
+        }
 
         default:
-            return qtyValue;
+            rawQty = qtyValue;
     }
+    return truncateQty(rawQty);
 }
 
 /**
