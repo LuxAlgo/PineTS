@@ -6,7 +6,7 @@ import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { Context } from './Context.class';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
-import { processStrategyOrders, processExitOrders } from './namespaces/strategy/utils';
+import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar } from './namespaces/strategy/utils';
 
 // ── Timeframe duration utility ──────────────────────────────────────
 //prettier-ignore
@@ -1164,6 +1164,16 @@ export class PineTS {
             if (context.strategy) {
                 processStrategyOrders(context);
                 processExitOrders(context);
+                // Margin-call check (TV broker emulator): after user-defined
+                // exits, if intra-bar adverse movement would have pushed
+                // equity below required margin, FORCE LIQUIDATE all open
+                // positions at the bar's adverse extreme. Skipped when no
+                // leverage (margin_long / margin_short >= 100).
+                processMarginCall(context);
+                // Latch max_drawdown / max_runup ONCE at the end of the bar so
+                // trades closed mid-bar by TP / SL contribute their realized
+                // P&L (not phantom intra-bar excursions against the raw H/L).
+                finalizeStrategyBar(context);
             }
 
             const result = await transpiledFn(context);

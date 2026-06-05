@@ -34,38 +34,56 @@ export function closedtrades(context: any) {
             [Symbol.toPrimitive]() { return list.length; },
         };
 
+        // Cost-basis denominator: entry notional + entry commission.
+        // Notional = |size| × entry_price × pointValue (PV converts price-units
+        // to account currency for futures; 1 for crypto/forex).
+        // For closed trades, trade.commission already contains BOTH entry
+        // and exit legs, so we approximate the entry leg as half. (For the
+        // percent='percent' commission type both legs are roughly equal at
+        // entry vs exit price — close enough; matches TV within epsilon.)
+        const pointValue: number = context.pine?.syminfo?.pointvalue ?? 1;
+        const costBasis = (t: Trade): number => {
+            const notional = Math.abs(t.size) * t.entry_price * pointValue;
+            const entryCommApprox = (t.commission ?? 0) / 2;
+            return notional + entryCommApprox;
+        };
+
         result.profit = (i: any) => at(i)?.profit ?? NaN;
         result.profit_percent = (i: any) => {
             const t = at(i);
             if (!t || t.profit === undefined) return NaN;
-            const notional = Math.abs(t.size) * t.entry_price;
-            return notional > 0 ? (100 * t.profit) / notional : NaN;
+            const basis = costBasis(t);
+            return basis > 0 ? (100 * t.profit) / basis : NaN;
         };
         result.size = (i: any) => at(i)?.size ?? NaN;
         result.commission = (i: any) => at(i)?.commission ?? NaN;
         result.entry_price = (i: any) => at(i)?.entry_price ?? NaN;
         result.entry_bar_index = (i: any) => at(i)?.entry_bar_index ?? NaN;
         result.entry_id = (i: any) => at(i)?.entry_id ?? '';
-        result.entry_comment = (i: any) => at(i)?.entry_comment ?? '';
+        // TV semantic: when no explicit comment was passed to strategy.entry,
+        // entry_comment falls back to entry_id (and same for exit_comment ←
+        // exit_id). openTrade already pre-stamps entry_id as entry_comment
+        // when none is given, but keep the fallback defensive.
+        result.entry_comment = (i: any) => at(i)?.entry_comment ?? at(i)?.entry_id ?? '';
         result.entry_time = (i: any) => at(i)?.entry_time ?? NaN;
         result.exit_price = (i: any) => at(i)?.exit_price ?? NaN;
         result.exit_bar_index = (i: any) => at(i)?.exit_bar_index ?? NaN;
         result.exit_id = (i: any) => at(i)?.exit_id ?? '';
-        result.exit_comment = (i: any) => at(i)?.exit_comment ?? '';
+        result.exit_comment = (i: any) => at(i)?.exit_comment ?? at(i)?.exit_id ?? '';
         result.exit_time = (i: any) => at(i)?.exit_time ?? NaN;
         result.max_drawdown = (i: any) => at(i)?.max_drawdown ?? 0;
         result.max_drawdown_percent = (i: any) => {
             const t = at(i);
             if (!t || !t.max_drawdown) return 0;
-            const notional = Math.abs(t.size) * t.entry_price;
-            return notional > 0 ? (100 * t.max_drawdown) / notional : 0;
+            const basis = costBasis(t);
+            return basis > 0 ? (100 * t.max_drawdown) / basis : 0;
         };
         result.max_runup = (i: any) => at(i)?.max_runup ?? 0;
         result.max_runup_percent = (i: any) => {
             const t = at(i);
             if (!t || !t.max_runup) return 0;
-            const notional = Math.abs(t.size) * t.entry_price;
-            return notional > 0 ? (100 * t.max_runup) / notional : 0;
+            const basis = costBasis(t);
+            return basis > 0 ? (100 * t.max_runup) / basis : 0;
         };
         // v6 property: index of oldest still-listed trade. Always 0 unless we
         // ever start trimming the buffer (we don't).

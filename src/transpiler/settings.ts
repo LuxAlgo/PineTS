@@ -51,6 +51,51 @@ export const ASYNC_METHODS = ['request.security', 'request.security_lower_tf'];
 // but a user identifier accidentally containing the substring is not.
 export const VIEWPORT_DEPENDENT_BUILTINS = ['chart.left_visible_bar_time', 'chart.right_visible_bar_time'];
 
+// Namespaces whose method calls receive a transpiler-injected trailing
+// options object containing `{ __callsiteId }` to uniquely identify the
+// AST call site at runtime. The runtime helper `extractCallsiteId(args)`
+// (in src/namespaces/utils.ts) pops this sentinel off the args array
+// before the normal arg-parsing runs.
+//
+// The pattern was introduced for plot/hline/fill to disambiguate calls
+// with the same `title` (Pine allows this; the runtime keys plots by
+// title, so without a callsite ID two `plot(x, "SMA")` calls would
+// collide in `context.plots`). The runtime appends the callsite suffix
+// only on collision — see `PlotHelper._resolvePlotKey`.
+//
+// FIXME (callsite-ID inconsistencies — known but not unified yet):
+//   1. `alert` ALSO uses this trailing-options-object pattern but has
+//      its own injection branch in ExpressionTransformer; it should be
+//      moved into this list when alert's per-callsite frequency gating
+//      is generalized.
+//   2. `ta.*` uses a DIFFERENT pattern: a positional `_callId` last
+//      argument injected by a separate branch in ExpressionTransformer
+//      (and consumed by `(source, period, _callId?: string)` signatures
+//      in each TA method). The positional form lets TA function calls
+//      compose with `$$.id` inside user functions for nesting-correct
+//      state, but it diverges from the trailing-options-object pattern
+//      used here. Unification would require updating every TA method's
+//      signature.
+//   3. User function calls use yet another mechanism — rewritten as
+//      `$.call(fn, "_fnN", ...)` wrapper at the expression level.
+//      Used to push the callId onto a context stack for nested TA.
+//   4. `strategy.*` uses this mechanism ONLY for `strategy.exit` (added
+//      to enable cadence-detection — see runtime in exit.ts). Other
+//      `strategy.*` methods are excluded to avoid forcing every strategy
+//      handler to extractCallsiteId(); future unification could extend
+//      the pattern to entry/order/close.
+//
+// Entries can be a bare namespace (e.g. `'plot'` → all plot.* methods get
+// injection) OR a fully-qualified `'namespace.method'` (e.g.
+// `'strategy.exit'` → only that method). The transpiler checks both
+// forms.
+export const CALLSITE_ID_NAMESPACES = [
+    'plot',           // all plot methods (including plot, plotchar, plotshape, plotarrow, plotbar, plotcandle)
+    'hline',          // all hline methods
+    'fill',           // all fill methods
+    'strategy.exit',  // cadence-detection for persistent vs ephemeral exit-parameter capture
+];
+
 // Factory methods that create objects with side effects (format: 'namespace.method')
 // When used inside `var` declarations, these calls are wrapped in arrow functions
 // so they are only evaluated on bar 0 (deferred evaluation via initVar thunk).

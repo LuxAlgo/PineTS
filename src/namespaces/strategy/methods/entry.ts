@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2025 Alaa-eddine KADDOURI
 
-import { calculateOrderQty, parseDirection, wouldExceedPyramiding } from '../utils';
+import { calculateOrderQty, parseDirection, wouldExceedPyramiding, roundToMintick } from '../utils';
 import { Order } from '../types';
 import { Series } from '../../../Series';
 import { parseArgsForPineParams } from '../../utils';
@@ -91,6 +91,13 @@ export function entry(context: any) {
             orderType = 'stop';
         }
 
+        // Snap limit/stop to the mintick grid AWAY from current price (the
+        // broker-emulator convention — see roundToMintick). For market
+        // orders this is a no-op.
+        const mintick = context.pine?.syminfo?.mintick ?? 0;
+        const limitValueRounded = limitValue !== undefined ? roundToMintick(limitValue, currentPrice, mintick) : undefined;
+        const stopValueRounded  = stopValue  !== undefined ? roundToMintick(stopValue,  currentPrice, mintick) : undefined;
+
         const currentTime = Series.from(context.data.openTime).get(0);
 
         const orderObj: Order = {
@@ -98,8 +105,8 @@ export function entry(context: any) {
             direction: dir,
             qty: totalQty,
             type: orderType,
-            limit: limitValue,
-            stop: stopValue,
+            limit: limitValueRounded,
+            stop: stopValueRounded,
             bar: context.idx,
             time: currentTime,
             status: 'pending',
@@ -107,6 +114,7 @@ export function entry(context: any) {
             oca_name: ocaName,
             oca_type: ocaType as 'cancel' | 'reduce' | 'none' | undefined,
             comment: commentValue,
+            _isReversalEntry: isReversal,
         };
 
         strategy.pending_orders.push(orderObj);
