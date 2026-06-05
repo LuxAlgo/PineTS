@@ -67,6 +67,60 @@ export function roundToMintick(price: number, referencePrice: number, mintick: n
 }
 
 /**
+ * Margin required to hold a position of `qty` contracts at `price`, given
+ * the `marginPct` (% of notional that must be posted as collateral). The
+ * pointValue factor converts price units to account-currency dollars
+ * (1 for crypto, varies for futures).
+ *
+ * Pine docs (strategy() declaration): `margin_long` / `margin_short` is
+ * the percentage of notional held as collateral. 100 = no leverage, 20 =
+ * 5× leverage, etc.
+ */
+export function computeRequiredMargin(qty: number, price: number, marginPct: number, pointValue: number): number {
+    return Math.abs(qty) * price * pointValue * marginPct / 100;
+}
+
+/**
+ * Account equity computed AS IF the marketprice were `atPrice` — used to
+ * check what equity would be at a hypothetical intra-bar price (e.g. the
+ * bar's adverse extreme for a margin-call check).
+ *
+ *   equity_at_price = initial_capital + netprofit + unrealizedPnL_at_price
+ *
+ * The mark-to-market is computed against EVERY open trade's entry price.
+ */
+export function computeEquityAtPrice(context: any, atPrice: number): number {
+    const strategy: StrategyState = context.strategy;
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
+    let unrealized = 0;
+    for (const trade of strategy.opentrades) {
+        const dir = Math.sign(trade.size);
+        const priceChange = dir === 1 ? atPrice - trade.entry_price : trade.entry_price - atPrice;
+        unrealized += priceChange * Math.abs(trade.size) * pointValue;
+    }
+    return strategy.initial_capital + strategy.netprofit + unrealized;
+}
+
+/**
+ * Total margin currently held by all open positions, valued at `atPrice`.
+ * Per-position margin uses `margin_long` for longs and `margin_short` for
+ * shorts (Pine semantic — see strategy() declaration).
+ */
+export function computeHeldMargin(context: any, atPrice: number): number {
+    const strategy: StrategyState = context.strategy;
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
+    let total = 0;
+    for (const trade of strategy.opentrades) {
+        const dir = Math.sign(trade.size);
+        const marginPct = dir === 1
+            ? (strategy.config.margin_long  ?? 100)
+            : (strategy.config.margin_short ?? 100);
+        total += computeRequiredMargin(trade.size, atPrice, marginPct, pointValue);
+    }
+    return total;
+}
+
+/**
  * Calculate order quantity based on strategy configuration
  */
 export function calculateOrderQty(context: any, specifiedQty: number | undefined, direction: number, fillPrice: number): number {
@@ -226,6 +280,50 @@ export function processStrategyOrders(context: any): void {
             // shorts fill lower). slippage is in ticks of syminfo.mintick.
             const direction = parseDirection(order.direction);
             fillPrice = applySlippage(context, direction, fillPrice);
+
+            // Pre-trade margin check (TV broker emulator). If the required
+            // margin for the NEW position would exceed available equity at
+            // fill time, TV silently drops the order — no trade record, no
+            // log. Verified against QA #10's xlsx:
+            //   PT #1 rejected: required $10,010.30 > available $10,000
+            //   PT #2 rejected: required $10,014.07 > available $10,000
+            //   PT #3 accepted: required  $9,977.65 < available $10,000
+            // For reversals, the close leg always succeeds (frees margin);
+            // we check the NEW open leg only. For pyramiding (same-direction
+            // adds), held margin from existing positions stays locked.
+            const marginPct = direction === 1
+                ? (strategy.config.margin_long  ?? 100)
+                : (strategy.config.margin_short ?? 100);
+            if (marginPct < 100) {
+                const oldSize = strategy.position_size;
+                const oldSign = Math.sign(oldSize);
+                const isReversal = oldSign !== 0 && oldSign !== direction;
+                const newOpenQty = isReversal
+                    ? Math.max(0, order.qty - Math.abs(oldSize))
+                    : order.qty;
+
+                if (newOpenQty > 0) {
+                    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
+                    // Equity is already MtM'd at OPEN by markToMarket() at the
+                    // top of processStrategyOrders, so strategy.equity is the
+                    // current account value. Subtract margin held by positions
+                    // that will REMAIN after this order:
+                    //   - reversal: nothing remains from old position.
+                    //   - pyramiding (same dir): existing held margin stays.
+                    //   - fresh entry: nothing held to begin with.
+                    let heldMarginRemaining = 0;
+                    if (oldSign === direction) {
+                        heldMarginRemaining = computeHeldMargin(context, openPrice);
+                    }
+                    const availableEquity = strategy.equity - heldMarginRemaining;
+                    const requiredMargin = computeRequiredMargin(newOpenQty, fillPrice, marginPct, pointValue);
+
+                    if (requiredMargin > availableEquity) {
+                        order.status = 'cancelled';
+                        continue;
+                    }
+                }
+            }
 
             // Execute the order using the pre-calculated qty
             executeOrder(context, order, fillPrice, currentTime);
@@ -1256,6 +1354,57 @@ export function processExitOrders(context: any): void {
     // Refresh equity for any caller reading metrics between processExitOrders
     // and the bar-finalize step. Peaks are latched in finalizeBar().
     markToMarket(context, closePrice);
+}
+
+/**
+ * Margin-call check (TV broker emulator). After all entries and user-defined
+ * exits have processed for the bar, check whether the bar's INTRA-BAR
+ * adverse movement (low for longs, high for shorts) would have pushed
+ * account equity below required maintenance margin. If yes, FORCE LIQUIDATE
+ * all open positions at the bar's adverse extreme with exit_id="Margin call".
+ *
+ * Verified against QA #10's xlsx — trade #3 short at $3796.62, qty=13.14,
+ * 20% margin on $10k account:
+ *   bar 2019-01-06 H=$4080 → equity_at_H = $6,274.93,
+ *   required_margin_at_H = $10,722.70 → equity < margin → liquidate at $4080.
+ *
+ * TV reports the exit price as the bar's adverse extreme even though the
+ * theoretical threshold (where equity == margin) is closer ($3,798). This
+ * is the pessimistic broker model — the trader is assumed to be liquidated
+ * at the worst intra-bar price.
+ *
+ * Skipped entirely when the position's `margin_pct >= 100` (no leverage)
+ * or when there are no open positions.
+ */
+export function processMarginCall(context: any): void {
+    const strategy: StrategyState = context.strategy;
+    if (!strategy || strategy.opentrades.length === 0) return;
+
+    const positionDir = Math.sign(strategy.position_size);
+    if (positionDir === 0) return;
+
+    const marginPct = positionDir === 1
+        ? (strategy.config.margin_long  ?? 100)
+        : (strategy.config.margin_short ?? 100);
+    if (marginPct >= 100) return;  // No leverage → no margin call.
+
+    const highPrice   = Series.from(context.data.high).get(0);
+    const lowPrice    = Series.from(context.data.low).get(0);
+    const currentTime = Series.from(context.data.openTime).get(0);
+    const pointValue  = context.pine?.syminfo?.pointvalue ?? 1;
+
+    const adversePrice = positionDir === 1 ? lowPrice : highPrice;
+    const totalQty = Math.abs(strategy.position_size);
+    const equityAtAdverse = computeEquityAtPrice(context, adversePrice);
+    const requiredMarginAtAdverse = computeRequiredMargin(totalQty, adversePrice, marginPct, pointValue);
+
+    if (equityAtAdverse < requiredMarginAtAdverse) {
+        // Liquidate ALL positions at the adverse extreme.
+        closePartialPosition(context, totalQty, adversePrice, currentTime, {
+            exitId:      'Margin call',
+            exitComment: 'Margin call',
+        });
+    }
 }
 
 /**
