@@ -128,6 +128,34 @@ export interface Order {
     // For a long: highest high seen since the trail armed; for a short: lowest low.
     trail_peak?: number;
     trail_armed?: boolean;
+
+    // Internal: set on `strategy.entry` orders that REVERSE the current
+    // position (opposite direction with existing size). Used by
+    // `strategy.exit` to detect when its absolute limit/stop values were
+    // computed from the OUTGOING position's avg (i.e. stale): the user
+    // typically writes `stop = strategy.position_avg_price + N` on the
+    // crossunder bar, but at that point position_avg_price still reflects
+    // the position being reversed away. TV silently ignores stale legs;
+    // PT drops them at trigger evaluation (see processExitOrders).
+    _isReversalEntry?: boolean;
+    _attachedAtReversal?: boolean;
+
+    // Internal: cadence-detection for strategy.exit. TV's broker
+    // emulator uses Pine's lazy series-eval semantic for exit
+    // parameters — the variable behind limit/stop is re-read each bar.
+    // For a variable scoped INSIDE an if-block (sparse pattern), that
+    // gives NA on non-trigger bars → TV doesn't fire stale captures.
+    // For a variable in MAIN scope (persistent pattern, called every
+    // bar), TV reads the captured value → fires stale captures.
+    //
+    // PT can't see the variable's scope from runtime, but the call
+    // CADENCE (how often the user calls strategy.exit per call site)
+    // correlates 1:1. Detected at queue time: if the user called this
+    // exit's callsite on the PRIOR bar, `_isPersistent = true`. Used
+    // by processExitOrders to suppress the stale-reversal drop on
+    // persistent-pattern exits.
+    _isPersistent?: boolean;
+    _callsiteId?: string;
 }
 
 /**
@@ -180,6 +208,24 @@ export interface StrategyState {
     // as the denominator of max_runup_percent (TV reports runup as a
     // percentage of the equity AT the peak, not of initial_capital).
     equity_at_runup_peak: number;
+    // Max-Equity snapshot (running high-water of realized equity) at the
+    // moment max_drawdown was last bumped to a new peak. Used as the
+    // denominator of max_drawdown_percent — TV's empirical behavior is
+    // ddpct = max_drawdown / Max_Equity-at-latch × 100, NOT against
+    // initial_capital or current equity_peak.
+    equity_at_drawdown_peak: number;
+
+    // Running max of `(latched_drawdown / equity_at_that_latch) × 100` and
+    // `(latched_runup / equity_at_that_latch) × 100` across the strategy's
+    // lifetime. TV's max_drawdown_percent / max_runup_percent are NOT
+    // derived from the current max_drawdown / current equity_at_peak —
+    // they're the HIGHEST RATIO ever observed across all latch events.
+    // The two interpretations diverge when a later latch produces a larger
+    // ABSOLUTE drawdown but a smaller PERCENTAGE (because equity grew
+    // faster than the drawdown). See [qa-issues-todo.md] #1 for the
+    // empirical evidence on BTCUSDC weekly 2020-05-04 vs 2021-05-10.
+    max_drawdown_percent_value: number;
+    max_runup_percent_value: number;
 
     // Trade-stat counters — updated each time a trade closes
     wintrades: number;                // count of closed trades with profit > 0
@@ -208,4 +254,16 @@ export interface StrategyState {
     // further entries are blocked for the rest of the run (or trading day for
     // intraday rules — TODO: day rollover detection).
     risk_halted: boolean;
+
+    // Internal: per-callsite cadence tracking for strategy.exit. Keyed by the
+    // transpiler-injected __callsiteId; value is the last context.idx the user
+    // called strategy.exit at that site. Read at queue time to detect whether
+    // the prior bar also called this site (persistent pattern) or not (sparse
+    // / inside-if-block pattern). See Order._isPersistent.
+    _exit_call_history?: Map<string, number>;
+    // Fallback counter for non-transpiled callers (no __callsiteId injection)
+    // — paired with per-bar reset so each "first-of-bar" raw call gets a
+    // stable synthetic id like `exit_raw_N`.
+    _exit_fallback_counter?: number;
+    _exit_fallback_last_bar?: number;
 }

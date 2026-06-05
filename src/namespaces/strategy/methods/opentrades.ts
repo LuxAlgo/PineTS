@@ -32,6 +32,10 @@ export function opentrades(context: any) {
             [Symbol.toPrimitive]() { return list.length; },
         };
 
+        // PointValue converts price-change × qty into account-currency dollars.
+        // 1 for crypto/forex; can be >1 for futures (e.g. $50 per point on ES).
+        const pointValue: number = context.pine?.syminfo?.pointvalue ?? 1;
+
         // Helper: hypothetical exit commission if the trade closed right now
         // at current price. TV's open-trade profit deducts BOTH the entry
         // commission (already charged on trade.commission) AND this
@@ -44,7 +48,8 @@ export function opentrades(context: any) {
             if (!value) return 0;
             const qty = Math.abs(t.size);
             switch (type) {
-                case 'percent':           return qty * cp * (value / 100);
+                // Notional = qty × price × pointValue, commission = value% of it.
+                case 'percent':           return qty * cp * pointValue * (value / 100);
                 case 'cash_per_contract': return qty * value;
                 case 'cash_per_order':    return value;
                 default: return 0;
@@ -54,8 +59,9 @@ export function opentrades(context: any) {
         // Per-trade cost-basis denominator for the * _percent getters.
         // TV uses entry notional + entry commission (the trade's true cost
         // basis), not just notional — the formula in the Pine docs
-        // ("entry_price × quantity") is imprecise.
-        const costBasis = (t: Trade): number => Math.abs(t.size) * t.entry_price + (t.commission ?? 0);
+        // ("entry_price × quantity") is imprecise. Notional includes pointValue.
+        const costBasis = (t: Trade): number =>
+            Math.abs(t.size) * t.entry_price * pointValue + (t.commission ?? 0);
 
         result.profit = (i: any) => {
             const t = at(i);
@@ -64,7 +70,7 @@ export function opentrades(context: any) {
             if (!Number.isFinite(cp)) return NaN;
             const dir = Math.sign(t.size);
             const priceChange = dir === 1 ? cp - t.entry_price : t.entry_price - cp;
-            return priceChange * Math.abs(t.size) - (t.commission ?? 0) - hypotheticalExitComm(t, cp);
+            return priceChange * Math.abs(t.size) * pointValue - (t.commission ?? 0) - hypotheticalExitComm(t, cp);
         };
         result.profit_percent = (i: any) => {
             const t = at(i);
@@ -79,7 +85,7 @@ export function opentrades(context: any) {
         result.entry_price = (i: any) => at(i)?.entry_price ?? NaN;
         result.entry_bar_index = (i: any) => at(i)?.entry_bar_index ?? NaN;
         result.entry_id = (i: any) => at(i)?.entry_id ?? '';
-        result.entry_comment = (i: any) => at(i)?.entry_comment ?? '';
+        result.entry_comment = (i: any) => at(i)?.entry_comment ?? at(i)?.entry_id ?? '';
         result.entry_time = (i: any) => at(i)?.entry_time ?? NaN;
         result.max_drawdown = (i: any) => at(i)?.max_drawdown ?? 0;
         result.max_drawdown_percent = (i: any) => {

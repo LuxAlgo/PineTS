@@ -42,6 +42,30 @@ export function close(context: any) {
         const targetId = parsed.id;
         if (targetId === undefined || targetId === null) return;
 
+        // TV semantic: strategy.close() supersedes any pending conditional
+        // strategy.exit() orders that target the same entry id. Without this
+        // cancellation, both the close market and the exit (TP/SL/trail)
+        // legs fire on the next bar, double-closing the position.
+        //
+        // Conditional exit identification: strategy.exit() orders have at
+        // least one of profit/loss/limit/stop/trail_price/trail_points set;
+        // strategy.close() / close_all() leave all of those undefined.
+        const isConditionalExit = (o: Order) =>
+            (o.category ?? 'entry') === 'exit' &&
+            (o.profit !== undefined || o.loss !== undefined ||
+             o.limit !== undefined  || o.stop !== undefined ||
+             o.trail_price !== undefined || o.trail_points !== undefined);
+
+        const pending = context.strategy.pending_orders;
+        for (const o of pending) {
+            if (isConditionalExit(o) &&
+                (o.from_entry ?? '') === targetId &&
+                o.status === 'pending') {
+                o.status = 'cancelled';
+            }
+        }
+        context.strategy.pending_orders = pending.filter((o: Order) => o.status === 'pending');
+
         const order: Order = {
             id: `close_${targetId}`,
             direction: 0, // resolved at fill time from matching position sign

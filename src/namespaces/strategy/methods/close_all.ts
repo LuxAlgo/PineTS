@@ -26,6 +26,26 @@ export function close_all(context: any) {
         }
         const parsed = parseArgsForPineParams<any>(args, CLOSE_ALL_SIGNATURES, CLOSE_ALL_ARGS_TYPES);
 
+        // TV semantic: strategy.close_all() supersedes any pending conditional
+        // strategy.exit() orders for the entire book. Without this, both the
+        // close_all market and the conditional exits fire on the next bar,
+        // double-closing the position. Conditional exits are identified by
+        // having at least one of profit/loss/limit/stop/trail_* set; close()
+        // / close_all() markets leave all of those undefined.
+        const isConditionalExit = (o: Order) =>
+            (o.category ?? 'entry') === 'exit' &&
+            (o.profit !== undefined || o.loss !== undefined ||
+             o.limit !== undefined  || o.stop !== undefined ||
+             o.trail_price !== undefined || o.trail_points !== undefined);
+
+        const pending = context.strategy.pending_orders;
+        for (const o of pending) {
+            if (isConditionalExit(o) && o.status === 'pending') {
+                o.status = 'cancelled';
+            }
+        }
+        context.strategy.pending_orders = pending.filter((o: Order) => o.status === 'pending');
+
         const order: Order = {
             id: 'close_all',
             direction: 0, // resolved at fill time

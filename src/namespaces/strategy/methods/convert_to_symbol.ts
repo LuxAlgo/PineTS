@@ -3,19 +3,17 @@
 
 /**
  * Inverse of convert_to_account: from account currency → symbol currency.
- * Same identity passthrough for matching-currency case.
+ *
+ * Mirrors convert_to_account's TV-matching behavior: identity passthrough
+ * when account and symbol currencies are the same string, NaN when they
+ * differ. See convert_to_account.ts for the full rationale.
  */
 export function convert_to_symbol(context: any) {
-    let warned = false;
     return (value: number) => {
         const s = context.strategy;
         const symCur = context.pine?.syminfo?.currency;
         const acctCur = s?.account_currency ?? 'USD';
-        if (symCur && symCur !== acctCur && !warned) {
-            // eslint-disable-next-line no-console
-            console.warn(`strategy.convert_to_symbol: no FX rate for ${acctCur}→${symCur}; returning value unchanged.`);
-            warned = true;
-        }
+        if (symCur && symCur !== acctCur) return NaN;
         return value;
     };
 }

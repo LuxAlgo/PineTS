@@ -31,6 +31,42 @@ export function parseStrategyOptions(args: any[]): any {
 }
 
 /**
+ * Round a stop/limit price to the symbol's mintick grid, AWAY from the
+ * reference price (typically the current bar's close at order placement).
+ *
+ * Pine's broker emulator places stop/limit orders on the mintick grid
+ * conservatively — a buy stop at 4188.4541 above current 4184 becomes
+ * 4188.46 (ceiling), not 4188.45. This makes the order trigger LATER
+ * (requires more price movement), mirroring real-broker order placement.
+ *
+ * The rule:
+ *   price > referencePrice → ceil to mintick (push price UP)
+ *   price < referencePrice → floor to mintick (push price DOWN)
+ *   price === referencePrice → return as-is
+ *
+ * Covers all four cases naturally:
+ *   - Buy stop above current  → ceil
+ *   - Sell stop below current → floor
+ *   - Buy limit below current → floor
+ *   - Sell limit above current → ceil
+ *   - Long TP above entry / SL below entry → ceil / floor
+ *   - Short TP below entry / SL above entry → floor / ceil
+ *
+ * For mintick === 0 or undefined (defensive), returns the price unchanged.
+ */
+export function roundToMintick(price: number, referencePrice: number, mintick: number): number {
+    if (!mintick || mintick <= 0 || !Number.isFinite(price)) return price;
+    if (price === referencePrice) return price;
+    const ticks = price / mintick;
+    // Small epsilon guards against float-imprecision flipping an
+    // already-on-grid value to the next tick.
+    const EPS = 1e-9;
+    return price > referencePrice
+        ? Math.ceil(ticks - EPS) * mintick
+        : Math.floor(ticks + EPS) * mintick;
+}
+
+/**
  * Calculate order quantity based on strategy configuration
  */
 export function calculateOrderQty(context: any, specifiedQty: number | undefined, direction: number, fillPrice: number): number {
@@ -96,16 +132,22 @@ export function processStrategyOrders(context: any): void {
     //   - max_drawdown includes the entry commission as a baseline cost.
     //   - max_runup is the favorable price gain net of that same cost.
     // This matches TV's per-trade reporting.
+    //
+    // pointValue converts a one-unit price move into account-currency dollars.
+    // For BTC and most crypto/forex it's 1; for futures it can be e.g. $50
+    // per point on the ES E-mini. Multiplied into every priceChange × qty
+    // computation throughout this file so excursions and P&L are in $.
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
     for (const trade of strategy.opentrades) {
         const tradeQty = Math.abs(trade.size);
         const isLongTrade = trade.size > 0;
         const entryComm = trade.commission ?? 0;
         const advPrice = isLongTrade
-            ? (trade.entry_price - lowPrice) * tradeQty
-            : (highPrice - trade.entry_price) * tradeQty;
+            ? (trade.entry_price - lowPrice) * tradeQty * pointValue
+            : (highPrice - trade.entry_price) * tradeQty * pointValue;
         const favPrice = isLongTrade
-            ? (highPrice - trade.entry_price) * tradeQty
-            : (trade.entry_price - lowPrice) * tradeQty;
+            ? (highPrice - trade.entry_price) * tradeQty * pointValue
+            : (trade.entry_price - lowPrice) * tradeQty * pointValue;
         const advNet = Math.max(0, advPrice) + entryComm;
         const favNet = Math.max(0, favPrice - entryComm);
         if (advNet > (trade.max_drawdown ?? 0)) trade.max_drawdown = advNet;
@@ -222,14 +264,17 @@ export function parseDirection(direction: number | string): number {
  *   - strategy.commission.cash_per_contract: commission_value per contract filled
  *   - strategy.commission.cash_per_order   : commission_value flat per fill leg
  */
-function computeLegCommission(strategy: StrategyState, qty: number, price: number): number {
+function computeLegCommission(context: any, strategy: StrategyState, qty: number, price: number): number {
     const type = strategy.config.commission_type ?? 'percent';
     const value = strategy.config.commission_value ?? 0;
     if (!value || value === 0) return 0;
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
     switch (type) {
         case 'percent':
-            return Math.abs(qty) * price * (value / 100);
+            // Notional = qty × price × pointValue, commission is value% of it.
+            return Math.abs(qty) * price * pointValue * (value / 100);
         case 'cash_per_contract':
+            // value is in account currency per contract — no pointValue factor.
             return Math.abs(qty) * value;
         case 'cash_per_order':
             return value;
@@ -359,17 +404,37 @@ export function evaluateCatastrophicRiskHalt(strategy: StrategyState): void {
  * @param price     fill price
  * @param time      fill time (ms)
  */
-export function openTrade(context: any, entryId: string, direction: number, qty: number, price: number, time: number): void {
+export function openTrade(
+    context: any,
+    entryId: string,
+    direction: number,
+    qty: number,
+    price: number,
+    time: number,
+    entryComment?: string,
+    isReversalOpen?: boolean,
+): void {
     const strategy: StrategyState = context.strategy;
     const tradeNum = strategy.opentrades.length + strategy.closedtrades.length;
 
     // Charge entry-leg commission up front; trade.commission will be increased
     // by the exit leg when it closes (or proportional share on partial close).
-    const entryCommission = computeLegCommission(strategy, qty, price);
+    //
+    // For cash_per_order on a reversal open, charge only HALF the flat fee:
+    // the other half is charged to the closing leg in closePartialPosition,
+    // matching TV's 50/50 split of the order's flat fee between the two legs.
+    const commTypeOpen = strategy.config.commission_type ?? 'percent';
+    const halveFlat = isReversalOpen && commTypeOpen === 'cash_per_order';
+    const rawEntryCommission = computeLegCommission(context, strategy, qty, price);
+    const entryCommission = halveFlat ? rawEntryCommission / 2 : rawEntryCommission;
 
     const trade: Trade = {
         id: `trade_${tradeNum}`,
         entry_id: entryId,
+        // TV's strategy.closedtrades.entry_comment falls back to the entry id
+        // when no explicit comment was passed to strategy.entry/order. Mirror
+        // that by stamping the id as the entry comment when none is given.
+        entry_comment: entryComment ?? entryId,
         entry_price: price,
         entry_bar_index: context.idx,
         entry_time: time,
@@ -381,6 +446,16 @@ export function openTrade(context: any, entryId: string, direction: number, qty:
     };
 
     strategy.opentrades.push(trade);
+
+    // Realize the entry commission immediately as a cash outflow. TV reports
+    // strategy.netprofit and strategy.grossloss net of entry commission the
+    // moment the trade opens (commission is a real cost paid at fill, not
+    // deferred to close). The exit commission is realized in
+    // closePartialPosition when the trade actually closes.
+    if (entryCommission > 0) {
+        strategy.netprofit -= entryCommission;
+        strategy.grossloss += entryCommission;
+    }
 
     // Per-trade fill-bar excursion: capture this bar's intra-bar H/L against
     // the just-filled trade. Without this, the per-trade loop at the top of
@@ -427,8 +502,9 @@ export function openTrade(context: any, entryId: string, direction: number, qty:
         }
     }
 
-    const adv = direction === 1 ? (price - worstPrice) * qty : (worstPrice - price) * qty;
-    const fav = direction === 1 ? (bestPrice  - price) * qty : (price - bestPrice)  * qty;
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
+    const adv = direction === 1 ? (price - worstPrice) * qty * pointValue : (worstPrice - price) * qty * pointValue;
+    const fav = direction === 1 ? (bestPrice  - price) * qty * pointValue : (price - bestPrice)  * qty * pointValue;
     // Fold entry-leg commission into BOTH excursions: a trade is "down" by
     // the entry commission the moment it fills (so the adverse excursion
     // includes that cost), and the favorable excursion is the price gain NET
@@ -473,18 +549,33 @@ function executeOrder(context: any, order: Order, fillPrice: number, fillTime: n
 
     if (isReducing) {
         // We are reducing or reversing
-        // First, use the order to close existing trades
+        // First, use the order to close existing trades. For a reversal,
+        // the reversing order's id/comment become the EXIT id/comment of
+        // the prior trade — that's TV behavior.
         const qtyToClose = Math.min(Math.abs(oldPosition), order.qty);
-        closePartialPosition(context, qtyToClose, fillPrice, fillTime);
-
-        // If there is remaining quantity (reversal), open a new trade
         const remainingQty = order.qty - qtyToClose;
+        // True reversal: the SAME order both flattens the prior position
+        // AND opens a new one in the opposite direction. For cash_per_order
+        // commission, TV charges the order's flat fee ONCE total — split
+        // 50/50 between the closing leg and the opening leg (so the closing
+        // trade gets +value/2 and the new trade also gets +value/2 on its
+        // entry). Marking the close with isImplicitReversal triggers that
+        // half-charge in closePartialPosition; the new openTrade is told
+        // separately to apply the same half-charge.
+        const isReversal = remainingQty > 0;
+        closePartialPosition(context, qtyToClose, fillPrice, fillTime, {
+            exitId:      order.id,
+            exitComment: order.comment,
+            isImplicitReversal: isReversal,
+        });
+
+        // If there is remaining quantity (reversal), open a new trade.
         if (remainingQty > 0) {
-            openTrade(context, order.id, direction, remainingQty, fillPrice, fillTime);
+            openTrade(context, order.id, direction, remainingQty, fillPrice, fillTime, order.comment, /* isReversalOpen */ true);
         }
     } else {
         // We are increasing position or opening fresh
-        openTrade(context, order.id, direction, order.qty, fillPrice, fillTime);
+        openTrade(context, order.id, direction, order.qty, fillPrice, fillTime, order.comment);
     }
 }
 
@@ -494,14 +585,33 @@ function executeOrder(context: any, order: Order, fillPrice: number, fillTime: n
  * FIFO accounting: closes oldest open trades first. Splits a trade if the
  * close qty is smaller than the trade's remaining qty.
  */
+export interface CloseInfo {
+    /** Which exit leg triggered ('profit'/'loss'/'trailing'), null otherwise. */
+    triggerKind?: 'profit' | 'loss' | 'trailing' | null;
+    /** Exit order's id, set onto the closed trade as trade.exit_id. */
+    exitId?: string;
+    /** Resolved exit comment (the matching comment_profit/loss/trailing). */
+    exitComment?: string;
+    /**
+     * True when this close is part of a single REVERSAL order that will
+     * also open a new trade in the opposite direction. Affects
+     * `cash_per_order` commission: TV charges the flat fee ONCE per order
+     * placement, attributed to the new entry — the implicit close leg of
+     * the reversal does NOT incur a second flat charge. Per-leg types
+     * (percent, cash_per_contract) are unaffected by this flag.
+     */
+    isImplicitReversal?: boolean;
+}
+
 export function closePartialPosition(
     context: any,
     qtyToClose: number,
     exitPrice: number,
     exitTime: number,
-    triggerKind?: 'profit' | 'loss' | 'trailing' | null,
+    closeInfo?: CloseInfo,
 ): void {
     const strategy: StrategyState = context.strategy;
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
     let remainingQty = qtyToClose;
 
     // Close trades from oldest to newest (FIFO)
@@ -526,9 +636,10 @@ export function closePartialPosition(
             trade.exit_bar_index = context.idx;
             trade.exit_time = exitTime;
 
-            // Gross P&L from price change (direction-aware)
+            // Gross P&L from price change (direction-aware). PointValue
+            // converts the price-change × qty units into account currency.
             const priceChange = tradeDirection === 1 ? exitPrice - trade.entry_price : trade.entry_price - exitPrice;
-            const grossPnL = priceChange * tradeQty;
+            const grossPnL = priceChange * tradeQty * pointValue;
 
             // Capture entry-only commission BEFORE adding the exit leg — used
             // below for the TP-override on max_drawdown.
@@ -536,7 +647,13 @@ export function closePartialPosition(
 
             // Charge entry + exit commission legs and bank them on the trade.
             // trade.commission already holds the entry leg charged in openTrade().
-            const exitCommission = computeLegCommission(strategy, tradeQty, exitPrice);
+            // Exception: for `cash_per_order` on a reversal close, the
+            // reversal order's flat fee is split 50/50 between the closing
+            // leg and the opening leg (matching TV — each side gets value/2).
+            const commType = strategy.config.commission_type ?? 'percent';
+            const halveFlatExit = closeInfo?.isImplicitReversal && commType === 'cash_per_order';
+            const rawExitCommission = computeLegCommission(context, strategy, tradeQty, exitPrice);
+            const exitCommission = halveFlatExit ? rawExitCommission / 2 : rawExitCommission;
             trade.commission = entryOnlyComm + exitCommission;
 
             // Override per-trade peaks based on which exit leg actually fired
@@ -547,13 +664,32 @@ export function closePartialPosition(
             //                          entry-commission baseline cost remains.
             // Reversal / close()/close_all() leave triggerKind undefined and
             // the trade's accumulated excursions stand.
-            if (triggerKind === 'loss')   trade.max_runup    = 0;
-            if (triggerKind === 'profit') trade.max_drawdown = entryOnlyComm;
+            if (closeInfo?.triggerKind === 'loss')   trade.max_runup    = 0;
+            if (closeInfo?.triggerKind === 'profit') trade.max_drawdown = entryOnlyComm;
 
-            // Profit on the trade is NET of all commission.
+            // Stamp the exit metadata onto the closed trade. exit_id is the
+            // exit ORDER's id ('ExA' / 'ExB' / etc.); exit_comment is the
+            // resolved per-leg comment (comment_loss / comment_profit /
+            // comment_trailing) selected by the trigger kind.
+            if (closeInfo?.exitId !== undefined)      trade.exit_id      = closeInfo.exitId;
+            if (closeInfo?.exitComment !== undefined) trade.exit_comment = closeInfo.exitComment;
+
+            // Profit on the trade is NET of all commission (entry + exit).
             trade.profit = grossPnL - trade.commission;
 
-            // Update gross profit/loss + win/loss/even counters (post-commission)
+            // netprofit: roll in the INCREMENTAL P&L from this close. The
+            // entry-leg commission was already realized at fill, so the
+            // close-time contribution is grossPnL − exitCommission.
+            const incremental = grossPnL - exitCommission;
+            strategy.netprofit += incremental;
+
+            // grossprofit / grossloss per Pine docs: total currency value of
+            // all COMPLETED winning / losing trades. So at close we ROLL
+            // BACK the entry-commission contribution to grossloss (which was
+            // added at fill) and partition the trade's total profit by sign.
+            // Open trades' entry commission stays in grossloss until they
+            // close (matches TV's commission_slippage behavior).
+            strategy.grossloss -= entryOnlyComm;
             if (trade.profit > 0) {
                 strategy.grossprofit += trade.profit;
                 strategy.wintrades++;
@@ -573,11 +709,17 @@ export function closePartialPosition(
             const tradeNum = strategy.opentrades.length + strategy.closedtrades.length;
 
             const priceChange = tradeDirection === 1 ? exitPrice - trade.entry_price : trade.entry_price - exitPrice;
-            const grossPnL = priceChange * qtyClosing;
+            const grossPnL = priceChange * qtyClosing * pointValue;
 
-            // Proportional entry-leg commission for the closed portion + full exit-leg commission.
+            // Proportional entry-leg commission for the closed portion + full
+            // exit-leg commission. Same cash_per_order half-on-reversal rule
+            // as the full-close path above (each side gets value/2 of the
+            // reversal order's flat fee).
             const entryCommissionShare = (trade.commission ?? 0) * (qtyClosing / tradeQty);
-            const exitCommission = computeLegCommission(strategy, qtyClosing, exitPrice);
+            const commTypePartial = strategy.config.commission_type ?? 'percent';
+            const halveFlatPartial = closeInfo?.isImplicitReversal && commTypePartial === 'cash_per_order';
+            const rawExitCommPartial = computeLegCommission(context, strategy, qtyClosing, exitPrice);
+            const exitCommission = halveFlatPartial ? rawExitCommPartial / 2 : rawExitCommPartial;
             const closedCommission = entryCommissionShare + exitCommission;
 
             const closedPortion: Trade = {
@@ -590,9 +732,26 @@ export function closePartialPosition(
                 exit_time: exitTime,
                 commission: closedCommission,
                 profit: grossPnL - closedCommission,
+                // Stamp exit metadata from the closing order.
+                exit_id:      closeInfo?.exitId      ?? trade.exit_id,
+                exit_comment: closeInfo?.exitComment ?? trade.exit_comment,
             };
 
-            // Update gross profit/loss + win/loss/even counters (post-commission)
+            // Apply the same SL/TP per-trade peak overrides to the closed
+            // portion (full close path comments above explain the semantic).
+            if (closeInfo?.triggerKind === 'loss')   closedPortion.max_runup    = 0;
+            if (closeInfo?.triggerKind === 'profit') closedPortion.max_drawdown = entryCommissionShare;
+
+            // Incremental P&L from this partial close — entry-leg share was
+            // already realized at fill, so the close-time contribution to
+            // netprofit is grossPnL − exit commission only.
+            const incremental = grossPnL - exitCommission;
+            strategy.netprofit += incremental;
+
+            // grossprofit / grossloss: roll back the entry-share contribution
+            // to grossloss (added at fill) and partition the closed portion's
+            // total profit by sign (mirrors the full-close path).
+            strategy.grossloss -= entryCommissionShare;
             if (closedPortion.profit! > 0) {
                 strategy.grossprofit += closedPortion.profit!;
                 strategy.wintrades++;
@@ -614,9 +773,6 @@ export function closePartialPosition(
             remainingQty = 0;
         }
     }
-
-    // Update net profit
-    strategy.netprofit = strategy.grossprofit - strategy.grossloss;
 
     // Catastrophic risk-rule halt check after this close.
     evaluateCatastrophicRiskHalt(strategy);
@@ -661,12 +817,13 @@ export function closePartialPosition(
  */
 function markToMarket(context: any, currentPrice: number): void {
     const strategy: StrategyState = context.strategy;
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
     let unrealizedPnL = 0;
     for (const trade of strategy.opentrades) {
         const tradeQty = Math.abs(trade.size);
         const tradeDirection = Math.sign(trade.size);
         const priceChange = tradeDirection === 1 ? currentPrice - trade.entry_price : trade.entry_price - currentPrice;
-        unrealizedPnL += priceChange * tradeQty;
+        unrealizedPnL += priceChange * tradeQty * pointValue;
     }
     strategy.openprofit = unrealizedPnL;
     strategy.equity = strategy.initial_capital + strategy.netprofit + unrealizedPnL;
@@ -702,6 +859,7 @@ function markToMarket(context: any, currentPrice: number): void {
  */
 function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): void {
     const strategy: StrategyState = context.strategy;
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
 
     const realizedEquity = strategy.initial_capital + strategy.netprofit;
     if (realizedEquity > strategy.equity_peak)   strategy.equity_peak   = realizedEquity;
@@ -715,22 +873,47 @@ function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): v
     if (posSize !== 0 && Number.isFinite(avgPrice)) {
         const worstPrice = posSize > 0 ? lowPrice  : highPrice;
         const bestPrice  = posSize > 0 ? highPrice : lowPrice;
-        // posSize * (avg - worstPrice) is always >= 0 (a loss):
-        //   long  (posSize > 0): low <  avg → avg - low > 0  → product > 0
-        //   short (posSize < 0): high > avg → avg - high < 0 → product = neg * neg > 0
-        worstExcursion = posSize * (avgPrice - worstPrice);
-        // posSize * (bestPrice - avg) is always >= 0 (a gain), symmetric to above.
-        bestExcursion  = posSize * (bestPrice - avgPrice);
+        // posSize * (avg - worstPrice) is always >= 0 (a loss); same for gain.
+        // Multiplied by pointValue to convert price units → account currency.
+        worstExcursion = posSize * (avgPrice - worstPrice) * pointValue;
+        bestExcursion  = posSize * (bestPrice - avgPrice)  * pointValue;
     }
 
     const drawDown = (strategy.equity_peak   - realizedEquity) + worstExcursion;
-    if (drawDown > strategy.max_drawdown) strategy.max_drawdown = drawDown;
+    if (drawDown > strategy.max_drawdown) {
+        strategy.max_drawdown = drawDown;
+        // Snapshot Max_Equity (the realized high-water in force at this
+        // moment) — denominator for max_drawdown_percent. Per TV's docs:
+        //   ddpct = max_drawdown / Max_Equity-at-latch × 100
+        strategy.equity_at_drawdown_peak = strategy.equity_peak;
+
+        // TV's max_drawdown_percent is the RUNNING MAX of the per-latch
+        // ratio, not (current_max_drawdown / current_equity_at_peak).
+        // The two diverge when a later latch has a larger absolute
+        // drawdown but a smaller percentage (equity grew faster). Track
+        // the high-water ratio independently of the absolute peak.
+        if (strategy.equity_peak > 0) {
+            const ratio = (100 * drawDown) / strategy.equity_peak;
+            if (ratio > strategy.max_drawdown_percent_value) {
+                strategy.max_drawdown_percent_value = ratio;
+            }
+        }
+    }
 
     const runUp   = (realizedEquity - strategy.equity_trough) + bestExcursion;
     if (runUp > strategy.max_runup) {
         strategy.max_runup = runUp;
         // Snapshot the total equity at this peak — denominator for max_runup_percent.
         strategy.equity_at_runup_peak = realizedEquity + bestExcursion;
+
+        // Symmetric running-max-of-ratio for max_runup_percent. See the
+        // max_drawdown_percent comment above for the semantic reason.
+        if (strategy.equity_at_runup_peak > 0) {
+            const ratio = (100 * runUp) / strategy.equity_at_runup_peak;
+            if (ratio > strategy.max_runup_percent_value) {
+                strategy.max_runup_percent_value = ratio;
+            }
+        }
     }
 }
 
@@ -748,13 +931,13 @@ export function closeMatching(
     qtyToClose: number,
     exitPrice: number,
     exitTime: number,
-    triggerKind?: 'profit' | 'loss' | 'trailing' | null,
+    closeInfo?: CloseInfo,
 ): void {
     const strategy: StrategyState = context.strategy;
 
     if (!fromEntry || fromEntry === '') {
         // No filter — close FIFO across all open trades.
-        closePartialPosition(context, qtyToClose, exitPrice, exitTime, triggerKind);
+        closePartialPosition(context, qtyToClose, exitPrice, exitTime, closeInfo);
         return;
     }
 
@@ -772,7 +955,7 @@ export function closeMatching(
     const effectiveClose = Math.min(qtyToClose, matchingQty);
 
     strategy.opentrades = [...matching, ...others];
-    closePartialPosition(context, effectiveClose, exitPrice, exitTime, triggerKind);
+    closePartialPosition(context, effectiveClose, exitPrice, exitTime, closeInfo);
 }
 
 /**
@@ -832,7 +1015,10 @@ export function processExitOrders(context: any): void {
                 qtyToClose = matchingQty * (order.qty_percent / 100);
             }
 
-            closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime);
+            closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime, {
+                exitId:      order.id,
+                exitComment: order.comment,
+            });
             order.status = 'filled';
             order.fill_price = fillPrice;
             order.fill_bar = context.idx;
@@ -867,11 +1053,67 @@ export function processExitOrders(context: any): void {
                 : avgEntry + order.loss * mintick;
         }
 
+        // Validate trigger prices are on the correct side of avgEntry —
+        // EPHEMERAL pattern only. A wrong-sided leg (e.g. SL below entry
+        // for a short, TP above entry for a short) typically arises when
+        // the user computes the price from strategy.position_avg_price
+        // BEFORE a reversal fill — the value reflects the OUTGOING
+        // position. For sparse/ephemeral exits (variable scoped inside
+        // an if-block), TV's lazy series-eval gives NA on non-trigger
+        // bars → no fire; PT mirrors that by dropping the wrong-sided
+        // leg here.
+        //
+        // For PERSISTENT exits (every-bar refresh, main-scope variable),
+        // TV trusts the captured value and lets gap-fill produce the
+        // actual reachable price. E.g. QA #5b trade #100: stale
+        // shortTpPrice = long_avg(52666) - 5000 = 47666 sits ABOVE the
+        // new short's entry (46868) — wrong-sided geometrically — but
+        // TV keeps it; the bar's open (46868) ≤ TP (47666) triggers
+        // gap-fill at the open for a zero-PnL exit. Dropping here would
+        // miss that.
+        if (!order._isPersistent) {
+            if (slPrice !== undefined) {
+                const slValid = isLong ? slPrice < avgEntry : slPrice > avgEntry;
+                if (!slValid) slPrice = undefined;
+            }
+            if (tpPrice !== undefined) {
+                const tpValid = isLong ? tpPrice > avgEntry : tpPrice < avgEntry;
+                if (!tpValid) tpPrice = undefined;
+            }
+        }
+
+        // Stale-attachment drop: when the exit was queued at the same bar
+        // as the reversal entry it attaches to, the user's absolute
+        // limit/stop values were computed from the OUTGOING position's
+        // avg. TV's behavior depends on the user's variable scope: if the
+        // variable was scoped to an if-block (lazy series eval gives NA
+        // on non-trigger bars), TV doesn't fire; if the variable is in
+        // main scope (always-defined value), TV fires the captured value.
+        //
+        // PT detects this via call-cadence at queue time (see
+        // [exit.ts](../methods/exit.ts)) — a `_isPersistent` flag set
+        // when the user called this same call site on the prior bar
+        // (i.e., the strategy.exit line is being re-executed every bar).
+        // Persistent capture → trust the value (mirrors TV's main-scope
+        // path). Ephemeral capture → drop the absolute legs (mirrors
+        // TV's NA-on-non-trigger-bar path for if-block-scoped vars).
+        if (order._attachedAtReversal && !order._isPersistent) {
+            if (order.limit !== undefined) tpPrice = undefined;
+            if (order.stop  !== undefined) slPrice = undefined;
+        }
+
         // Trailing-stop state.
         // Two arming modes:
         //   trail_price: armed when market reaches the absolute price level
         //   trail_points: armed when market moves N ticks in favor from entry
         // After arming, ride at trail_offset ticks behind the running peak.
+        //
+        // TV semantic — verified by probe scripts in
+        // .scratchpad/trail-probes/probe1-bar-state.pine and probe2: the trail
+        // CANNOT arm and trigger on the same bar. The arming bar establishes
+        // the peak; the trigger check is suppressed for that bar only. SL and
+        // TP triggers are independent and still fire on the arming bar.
+        let trailArmedThisBar = false;
         if (!order.trail_armed && (order.trail_price !== undefined || order.trail_points !== undefined)) {
             let armPrice: number | undefined;
             if (order.trail_price !== undefined) armPrice = order.trail_price;
@@ -885,6 +1127,7 @@ export function processExitOrders(context: any): void {
                 if (armed) {
                     order.trail_armed = true;
                     order.trail_peak = isLong ? highPrice : lowPrice;
+                    trailArmedThisBar = true;
                 }
             }
         } else if (order.trail_armed) {
@@ -901,39 +1144,77 @@ export function processExitOrders(context: any): void {
         }
 
         // Evaluate triggers against this bar.
-        // TV convention: when both TP and SL could've fired in the same bar,
-        // SL fires (pessimistic assumption — bar's range hit SL "first").
-        // Trailing fires when low <= trailTrigger (long) or high >= trailTrigger (short).
+        //
+        // TV's intra-bar order assumption — when both TP and SL could've fired,
+        // which fires first is determined by the bar's open's PROXIMITY to high
+        // vs low (TV docs, "Concepts / Strategies / Broker emulator"):
+        //   open closer to HIGH → assumed order: open → high → low → close
+        //                         (first move is up — favorable for longs, adverse for shorts)
+        //   open closer to LOW  → assumed order: open → low → high → close
+        //                         (first move is down — adverse for longs, favorable for shorts)
+        //
+        // For a long: open-near-high fires TP first, open-near-low fires SL first.
+        // For a short: open-near-high fires SL first, open-near-low fires TP first.
+        // Trail is treated as an adverse-side trigger (it kicks in on a retrace
+        // against the favorable peak), so it fires together with SL.
+        const openCloserToHigh = Math.abs(highPrice - openPrice) <= Math.abs(openPrice - lowPrice);
+        const favorableFirst = isLong ? openCloserToHigh : !openCloserToHigh;
+
         let triggered = false;
         let triggerPrice: number = NaN;
         let triggerKind: 'profit' | 'loss' | 'trailing' | null = null;
 
-        // SL check (pessimistic first)
-        if (slPrice !== undefined) {
+        // Gap-fill rule: if the bar's OPEN is already past the trigger
+        // (favorable side for the position), the actual fill price is the
+        // OPEN, not the literal trigger price. This mirrors real broker
+        // behavior — if you'd planned a stop at $100 and the bar opens at
+        // $95, you fill at $95, not $100. For favorable triggers (TP for
+        // long means open above limit; TP for short means open below limit)
+        // the trader gets the favorable gap. For adverse triggers (SL),
+        // same gap detection but on the adverse side.
+        const checkSl = () => {
+            if (triggered || slPrice === undefined) return;
             const slHit = isLong ? lowPrice <= slPrice : highPrice >= slPrice;
             if (slHit) {
                 triggered = true;
-                triggerPrice = slPrice;
+                // Adverse-side gap: long SL with open below stop, or short SL with open above stop.
+                const openPastSl = isLong ? openPrice <= slPrice : openPrice >= slPrice;
+                triggerPrice = openPastSl ? openPrice : slPrice;
                 triggerKind = 'loss';
             }
-        }
-        // Trail check (if not already SL-triggered)
-        if (!triggered && trailTrigger !== undefined) {
+        };
+        const checkTrail = () => {
+            if (triggered || trailTrigger === undefined || trailArmedThisBar) return;
             const trailHit = isLong ? lowPrice <= trailTrigger : highPrice >= trailTrigger;
             if (trailHit) {
                 triggered = true;
-                triggerPrice = trailTrigger;
+                const openPastTrail = isLong ? openPrice <= trailTrigger : openPrice >= trailTrigger;
+                triggerPrice = openPastTrail ? openPrice : trailTrigger;
                 triggerKind = 'trailing';
             }
-        }
-        // TP check (if not already SL/trail-triggered)
-        if (!triggered && tpPrice !== undefined) {
+        };
+        const checkTp = () => {
+            if (triggered || tpPrice === undefined) return;
             const tpHit = isLong ? highPrice >= tpPrice : lowPrice <= tpPrice;
             if (tpHit) {
                 triggered = true;
-                triggerPrice = tpPrice;
+                // Favorable-side gap: long TP with open above limit, or short TP with open below limit.
+                const openPastTp = isLong ? openPrice >= tpPrice : openPrice <= tpPrice;
+                triggerPrice = openPastTp ? openPrice : tpPrice;
                 triggerKind = 'profit';
             }
+        };
+
+        if (favorableFirst) {
+            // First extreme is the favorable one → TP fires before SL/trail.
+            checkTp();
+            checkSl();
+            checkTrail();
+        } else {
+            // First extreme is the adverse one → SL/trail fire before TP.
+            checkSl();
+            checkTrail();
+            checkTp();
         }
 
         if (triggered) {
@@ -946,7 +1227,22 @@ export function processExitOrders(context: any): void {
                 qtyToClose = matchingQty * (order.qty_percent / 100);
             }
 
-            closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime, triggerKind);
+            // Resolve which per-leg comment to stamp on the closed trade.
+            // strategy.exit() exposes comment_profit / comment_loss /
+            // comment_trailing — each fires only when its leg triggers.
+            // Fall back to the order's generic `comment` if the per-leg
+            // string isn't set.
+            const legComment =
+                triggerKind === 'profit'   ? (order.comment_profit   ?? order.comment) :
+                triggerKind === 'loss'     ? (order.comment_loss     ?? order.comment) :
+                triggerKind === 'trailing' ? (order.comment_trailing ?? order.comment) :
+                                              order.comment;
+
+            closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime, {
+                triggerKind,
+                exitId:      order.id,
+                exitComment: legComment,
+            });
             order.status = 'filled';
             order.fill_price = fillPrice;
             order.fill_bar = context.idx;
@@ -1057,6 +1353,9 @@ export function initializeStrategy(context: any, config: any): void {
         equity_peak: initialCapital,
         equity_trough: initialCapital,
         equity_at_runup_peak: initialCapital,
+        equity_at_drawdown_peak: initialCapital,
+        max_drawdown_percent_value: 0,
+        max_runup_percent_value: 0,
 
         // Trade-stat counters
         wintrades: 0,
@@ -1073,5 +1372,10 @@ export function initializeStrategy(context: any, config: any): void {
         // Risk-management rules (configured via strategy.risk.*)
         risk_rules: {},
         risk_halted: false,
+
+        // Cadence tracking for strategy.exit (see types.ts).
+        _exit_call_history: new Map<string, number>(),
+        _exit_fallback_counter: 0,
+        _exit_fallback_last_bar: -1,
     };
 }

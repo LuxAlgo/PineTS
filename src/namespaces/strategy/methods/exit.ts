@@ -3,7 +3,8 @@
 
 import { Order } from '../types';
 import { Series } from '../../../Series';
-import { parseArgsForPineParams } from '../../utils';
+import { parseArgsForPineParams, extractCallsiteId } from '../../utils';
+import { roundToMintick } from '../utils';
 
 /**
  * Pine signature (21 named args):
@@ -52,6 +53,23 @@ export function exit(context: any) {
         if (!context.strategy) {
             throw new Error('strategy.exit() called before strategy() declaration');
         }
+
+        // Extract the transpiler-injected callsite ID BEFORE parsing args
+        // (so parseArgsForPineParams doesn't see the sentinel). When the call
+        // comes from non-transpiled JS, the sentinel is absent — fall back
+        // to a per-bar synthetic counter so each "raw" call still gets a
+        // stable id within the bar (the cadence check below is fuzzier in
+        // that case but still works for the canonical patterns).
+        let callsiteId = extractCallsiteId(args);
+        if (callsiteId === undefined) {
+            const s = context.strategy;
+            if (s._exit_fallback_last_bar !== context.idx) {
+                s._exit_fallback_counter = 0;
+                s._exit_fallback_last_bar = context.idx;
+            }
+            callsiteId = `exit_raw_${s._exit_fallback_counter++}`;
+        }
+
         const parsed = parseArgsForPineParams<any>(args, EXIT_SIGNATURES, EXIT_ARGS_TYPES);
 
         const extractValue = (val: any) => {
@@ -69,12 +87,55 @@ export function exit(context: any) {
         const qty              = extractValue(parsed.qty);
         const qtyPercent       = extractValue(parsed.qty_percent);
         const profit           = extractValue(parsed.profit);
-        const limit            = extractValue(parsed.limit);
+        const limitRaw         = extractValue(parsed.limit);
         const loss             = extractValue(parsed.loss);
-        const stop             = extractValue(parsed.stop);
-        const trailPrice       = extractValue(parsed.trail_price);
+        const stopRaw          = extractValue(parsed.stop);
+        const trailPriceRaw    = extractValue(parsed.trail_price);
         const trailPoints      = extractValue(parsed.trail_points);
         const trailOffset      = extractValue(parsed.trail_offset);
+
+        // Snap limit/stop/trail_price to the mintick grid AWAY from the
+        // current bar's close (broker-emulator convention — see
+        // roundToMintick in utils.ts). For QA #3 / #5b values like
+        // position_avg_price + 5000 the inputs are already mintick-aligned,
+        // so the helper is a no-op there. For tests like stop_orders that
+        // multiply close × 0.95 etc., it produces the same adverse rounding
+        // TV applies on order placement.
+        const mintick = context.pine?.syminfo?.mintick ?? 0;
+        const currentClose = Series.from(context.data.close).get(0);
+        const limit       = limitRaw      !== undefined ? roundToMintick(limitRaw,      currentClose, mintick) : undefined;
+        const stop        = stopRaw       !== undefined ? roundToMintick(stopRaw,       currentClose, mintick) : undefined;
+        const trailPrice  = trailPriceRaw !== undefined ? roundToMintick(trailPriceRaw, currentClose, mintick) : undefined;
+
+        // Detect stale-attachment: when this exit is attached to a pending
+        // entry that REVERSES the current position, the user's absolute
+        // limit/stop values (computed from strategy.position_avg_price at
+        // call time) reflect the OUTGOING position's avg, not the incoming
+        // one. TV silently drops those legs; we mark the order here and
+        // processExitOrders skips the absolute legs when the flag is set.
+        const fromEntryId = fromEntry ?? '';
+        const pendingEntry = fromEntryId
+            ? context.strategy.pending_orders.find(
+                  (o: Order) => o.category === 'entry' && o.id === fromEntryId && o.status === 'pending',
+              )
+            : context.strategy.pending_orders.find(
+                  (o: Order) => o.category === 'entry' && o.status === 'pending',
+              );
+        const attachedAtReversal = !!pendingEntry?._isReversalEntry;
+
+        // Cadence detection: persistent vs ephemeral capture.
+        // If the user called strategy.exit at THIS exact call site on the
+        // previous bar, the pattern is "every bar" (persistent — variable
+        // is in main scope, value always defined). If the prior bar had
+        // no call, the pattern is "sparse" (ephemeral — variable likely
+        // scoped to an if-block, NA on non-trigger bars in TV). Used
+        // below by processExitOrders to suppress the stale-reversal drop
+        // for persistent-pattern exits, matching TV's actual behavior of
+        // firing the captured value when the user keeps refreshing it.
+        const history = context.strategy._exit_call_history as Map<string, number>;
+        const lastBarForSite = history.get(callsiteId);
+        const isPersistent = lastBarForSite !== undefined && lastBarForSite === context.idx - 1;
+        history.set(callsiteId, context.idx);
 
         const order: Order = {
             id: idValue ?? 'exit',
@@ -86,7 +147,7 @@ export function exit(context: any) {
             time: Series.from(context.data.openTime).get(0),
             status: 'pending',
             category: 'exit',
-            from_entry: fromEntry ?? '',
+            from_entry: fromEntryId,
             profit, loss, limit, stop,
             trail_price: trailPrice,
             trail_points: trailPoints,
@@ -103,8 +164,28 @@ export function exit(context: any) {
             disable_alert: extractValue(parsed.disable_alert),
             trail_armed: false,
             trail_peak: NaN,
+            _attachedAtReversal: attachedAtReversal,
+            _isPersistent: isPersistent,
+            _callsiteId: callsiteId,
         };
 
-        context.strategy.pending_orders.push(order);
+        // Pine semantic: calling strategy.exit with the same `id` REPLACES the
+        // prior pending exit order (allowing dynamic TP/SL adjustment each
+        // bar). Without this, stale exits accumulate across the strategy's
+        // lifetime — they survive past their originating trade, and when a
+        // later trade happens to satisfy the wrong-sided / stale-reversal
+        // checks geometrically, the old order fires at a phantom price.
+        // Same id + same from_entry scope is the replacement key.
+        const exitId = order.id;
+        const list = context.strategy.pending_orders as Order[];
+        for (let i = list.length - 1; i >= 0; i--) {
+            const o = list[i];
+            if (o.category === 'exit' && o.id === exitId &&
+                (o.from_entry ?? '') === (order.from_entry ?? '') &&
+                o.status === 'pending') {
+                list.splice(i, 1);
+            }
+        }
+        list.push(order);
     };
 }

@@ -2,8 +2,13 @@
 // Copyright (C) 2025 Alaa-eddine KADDOURI
 
 /**
- * Average per-trade loss (as a positive percent) across losing closed trades.
- * NaN when no losers yet. Matches Pine's strategy.avg_losing_trade_percent.
+ * Average per-trade loss (as a SIGNED negative percent) across losing
+ * closed trades. NaN when no losers yet.
+ *
+ * Note: `strategy.avg_losing_trade` (the dollar version) is reported as a
+ * POSITIVE magnitude by Pine convention, but `_percent` is signed —
+ * negative values, since they represent losses. Verified against
+ * `avg_stats.pine` TV output.
  */
 export function avg_losing_trade_percent(context: any) {
     return () => {
@@ -13,7 +18,7 @@ export function avg_losing_trade_percent(context: any) {
         for (const t of s.closedtrades) {
             if ((t.profit ?? 0) < 0) {
                 const notional = Math.abs(t.size) * t.entry_price;
-                if (notional > 0) sum += (100 * Math.abs(t.profit ?? 0)) / notional;
+                if (notional > 0) sum += (100 * (t.profit ?? 0)) / notional;
             }
         }
         return sum / s.losstrades;

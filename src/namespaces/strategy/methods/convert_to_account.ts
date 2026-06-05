@@ -4,22 +4,24 @@
 /**
  * Convert a value from the symbol's currency to the account currency.
  *
- * For the common same-currency case (e.g. BTCUSDC's quote currency USDC ≈ USD),
- * this is an identity. Genuine cross-currency conversion would require an FX
- * rate source which we don't model; returns the input unchanged in that case
- * with a console warning on first call.
+ * TV behavior — verified against `conversion.pine` on BTCUSDC (symbol
+ * currency = USDC) with account currency = USD:
+ *   - same currency string → return the value unchanged (identity)
+ *   - different currency strings → return `na` (NaN), since there's no
+ *     FX rate available. This is TV's behavior even for nominally
+ *     pegged pairs like USDC vs USD — string equality, not economic
+ *     equivalence.
+ *
+ * When `syminfo.currency` is undefined we fall back to identity rather
+ * than NaN, so synthetic / array-fed datasets without a syminfo block
+ * don't get poisoned.
  */
 export function convert_to_account(context: any) {
-    let warned = false;
     return (value: number) => {
         const s = context.strategy;
         const symCur = context.pine?.syminfo?.currency;
         const acctCur = s?.account_currency ?? 'USD';
-        if (symCur && symCur !== acctCur && !warned) {
-            // eslint-disable-next-line no-console
-            console.warn(`strategy.convert_to_account: no FX rate for ${symCur}→${acctCur}; returning value unchanged.`);
-            warned = true;
-        }
+        if (symCur && symCur !== acctCur) return NaN;
         return value;
     };
 }
