@@ -1,5 +1,36 @@
 # Change Log
 
+## [0.9.19] - 2026-06-05 - Strategy Broker Emulator — Margin Calls, Drawdown/Runup & Exit Cadence
+
+### Added
+
+- **Margin-call liquidation (`processMarginCall`)**: After entries and user-defined exits each bar, the engine checks whether intra-bar adverse movement (low for longs, high for shorts) would push equity below required maintenance margin when **`margin_long` / `margin_short` < 100**. If so, all open positions are force-liquidated at the bar's adverse extreme with **`exit_id` / `exit_comment` = `"Margin call"`**. Skipped when no leverage is configured. Helpers **`computeRequiredMargin`**, **`computeEquityAtPrice`**, **`computeHeldMargin`** model collateral in account currency via **`syminfo.pointvalue`**.
+- **Pre-trade margin rejection**: Entry orders that would require more margin than available equity at fill time are silently dropped (TV broker emulator — verified against margin QA oracles).
+- **`finalizeStrategyBar()`**: End-of-bar hook latches **`strategy.max_drawdown`** / **`strategy.max_runup`** once, after all fills settle, so TP/SL closes contribute realized P&L instead of phantom intra-bar excursions against raw H/L.
+- **`roundToMintick()`**: Stop/limit/trail prices on **`strategy.entry`** and **`strategy.exit`** snap to **`syminfo.mintick`** away from the reference close (broker placement convention).
+- **`CALLSITE_ID_NAMESPACES`**: Centralized transpiler list for trailing **`{ __callsiteId }`** injection; **`strategy.exit`** added for per-call-site cadence detection (persistent vs ephemeral exit-parameter capture). Documented known unification gaps with **`plot`**, **`ta.*`**, and **`alert`** patterns in **`settings.ts`**.
+- **Order qty truncation**: **`calculateOrderQty`** floors computed qty to **6 decimal places** (`floor(qty × 1e6) / 1e6`) matching TV's empirical sizing precision (independent of **`syminfo.mincontract`**).
+
+### Fixed
+
+- **`strategy.max_drawdown` / `max_runup` (account & per-trade)**: Equity peaks now latch after fills via **`updateEquityPeaks`** using realized equity + intra-bar H/L excursions of surviving positions. Per-trade peaks use **`syminfo.pointvalue`**; TP closes zero **`max_runup`**, SL closes set **`max_drawdown`** to entry commission only. Eliminates over-counting when stops fire before the bar's raw extreme.
+- **`strategy.max_drawdown_percent` / `max_runup_percent`**: Now track the **running max** of `(latched_value / equity_at_that_latch) × 100` across all latch events — not a derived ratio from current peaks (matches TV when later drawdowns are larger in $ but smaller in %).
+- **`strategy.margin_liquidation_price`**: Replaced simplified peak-loss formula with TradingView's documented formula using realized equity, **`pointvalue`**, direction, and margin%; result rounded to mintick (floor for longs, ceil for shorts).
+- **`strategy.convert_to_account` / `convert_to_symbol`**: Return **`na`** when symbol and account currency strings differ (string equality, not economic equivalence — e.g. USDC vs USD); identity passthrough when they match; identity fallback when **`syminfo.currency`** is undefined.
+- **`strategy.exit()` broker semantics**: Same **`id` + `from_entry`** replaces prior pending exit (dynamic TP/SL adjustment); **`strategy.close()` / `close_all()`** cancel pending conditional exits targeting the same entry/book to prevent double-close; stale-reversal absolute legs dropped for ephemeral captures but kept for persistent every-bar refreshes (call-cadence via **`__callsiteId`**); wrong-sided SL/TP legs dropped for ephemeral pattern; trailing stop cannot arm and trigger on the same bar; intra-bar TP/SL ordering uses open-proximity-to-H/L rule from TV broker docs.
+- **Commission & P&L accounting**: Entry commission realized at fill (**`netprofit`** / **`grossloss`**); exit commission at close; incremental **`netprofit`** updates; **`grossprofit` / `grossloss`** roll back entry commission at close and partition by trade sign; **`cash_per_order`** flat fee split 50/50 across reversal close/open legs; percent commission uses **`qty × price × pointvalue`** notional.
+- **`strategy.opentrades.profit`**: Deducts hypothetical exit commission; cost-basis denominators include **`pointvalue`** and entry commission; **`capital_held`** returns **`na`** when margin is not explicitly configured (defaults 100%).
+- **`strategy.closedtrades.*` percent getters**: Cost basis = entry notional × **`pointvalue`** + approximated entry commission; **`entry_comment` / `exit_comment`** fall back to **`entry_id` / `exit_id`** when unset.
+- **`strategy.avg_losing_trade_percent`**: Reports signed negative percents (loss convention), not positive magnitudes.
+- **Reversal metadata**: Reversing orders stamp prior trade **`exit_id` / `exit_comment`** from the reversing order; new trade gets entry comment from order.
+
+### Changed
+
+- **`syminfo.pointvalue` threading**: Woven through P&L, commission, per-trade excursions, equity peaks, margin helpers, and trade-collection getters so futures-style point values convert correctly.
+- **Package metadata**: Repository URL → **`LuxAlgo/PineTS`**, homepage → **`luxalgo.com`**.
+
+---
+
 ## [0.9.17] - 2026-06-02 - Strategy Namespace, `updateTail` Var Snapshots & Drawing `color(na)` Semantics
 
 ### Added
