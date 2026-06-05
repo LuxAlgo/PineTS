@@ -5,13 +5,23 @@
  * Price at which the current leveraged position would be force-liquidated.
  * Returns NaN when flat or when the relevant margin% is 100 (no leverage).
  *
- * Formula (simplified):
- *   long  → entry_avg_price * (1 - margin_long / 100)
- *   short → entry_avg_price * (1 + margin_short / 100)
+ * Official TV formula, documented at
+ * https://www.tradingview.com/support/solutions/43000717375/ :
  *
- * This is the simple peak-loss-tolerable price; real broker liquidation
- * depends on maintenance margin schedules which we don't model.
- * Matches Pine's strategy.margin_liquidation_price in the common case.
+ *   MarginLiquidationPriceRaw =
+ *       ((InitialCapital + NetProfit) / (PointValue * AbsPositionSize)
+ *        − Direction * EntryPrice)
+ *     / (MarginPercent / 100 − Direction)
+ *
+ * Where:
+ *   InitialCapital + NetProfit = realized account equity (initial cash
+ *                                 plus closed-trade P&L; excludes openprofit)
+ *   PointValue                 = syminfo.pointvalue (1 for crypto, varies
+ *                                 for futures contracts)
+ *   AbsPositionSize            = |strategy.position_size|
+ *   Direction                  = +1 for long, −1 for short
+ *   EntryPrice                 = strategy.position_avg_price
+ *   MarginPercent              = margin_long for longs, margin_short for shorts
  */
 export function margin_liquidation_price(context: any) {
     return () => {
@@ -20,14 +30,26 @@ export function margin_liquidation_price(context: any) {
         const avgPrice = s.position_avg_price;
         if (!Number.isFinite(avgPrice)) return NaN;
 
-        if (s.position_size > 0) {
-            const marginLong = s.config.margin_long ?? 100;
-            if (marginLong >= 100) return NaN;
-            return avgPrice * (1 - marginLong / 100);
-        } else {
-            const marginShort = s.config.margin_short ?? 100;
-            if (marginShort >= 100) return NaN;
-            return avgPrice * (1 + marginShort / 100);
-        }
+        const direction = Math.sign(s.position_size);
+        const marginPct = direction === 1
+            ? (s.config.margin_long  ?? 100)
+            : (s.config.margin_short ?? 100);
+        if (marginPct >= 100) return NaN;  // No leverage → no liquidation.
+
+        const qty        = Math.abs(s.position_size);
+        const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
+        const realizedEq = (s.initial_capital ?? 0) + (s.netprofit ?? 0);
+
+        const numerator   = realizedEq / (pointValue * qty) - direction * avgPrice;
+        const denominator = marginPct / 100 - direction;
+        const raw         = numerator / denominator;
+
+        // Per the TV docs, the raw value is rounded to the nearest mintick:
+        // DOWN for longs (toward more negative, safer/farther from current),
+        // UP for shorts (toward more positive, safer/farther from current).
+        const mintick = context.pine?.syminfo?.mintick ?? 0.01;
+        return direction === 1
+            ? Math.floor(raw / mintick) * mintick
+            : Math.ceil(raw / mintick)  * mintick;
     };
 }

@@ -4,7 +4,7 @@
 import * as walk from 'acorn-walk';
 import ScopeManager from '../analysis/ScopeManager';
 import { ASTFactory, CONTEXT_NAME } from '../utils/ASTFactory';
-import { KNOWN_NAMESPACES, NAMESPACES_LIKE, ASYNC_METHODS } from '../settings';
+import { KNOWN_NAMESPACES, NAMESPACES_LIKE, ASYNC_METHODS, CALLSITE_ID_NAMESPACES } from '../settings';
 
 const UNDEFINED_ARG = {
     type: 'Identifier',
@@ -1429,9 +1429,15 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         });
         node.arguments = newArgs;
 
-        // Inject unique callsite ID for plot/hline/fill to support duplicate titles
-        const PLOT_ID_NAMESPACES = ['plot', 'hline', 'fill'];
-        if (PLOT_ID_NAMESPACES.includes(namespace)) {
+        // Inject a trailing `{ __callsiteId }` options object for calls that
+        // opt in via CALLSITE_ID_NAMESPACES. Entries may be bare namespaces
+        // ('plot' → matches plot.*) or fully-qualified namespace.method
+        // ('strategy.exit' → that method only). The runtime helper
+        // extractCallsiteId() pops the sentinel. See settings.ts for the
+        // pattern's purpose and known unification gaps (alert, ta, etc).
+        const methodNameForCallsite = node.callee.property.name;
+        const fullPath = `${namespace}.${methodNameForCallsite}`;
+        if (CALLSITE_ID_NAMESPACES.includes(namespace) || CALLSITE_ID_NAMESPACES.includes(fullPath)) {
             const callsiteId = scopeManager.getNextPlotCallId();
             node.arguments.push({
                 type: 'ObjectExpression',
