@@ -1236,8 +1236,14 @@ export function processExitOrders(context: any): void {
                     trailArmedThisBar = true;
                 }
             }
-        } else if (order.trail_armed) {
-            // Already armed — update peak.
+        }
+
+        // Determine if open is closer to high vs low (Proximity Rule)
+        const openCloserToHigh = Math.abs(highPrice - openPrice) <= Math.abs(openPrice - lowPrice);
+        const favorableFirst = isLong ? openCloserToHigh : !openCloserToHigh;
+
+        if (order.trail_armed && !trailArmedThisBar && favorableFirst) {
+            // Favorable first: update peak before evaluation
             if (isLong) order.trail_peak = Math.max(order.trail_peak ?? -Infinity, highPrice);
             else order.trail_peak = Math.min(order.trail_peak ?? Infinity, lowPrice);
         }
@@ -1263,8 +1269,6 @@ export function processExitOrders(context: any): void {
         // For a short: open-near-high fires SL first, open-near-low fires TP first.
         // Trail is treated as an adverse-side trigger (it kicks in on a retrace
         // against the favorable peak), so it fires together with SL.
-        const openCloserToHigh = Math.abs(highPrice - openPrice) <= Math.abs(openPrice - lowPrice);
-        const favorableFirst = isLong ? openCloserToHigh : !openCloserToHigh;
 
         let triggered = false;
         let triggerPrice: number = NaN;
@@ -1297,6 +1301,20 @@ export function processExitOrders(context: any): void {
                 const openPastTrail = isLong ? openPrice <= trailTrigger : openPrice >= trailTrigger;
                 triggerPrice = openPastTrail ? openPrice : trailTrigger;
                 triggerKind = 'trailing';
+            } else if (!favorableFirst) {
+                // Adverse first & didn't hit: update peak now
+                if (isLong) order.trail_peak = Math.max(order.trail_peak ?? -Infinity, highPrice);
+                else order.trail_peak = Math.min(order.trail_peak ?? Infinity, lowPrice);
+
+                const updatedTrailTrigger = isLong
+                    ? order.trail_peak - order.trail_offset * mintick
+                    : order.trail_peak + order.trail_offset * mintick;
+                const segment3Hit = isLong ? closePrice <= updatedTrailTrigger : closePrice >= updatedTrailTrigger;
+                if (segment3Hit) {
+                    triggered = true;
+                    triggerPrice = updatedTrailTrigger;
+                    triggerKind = 'trailing';
+                }
             }
         };
         const checkTp = () => {
