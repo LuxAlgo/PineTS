@@ -1080,6 +1080,11 @@ export class PineTS {
         context.__maxLoops = this._maxLoops;
         context._alertMode = this._alertMode;
 
+        // User-explicit prop overrides flow from the Indicator to the runtime.
+        // Read by Core.indicator() and initializeStrategy/strategy.any() to
+        // merge on top of source-code declaration args.
+        context._propOverrides = this._currentIndicator?.getRuntimePropOverrides() ?? {};
+
         context.pineTSCode = pineTSCode;
         context.isSecondaryContext = isSecondary; // Set secondary context flag
         context.data.close = new Series([]);

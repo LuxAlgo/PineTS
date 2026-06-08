@@ -70,6 +70,42 @@ export interface IPineInput {
 }
 
 /**
+ * Pine Script declaration-arg typing classification (used by `IPineProp`).
+ *
+ * `enum` covers every Pine-namespace constant used as a declaration arg
+ * (e.g. `format.percent`, `currency.USD`, `strategy.percent_of_equity`).
+ * The scanner resolves these to bare strings via the rightmost-identifier
+ * rule, matching what the runtime sees.
+ */
+export type PinePropType = 'string' | 'int' | 'float' | 'bool' | 'enum';
+
+/**
+ * Schema entry for a single `indicator()` / `strategy()` declaration argument.
+ *
+ * The full set of entries is curated from the Pine v6 reference:
+ *   - https://www.tradingview.com/pine-script-reference/v6/#fun_indicator
+ *   - https://www.tradingview.com/pine-script-reference/v6/#fun_strategy
+ *
+ * `title` and `shorttitle` are present in the schema with `mutable: false`
+ * so UI consumers can render them, but are filtered out of `.prop` writes.
+ *
+ * For enum-typed entries, `options` enumerates the accepted runtime strings.
+ * The schema source file points to the corresponding exported Pine enum
+ * (e.g. `enum format` in Types.ts) so JS callers can import the same source.
+ */
+export interface IPineProp {
+    name:        string;                      // 'initial_capital', 'pyramiding', ...
+    type:        PinePropType;
+    defval:      unknown;                     // Pine-spec default
+    options?:    unknown[];                   // enum: accepted runtime values
+    minval?:     number;
+    maxval?:     number;
+    mutable:     boolean;                     // false for title/shorttitle
+    appliesTo:   'indicator' | 'strategy' | 'both';
+    version?:    5 | 6;                       // 6 = v6-only (behind_chart, dynamic_requests)
+}
+
+/**
  * Result of `Indicator.prepare()`. The single artifact handed to the engine.
  *
  * `inputs` is the title-keyed map the runtime already expects — built by

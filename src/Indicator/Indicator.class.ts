@@ -5,7 +5,10 @@ import { transpile } from '../transpiler/index';
 import { VIEWPORT_DEPENDENT_BUILTINS } from '../transpiler/settings';
 import { scanInputs } from './scanInputs';
 import { buildInputProxy } from './inputProxy';
-import type { IPineInput, PreparedScript } from './types';
+import { scanDeclaration } from './scanDeclaration';
+import { propsForDeclaration } from './propsSchema';
+import { buildPropProxy } from './propProxy';
+import type { IPineInput, IPineProp, PreparedScript } from './types';
 
 /**
  * The single owner of every per-script artifact. Holds the source, lazily
@@ -37,12 +40,24 @@ export class Indicator {
     // the getter.
     declare public readonly input: Record<string, unknown>;
 
+    // `.prop` mirrors `.input`: frozen container, name-keyed view of declaration
+    // args. Filtered to mutable entries only — title/shorttitle are excluded.
+    declare public readonly prop: Record<string, unknown>;
+
     // Lazy artifacts — populated on first prepare() call.
     private _prepared: PreparedScript | null = null;
     private _inputMeta: IPineInput[] | null = null;
     private _inputValues: Record<string, unknown> = {};
     private _explicitOverrides = new Set<string>(); // titles the user wrote via .input.X = ...
     private _inputProxy: Record<string, unknown> | null = null;
+
+    // Prop machinery — same lazy pattern as inputs.
+    private _propMeta: IPineProp[] | null = null;
+    private _propValues: Record<string, unknown> = {};
+    private _propProxy: Record<string, unknown> | null = null;
+    private _declarationType: 'indicator' | 'strategy' | null = null;
+    private _sourcePropArgs: Record<string, unknown> = {};
+    private _explicitPropOverrides = new Set<string>(); // names the user wrote via .prop.X = ...
 
     constructor(source: Function | string, inputs: Record<string, unknown> = {}) {
         this.source = source;
@@ -54,6 +69,16 @@ export class Indicator {
             get: () => this._getInputProxy(),
             set: () => {
                 throw new Error('[Indicator] .input cannot be replaced — mutate individual keys (e.g. ind.input["My Title"] = 20).');
+            },
+            enumerable: true,
+            configurable: false,
+        });
+
+        // `.prop` mirrors `.input` — frozen container, lazy proxy.
+        Object.defineProperty(this, 'prop', {
+            get: () => this._getPropProxy(),
+            set: () => {
+                throw new Error('[Indicator] .prop cannot be replaced — mutate individual keys (e.g. ind.prop["initial_capital"] = 50000).');
             },
             enumerable: true,
             configurable: false,
@@ -131,6 +156,41 @@ export class Indicator {
         return this._inputMeta!;
     }
 
+    /**
+     * Schema metadata for declaration props applicable to this script's type.
+     * Includes non-mutable entries (`title`, `shorttitle`) for completeness —
+     * UI builders can render them; writes to those keys via `.prop` still throw.
+     */
+    public getPropsMeta(): IPineProp[] {
+        this._ensurePropsScanned();
+        return this._propMeta!;
+    }
+
+    /**
+     * Name-keyed map of user-overridden props for the runtime to merge on top
+     * of the source-code's indicator()/strategy() call args. Only explicit
+     * writes via `.prop` are included — source-code values flow through the
+     * normal Pine call path.
+     */
+    public getRuntimePropOverrides(): Record<string, unknown> {
+        const out: Record<string, unknown> = {};
+        if (this._propMeta) {
+            for (const name of this._explicitPropOverrides) {
+                out[name] = this._propValues[name];
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Detected declaration type, or null if the source code has neither call.
+     * `.prop` falls back to the indicator schema in the null case.
+     */
+    public getDeclarationType(): 'indicator' | 'strategy' | null {
+        this._ensurePropsScanned();
+        return this._declarationType;
+    }
+
     // ── internals ───────────────────────────────────────────────────────
 
     private _ensureInputsScanned(): void {
@@ -144,6 +204,26 @@ export class Indicator {
     private _getInputProxy(): Record<string, unknown> {
         this._ensureInputsScanned();
         return this._inputProxy!;
+    }
+
+    private _ensurePropsScanned(): void {
+        if (this._propMeta) return;
+        const scanned = scanDeclaration(this.source);
+        this._declarationType = scanned.type;
+        this._sourcePropArgs = scanned.args;
+        this._propMeta = propsForDeclaration(scanned.type);
+        const built = buildPropProxy(
+            this._propMeta,
+            this._sourcePropArgs,
+            (name) => this._explicitPropOverrides.add(name),
+        );
+        this._propValues = built.values;
+        this._propProxy = built.proxy;
+    }
+
+    private _getPropProxy(): Record<string, unknown> {
+        this._ensurePropsScanned();
+        return this._propProxy!;
     }
 }
 

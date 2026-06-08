@@ -1474,7 +1474,8 @@ export function initializeStrategy(context: any, config: any): void {
         fill_orders_on_standard_ohlc: false,
     };
 
-    const finalConfig = { ...defaults, ...config };
+    // Layer order: spec defaults ← source call args ← user .prop overrides (latest wins).
+    const finalConfig = { ...defaults, ...config, ...(context._propOverrides ?? {}) };
     const initialCapital = finalConfig.initial_capital;
 
     context.strategy = {
