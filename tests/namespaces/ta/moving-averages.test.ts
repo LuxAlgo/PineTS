@@ -504,4 +504,31 @@ plot(res, "plot")
         console.log('STDEV plotdata_str\n', plotdata_str);
         expect(plotdata_str.trim()).toEqual(expected_plot.trim());
     });
+
+    it('SMA - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const smaMethod = (await import('../../../src/namespaces/ta/methods/sma')).sma(context);
+        
+        context.idx = 3;
+        context.data.close = new SeriesClass([4, 5, 6, 7]);
+        
+        let res1 = smaMethod(context.data.close, 3, 'sma_rollback_test');
+        expect(res1).toBe(6);
+        
+        context.data.close.set(0, 10);
+        let res2 = smaMethod(context.data.close, 3, 'sma_rollback_test');
+        expect(res2).toBe(7);
+        
+        context.idx = 4;
+        context.data.close = new SeriesClass([4, 5, 6, 10, 15]);
+        
+        let res3 = smaMethod(context.data.close, 3, 'sma_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(10.333333333333334));
+    });
 });

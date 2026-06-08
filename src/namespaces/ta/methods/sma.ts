@@ -5,6 +5,7 @@ import { Series } from '../../../Series';
 export function sma(context: any) {
     return (source: any, _period: any, _callId?: string) => {
         const period = Series.from(_period).get(0);
+        if (period <= 0) return NaN;
 
         // Incremental SMA calculation using rolling sum
         if (!context.taState) context.taState = {};
@@ -12,126 +13,91 @@ export function sma(context: any) {
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevSum: 0,
-                prevCallCount: 0,
-                // Tentative state
-                currentWindow: [],
-                currentSum: 0,
-                currentCallCount: 0,
+                lastIdx: context.idx - 1,
+                committedValues: new Array(period),
+                committedHead: 0,
+                committedCount: 0,
+                committedSum: 0,
+                values: new Array(period),
+                head: 0,
+                count: 0,
+                sum: 0,
+                currentResult: NaN,
             };
+            if (context.idx > 0) {
+                rebuildRollingSum(context.taState[stateKey], source, period);
+                context.taState[stateKey].lastIdx = context.idx;
+            }
         }
 
         const state = context.taState[stateKey];
 
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-                state.prevSum = state.currentSum;
-                state.prevCallCount = state.currentCallCount;
-            }
+        // Handle gap/conditional execution: rebuild from series if we skipped bars
+        if (context.idx > state.lastIdx + 1) {
+            rebuildRollingSum(state, source, period);
             state.lastIdx = context.idx;
         }
 
+        // Commit logic: lock previous tentative state
+        if (context.idx > state.lastIdx) {
+            state.committedValues = [...state.values];
+            state.committedHead = state.head;
+            state.committedCount = state.count;
+            state.committedSum = state.sum;
+            state.lastIdx = context.idx;
+        }
+
+        // Rollback logic: always initialize current bar's tentative state from committed state
+        state.values = [...state.committedValues];
+        state.head = state.committedHead;
+        state.count = state.committedCount;
+        state.sum = state.committedSum;
+
         const currentValue = Series.from(source).get(0);
+        const value = currentValue === undefined || currentValue === null ? NaN : Number(currentValue);
 
-        // Use committed state
-        const window = [...state.prevWindow];
-        
-        // Add current value to window
-        window.unshift(currentValue);
-
-        // Manage window size
-        while (window.length > period) {
-            window.pop();
-        }
-
-        // Track actual call count for callsite-correct backfill
-        const callCount = state.prevCallCount + 1;
-
-        // Backfill from source series when window is undersized.
-        // Use both callCount (for top-level warmup) and context.idx
-        // (for conditional/barstate.islast where chart has enough history).
-        let backfilled = false;
-        if (window.length < period && (callCount >= period || context.idx >= period - 1)) {
-            const series = Series.from(source);
-            while (window.length < period) {
-                window.push(series.get(window.length));
+        if (Number.isFinite(value)) {
+            if (state.count < period) {
+                state.values[state.count] = value;
+                state.count += 1;
+            } else {
+                state.sum -= state.values[state.head];
+                state.values[state.head] = value;
+                state.head += 1;
+                if (state.head === period) state.head = 0;
             }
-            backfilled = true;
+            state.sum += value;
         }
 
-        let sum;
+        state.currentResult = state.count < period
+            ? NaN
+            : context.precision(state.sum / period);
 
-        // Check for NaN contamination to decide on calculation strategy
-        const isCurrentInvalid = currentValue === undefined || currentValue === null || Number.isNaN(currentValue);
-        const isPrevSumInvalid = Number.isNaN(state.prevSum);
-
-        // When backfill added values to the window, prevSum doesn't include
-        // them so the incremental path would give wrong results.
-        let useFastPath = !isPrevSumInvalid && !isCurrentInvalid && !backfilled;
-        
-        // If fast path seems possible, we still need to be sure we didn't just pop a NaN (which would make result NaN -> Number, requiring recalc of prevSum didn't allow recovery)
-        // Actually, if prevSum was Number, then the window *should* have contained only Numbers. 
-        // So popping a value should be popping a Number.
-        // So fast path IS safe if prevSum is valid and current is valid.
-        
-        if (useFastPath) {
-             // Reconstruct incremental step
-             // We need the value that was popped. 
-             // Logic: sum = prevSum + current - popped
-             
-             // But we already modified 'window'. 
-             // Let's use the state logic again carefully.
-             
-             // Re-derive from state vars for calculation
-             let tempSum = state.prevSum + currentValue;
-             
-             // If we shrank the window, we need to subtract the element that was in prevWindow but not in current window.
-             // That element is prevWindow[prevWindow.length - 1] IF prevWindow.length == period.
-             
-             if (state.prevWindow.length >= period) {
-                 const popped = state.prevWindow[state.prevWindow.length - 1];
-                 // Double check popped validity just in case
-                 if (popped === undefined || popped === null || Number.isNaN(popped)) {
-                     useFastPath = false;
-                 } else {
-                     tempSum -= popped;
-                 }
-             }
-             
-             if (useFastPath) {
-                 sum = tempSum;
-             }
-        }
-        
-        if (!useFastPath) {
-            // Fallback to full recalculation
-            sum = 0;
-            let hasNaN = false;
-            for (const v of window) {
-                if (v === undefined || v === null || Number.isNaN(v)) {
-                    hasNaN = true;
-                    break;
-                }
-                sum += v;
-            }
-            if (hasNaN) sum = NaN;
-        }
-
-        // Update tentative state
-        state.currentWindow = window;
-        state.currentSum = sum;
-        state.currentCallCount = callCount;
-        
-        if (window.length < period) {
-            return NaN;
-        }
-
-        const sma = sum / period;
-        return context.precision(sma);
+        return state.currentResult;
     };
+}
+
+function rebuildRollingSum(state: any, source: any, period: number) {
+    const tempValues = [];
+    let tempSum = 0;
+    let tempCount = 0;
+    const series = Series.from(source);
+    for (let i = 1; i <= period; i++) {
+        const rawV = series.get(i);
+        const v = rawV === undefined || rawV === null ? NaN : Number(rawV);
+        if (Number.isFinite(v)) {
+            tempValues.unshift(v);
+            tempSum += v;
+            tempCount++;
+        } else {
+            break;
+        }
+    }
+    state.committedValues = new Array(period);
+    for (let i = 0; i < tempCount; i++) {
+        state.committedValues[i] = tempValues[i];
+    }
+    state.committedHead = 0;
+    state.committedCount = tempCount;
+    state.committedSum = tempSum;
 }
