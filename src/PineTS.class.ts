@@ -1150,6 +1150,10 @@ export class PineTS {
         for (let i = startIdx; i < endIdx; i++) {
             context.idx = i;
             context._execTick = (context._execTick || 0) + 1;
+            // Reset before each top-to-bottom script pass so `input.*()`
+            // calls get the same positional index every bar — that index
+            // is the override key resolved in `resolveInput`.
+            context._inputCallIndex = 0;
 
             context.data.close.data.push(this.close[i]);
             context.data.open.data.push(this.open[i]);

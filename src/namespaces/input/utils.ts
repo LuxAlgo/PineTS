@@ -27,12 +27,28 @@ export function parseInputOptions(args: any[]): Partial<InputOptions> {
 }
 
 export function resolveInput(context: any, options: Partial<InputOptions>) {
-    // If we have a runtime input value for this title, use it
-    // We check against context.inputs if it exists
-    if (options.title && context.inputs && context.inputs[options.title] !== undefined) {
-        return context.inputs[options.title];
+    // Consume this declaration's positional index, then advance the
+    // per-iteration counter for the next `input.*()` call. Mirrors the
+    // index assignment in `PineTS.introspectInputs` so GET (introspection)
+    // and PASS (override) resolve by the exact same key.
+    const index = context._inputCallIndex ?? 0;
+    context._inputCallIndex = index + 1;
+
+    const overrides = context.inputs;
+    if (overrides) {
+        // Primary key: stable positional name (`title ?? input_<index>`),
+        // matching `PineInputDeclaration.name`. Survives title renames and
+        // covers untitled inputs.
+        const name = typeof options.title === 'string' ? options.title : `input_${index}`;
+        if (overrides[name] !== undefined) {
+            return overrides[name];
+        }
+        // Back-compat: hosts that keyed overrides by raw title still work.
+        if (options.title && overrides[options.title] !== undefined) {
+            return overrides[options.title];
+        }
     }
-    
+
     // Otherwise return default value
     return options.defval;
 }

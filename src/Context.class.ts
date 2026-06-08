@@ -133,7 +133,22 @@ export class Context {
 
     public pineTSCode: Function | String;
 
+    /**
+     * Override values for `input.*()` declarations, keyed by the input's
+     * stable identity (see `_inputCallIndex`). Populated by the host via
+     * `_initializeContext`. Empty means "use each declaration's defval".
+     */
     public inputs: Record<string, any> = {};
+
+    /**
+     * Per-iteration counter of `input.*()` calls. The script re-executes
+     * top-to-bottom every bar, so input declarations fire in a stable
+     * source order; this counter assigns each one its positional index.
+     * That index is the override key (`input_<index>`) — stable across
+     * title renames and present even for untitled inputs, unlike title.
+     * Reset to 0 at the start of every iteration in `_executeIterations`.
+     */
+    public _inputCallIndex: number = 0;
 
     constructor({
         marketData,
