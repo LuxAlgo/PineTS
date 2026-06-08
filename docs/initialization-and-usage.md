@@ -266,7 +266,7 @@ const context = await pineTS.run(
 
 ### Running with Runtime Inputs
 
-To pass custom input values to your indicator at runtime, use the `Indicator` class:
+To pass custom input values to your indicator at runtime, wrap the source in an `Indicator` instance. Two equivalent forms — pick whichever is more ergonomic:
 
 ```typescript
 import { PineTS, Provider, Indicator } from 'pinets';
@@ -283,15 +283,18 @@ plot(ta.sma(src, len))
 // Initialize PineTS
 const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', 'D', 100);
 
-// Create Indicator with custom inputs
-// Keys must match the 'title' argument in input.* calls
-const indicator = new Indicator(code, {
-    Length: 50, // Override default 14
-});
+// (a) Per-key override via .input — preferred, validates against the input's schema
+const ind = new Indicator(code);
+ind.input['Length'] = 50;
+const { result } = await pineTS.run(ind);
 
-// Run with inputs
-const { result } = await pineTS.run(indicator);
+// (b) Constructor overrides map — legacy, still supported
+const ind2 = new Indicator(code, { Length: 50 });
 ```
+
+In both forms, the keys must match the **`title`** argument of the corresponding `input.*` call in the source.
+
+The `Indicator` class also lets you override `indicator()` / `strategy()` declaration arguments (e.g. `initial_capital`, `pyramiding`, `overlay`) via `ind.prop["name"] = value`, and exposes the script's schema for UI builders via `getInputsMeta()` / `getPropsMeta()`. See **[Indicator](indicator.md)** for the complete API surface.
 
 ### Return Value
 

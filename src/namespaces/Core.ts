@@ -229,7 +229,8 @@ export class Core {
             behind_chart: true,
         };
         //TODO : most of these values are not actually used by PineTS, future work should be done to implement them
-        this.context.indicator = { ...defaults, ...options };
+        // Layer order: spec defaults ← source call args ← user .prop overrides (latest wins).
+        this.context.indicator = { ...defaults, ...options, ...(this.context._propOverrides ?? {}) };
         return this.context.indicator;
     }
 

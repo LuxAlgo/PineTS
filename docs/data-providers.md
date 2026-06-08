@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Data Providers
-nav_order: 5
+nav_order: 7
 permalink: /data-providers/
 ---
 

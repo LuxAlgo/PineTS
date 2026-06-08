@@ -1,7 +1,7 @@
 ---
 layout: default
 title: API Coverage
-nav_order: 9
+nav_order: 11
 permalink: /api-coverage/
 has_children: true
 ---

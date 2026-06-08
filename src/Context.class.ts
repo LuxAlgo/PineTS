@@ -64,6 +64,11 @@ export class Context {
     /** Alert mode: 'realtime' = only fire on live bars (TV behavior), 'all' = fire on every bar (backtest). */
     public _alertMode: 'realtime' | 'all' = 'realtime';
 
+    /** Name-keyed map of declaration-prop overrides from `Indicator.prop`. Layered on top of
+     *  the source's `indicator()`/`strategy()` call args inside the per-bar handlers
+     *  (see Core.indicator and initializeStrategy). Empty object when no overrides are set. */
+    public _propOverrides: Record<string, unknown> = {};
+
     /** Monotonically increasing counter, incremented each time a bar starts executing.
      *  Used by alertcondition/AlertHelper to detect re-execution of the same bar. */
     public _execTick: number = 0;
