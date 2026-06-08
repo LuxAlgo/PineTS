@@ -348,7 +348,7 @@ export class PineTS {
      */
     public stream(
         pineTSCode: Indicator | Function | String,
-        options: { pageSize?: number; live?: boolean; interval?: number } = {},
+        options: { pageSize?: number; live?: boolean; interval?: number; inputs?: Record<string, any> } = {},
     ): { on: (event: 'data' | 'error' | 'warning' | 'alert', callback: Function) => void; stop: () => void } {
         const { live = true, interval = 1000 } = options;
         const pageSize = options.pageSize || this.data.length; // Default pageSize to full data if not provided
@@ -361,6 +361,14 @@ export class PineTS {
             inputs = pineTSCode.inputs || {};
         } else {
             code = pineTSCode;
+        }
+        // Raw source/function callers (e.g. the chart host, which passes a
+        // code string) can supply input.* overrides via the options bag.
+        // Merged over any Indicator-supplied inputs so an explicit options
+        // map wins. Keys use the stable `title ?? input_<index>` name —
+        // see `resolveInput`.
+        if (options.inputs) {
+            inputs = { ...inputs, ...options.inputs };
         }
 
         const listeners: { [key: string]: Function[] } = { data: [], error: [], warning: [], alert: [] };

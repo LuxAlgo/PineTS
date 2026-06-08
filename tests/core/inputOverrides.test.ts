@@ -78,6 +78,29 @@ describe('input.* overrides', () => {
         expect(last(ctx.result.b)).toBe(9.9); // overridden
     });
 
+    it('threads overrides through stream() options.inputs (raw-source caller path)', async () => {
+        // The chart host passes a code string + options bag (no Indicator
+        // wrapper), so this is the path checkout's stream hook uses.
+        const pineTS = newPine();
+        const resolved = await new Promise<number>((resolve, reject) => {
+            const handle = pineTS.stream(
+                ($: any) => {
+                    const { input } = $.pine;
+                    return { len: input.int(14, 'Length') };
+                },
+                { pageSize: 5, live: false, inputs: { Length: 21 } },
+            );
+            handle.on('data', (ctx: any) => {
+                const len = ctx.result?.len;
+                if (len === undefined) return; // ignore pages before result populates
+                handle.stop();
+                resolve(last(len));
+            });
+            handle.on('error', reject);
+        });
+        expect(resolved).toBe(21);
+    });
+
     it('resets the positional counter each bar so overrides hold across all bars', async () => {
         const ctx = await newPine().run(
             new Indicator(($: any) => {
