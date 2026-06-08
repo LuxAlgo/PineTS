@@ -1,5 +1,31 @@
 # Change Log
 
+## [0.9.20] - 2026-06-08 - Indicator Class as SSOT — `.input` / `.prop` Runtime Overrides
+
+### Added
+
+- **`Indicator` becomes the single source of truth for every per-script artifact**: refactored from a 12-line tuple `{source, inputs}` into the owner of the transpiled function, AST, parsed input schema, parsed declaration-prop schema, viewport-detection flag, and LTF slices. All PineTS entry points (**`run`**, **`stream`**, **`update`**) now route through **`Indicator.from(arg).prepare()`** so raw strings and raw functions get auto-wrapped in a throwaway Indicator. **`prepare()`** is lazy and cached — re-using the same Indicator across multiple **`pine.run()`** calls compiles the script **once**.
+- **`Indicator.input` — title-keyed Proxy for input overrides**: read or mutate `input.*` values per key (**`ind.input["Length"] = 50`**). The container itself is frozen (**`ind.input = {...}`** throws); per-key writes validate against the input's schema (type / options / minval / maxval) and throw tailored messages on violations or unknown titles. Constructor **`inputs`** map kept for back-compat; **`.input`** writes layer on top.
+- **`Indicator.getInputsMeta(): IPineInput[]`**: parsed input schema for UI builders. Captures **`type`**, **`defval`**, **`title`**, **`tooltip`**, **`group`**, **`inline`**, **`display`**, **`active`**, **`confirm`**, **`options`**, **`minval`**, **`maxval`**, **`step`** for every **`input.*(...)`** declaration in the source.
+- **`Indicator.prop` — name-keyed Proxy for `indicator()` / `strategy()` declaration overrides**: read or mutate declaration arguments (**`ind.prop["initial_capital"] = 75000`**, **`ind.prop["pyramiding"] = 5`**) before **`pine.run()`**. Same frozen-container + per-key validation semantics as **`.input`**. Excludes **`title`** / **`shorttitle`** from writes (still present in the meta with **`mutable: false`** so UIs can render them).
+- **Source-code defaults seeded into `.prop`**: when reading **`ind.prop["X"]`**, the value is layered as **spec default ← source code value ← user override**. Pine source like **`strategy("X", initial_capital=50000, currency=currency.EUR)`** seeds **`ind.prop["initial_capital"]` → 50000** and **`ind.prop["currency"] → "EUR"`** before any user write. Enum constants (**`currency.EUR`**, **`strategy.percent_of_equity`**, **`strategy.commission.cash_per_order`**) resolve via the rightmost-identifier rule to match what TradingView's runtime sees.
+- **`Indicator.getPropsMeta(): IPineProp[]`** & **`Indicator.getDeclarationType()`**: schema introspection filtered to props applicable to the detected script type (**`'indicator'`** vs **`'strategy'`**). Type detection falls back to **`'indicator'`** if no declaration call is found.
+- **Top-level exports `INDICATOR_PROPS` / `STRATEGY_PROPS` / `propsForDeclaration(type)`**: complete prop schemas (17 / 33 entries respectively) for UI code that needs the full list independent of any Indicator instance. Each enum-typed entry has a one-line comment in [**`src/Indicator/propsSchema.ts`**](src/Indicator/propsSchema.ts) enumerating accepted values and pointing to the corresponding exported Pine enum in **`src/namespaces/Types.ts`**.
+- **`scanDeclaration.ts`**: detects **`indicator()`** / **`strategy()`** in both Pine source (via existing **`pineToJS`** AST) and JS-function source (via **`acorn.parse`**). Decodes positional + named arguments and resolves namespace constants.
+- **`keyedProxy.ts`**: shared backend for **`.input`** and **`.prop`** Proxies — single source of validation + custom error messages. Replaces the previous duplicate Proxy code in **`inputProxy.ts`**.
+- **`Context._propOverrides`**: name-keyed map of user prop overrides populated in **`_initializeContext`** from **`ind.getRuntimePropOverrides()`**. Read by **`Core.indicator()`** and **`initializeStrategy()`** to merge on top of source-code declaration args (**`{ ...defaults, ...sourceArgs, ...userOverrides }`**).
+- **`docs/indicator.md`** (new): dedicated page covering Quickstart, Constructor, **`Indicator.from()`**, visible-range detection, the full **`.input`** / **`getInputsMeta()`** surface, the full **`.prop`** / **`getPropsMeta()`** surface (incl. source-default seeding, enum resolution, validation), reuse across runs, JS-function source caveats, and backward compatibility with the constructor **`inputs`** map. Every code example verified end-to-end against the live bundle before inclusion.
+- **Tests**: **`tests/Indicator/Indicator.test.ts`** (21 cases — input surface) and **`tests/Indicator/Indicator.props.test.ts`** (37 cases — prop surface including declaration detection, source-default seeding, indicator-vs-strategy cross-validation, enum/numeric bounds, end-to-end runtime override propagation).
+
+### Changed
+
+- **PineTS internals simplified**: **`_transpileCode`** and **`_detectViewportUsage`** moved off the **`PineTS`** class onto **`Indicator`** (where they conceptually belong — they're properties of the script, not the engine). **`_runComplete`** / **`_runPaginated`** now take an **`Indicator`** instance and call **`prepare()`** from inside their async bodies so transpile errors surface as Promise rejections (preserving the **`tests/transpiler/error-handling.test.ts`** contract).
+- **`docs/initialization-and-usage.md` — "Running with Runtime Inputs"**: rewritten to show both the new per-key **`ind.input["Length"] = 50`** form (preferred) and the legacy constructor map (still supported). Cross-links to the new [**Indicator**](docs/indicator.md) page for the full surface.
+- **`docs/strategy.md`**: Indicator-wrapper example now links to the dedicated [**Indicator**](docs/indicator.md) page in addition to **`initialization-and-usage.md`**.
+- **`docs/index.md`** + nav: added an Indicator entry at slot 4; bumped Alerts / Pagination / Data Providers / Syntax Guide / Strategy / Language Coverage / API Coverage down one slot each. Resolves two prior nav_order collisions (Alerts and Pagination were both at 4).
+
+---
+
 ## [0.9.19] - 2026-06-05 - Strategy Broker Emulator — Margin Calls, Drawdown/Runup & Exit Cadence
 
 ### Added

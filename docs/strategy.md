@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Strategy Namespace
-nav_order: 7
+nav_order: 9
 permalink: /strategy/
 ---
 
@@ -92,7 +92,7 @@ const ctx2 = await pine.run(new Indicator(code));                    // no overr
 const ctx3 = await pine.run(new Indicator(code, { Qty: 5 }));        // override input.int(1, "Qty")
 ```
 
-The `Indicator()` wrapper is the same one used for indicator scripts — strategies and indicators share the runtime, so there's nothing strategy-specific to do. See **[Initialization and Usage → Running with Runtime Inputs](initialization-and-usage.md#running-with-runtime-inputs)** for the full input-keying rules.
+The `Indicator()` wrapper is the same one used for indicator scripts — strategies and indicators share the runtime, so there's nothing strategy-specific to do. See **[Indicator](indicator.md)** for the full API (per-key overrides via `ind.input[...]` / `ind.prop[...]`, schema introspection, etc.), or **[Initialization and Usage → Running with Runtime Inputs](initialization-and-usage.md#running-with-runtime-inputs)** for a quick overview.
 
 ---
 
