@@ -26,6 +26,18 @@ export function close_all(context: any) {
         }
         const parsed = parseArgsForPineParams<any>(args, CLOSE_ALL_SIGNATURES, CLOSE_ALL_ARGS_TYPES);
 
+        // TV semantic: strategy.close_all() called with no open positions is
+        // a no-op. Without this guard, the queued order survives to the next
+        // bar and closes the next entry that fills at its entry price (zero
+        // PnL), because from_entry='' matches any new trade. Notably this
+        // affects scripts that call close_all on indicator conditions that
+        // can fire when the position is already flat (e.g. exit-bar-count
+        // indicators where the count signal coincides with a fresh entry on
+        // the next bar). The position-state check has to happen at QUEUE
+        // time, not fill time — by fill time the new entry has already
+        // filled and would match.
+        if (context.strategy.opentrades.length === 0) return;
+
         // TV semantic: strategy.close_all() supersedes any pending conditional
         // strategy.exit() orders for the entire book. Without this, both the
         // close_all market and the conditional exits fire on the next bar,

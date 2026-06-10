@@ -42,6 +42,17 @@ export function close(context: any) {
         const targetId = parsed.id;
         if (targetId === undefined || targetId === null) return;
 
+        // TV semantic: strategy.close(id) called with no open trades matching
+        // that entry id is a no-op. Without this guard the queued order
+        // survives to a later bar and can close a fresh entry that fills at
+        // its entry price (zero PnL). Same shape as the close_all() guard,
+        // scoped to the matching from_entry. Has to happen at QUEUE time;
+        // by fill time the new entry has already filled.
+        const hasMatching = context.strategy.opentrades.some(
+            (t: any) => t.entry_id === targetId,
+        );
+        if (!hasMatching) return;
+
         // TV semantic: strategy.close() supersedes any pending conditional
         // strategy.exit() orders that target the same entry id. Without this
         // cancellation, both the close market and the exit (TP/SL/trail)

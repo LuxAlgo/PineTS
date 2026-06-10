@@ -8,26 +8,47 @@ import { Series } from '../../Series';
  * Parse strategy() function arguments
  */
 export function parseStrategyOptions(args: any[]): any {
+    // Pine v5/v6 strategy() signature:
+    //   strategy(title, shorttitle, overlay, format, precision, scale,
+    //            pyramiding, calc_on_order_fills, ...)
+    // The transpiler emits leading POSITIONAL strings (title, optionally
+    // shorttitle) followed by a trailing object with all named args.
+    // Three input shapes show up in practice:
+    //   1. strategy("title")                       — title only
+    //   2. strategy("title", { opts })             — title + named args
+    //   3. strategy("title", "shorttitle", {opts}) — Pine v6 with shorttitle
+    // The original implementation handled #1 and #2 but DROPPED the
+    // trailing options object in #3 (returning only { title }), which
+    // silently lost commission_type, commission_value, overlay, and every
+    // other named arg.
     if (args.length === 0) return {};
 
-    // If first arg is a string, it's the title
-    if (typeof args[0] === 'string') {
-        const options: any = { title: args[0] };
-
-        // If second arg is object, merge it
-        if (args.length > 1 && typeof args[1] === 'object') {
-            return { ...options, ...args[1] };
-        }
-
-        return options;
-    }
-
-    // If first arg is object, use it directly
-    if (typeof args[0] === 'object') {
+    // If first arg is itself an object, treat it as the whole options bag.
+    if (typeof args[0] === 'object' && args[0] !== null) {
         return args[0];
     }
 
-    return {};
+    const options: any = {};
+    if (typeof args[0] === 'string') options.title = args[0];
+
+    // Walk remaining args. Strings are positional (so far only shorttitle
+    // is observed in this position). The LAST object encountered is the
+    // named-args bundle — its keys win over positional fields if there's
+    // overlap (matching Pine's behavior of named args overriding positional).
+    let trailingOptions: any = null;
+    for (let i = 1; i < args.length; i++) {
+        const a = args[i];
+        if (typeof a === 'string') {
+            // Currently only shorttitle slots in as a positional string.
+            // If future Pine versions add more positional strings, extend
+            // here.
+            if (options.shorttitle === undefined) options.shorttitle = a;
+        } else if (typeof a === 'object' && a !== null) {
+            trailingOptions = a;
+        }
+    }
+    if (trailingOptions) Object.assign(options, trailingOptions);
+    return options;
 }
 
 /**
@@ -302,10 +323,15 @@ export function processStrategyOrders(context: any): void {
             // succeeds (frees its prior margin) and only the new open leg
             // is checked. For pyramiding (same-direction adds), held
             // margin from existing positions stays locked.
+            //
+            // Runs for ALL margin percentages. At 100% margin the required
+            // margin equals the full notional (qty * price * pointValue * 1),
+            // matching TV's broker-emulator behavior of rejecting entries
+            // whose notional exceeds available equity even with no leverage.
             const marginPct = direction === 1
                 ? (strategy.config.margin_long  ?? 100)
                 : (strategy.config.margin_short ?? 100);
-            if (marginPct < 100) {
+            {
                 const oldSize = strategy.position_size;
                 const oldSign = Math.sign(oldSize);
                 const isReversal = oldSign !== 0 && oldSign !== direction;
@@ -1236,18 +1262,19 @@ export function processExitOrders(context: any): void {
                     trailArmedThisBar = true;
                 }
             }
-        } else if (order.trail_armed) {
-            // Already armed — update peak.
-            if (isLong) order.trail_peak = Math.max(order.trail_peak ?? -Infinity, highPrice);
-            else order.trail_peak = Math.min(order.trail_peak ?? Infinity, lowPrice);
         }
+        // Peak update is now deferred to checkTrail so we can split it
+        // around the intra-bar segment that TV's broker emulator assumes
+        // (favorable-first: peak updates BEFORE trigger check;
+        //  adverse-first: peak updates AFTER segment-1 check against the
+        //  OLD peak's trigger). Eager peak update produced phantom early
+        //  fires on adverse-first bars where the bar's high established
+        //  the new peak only AFTER the low had already passed.
 
-        let trailTrigger: number | undefined;
-        if (order.trail_armed && order.trail_peak !== undefined && order.trail_offset !== undefined) {
-            trailTrigger = isLong
-                ? order.trail_peak - order.trail_offset * mintick
-                : order.trail_peak + order.trail_offset * mintick;
-        }
+        // The trail trigger is now computed inside checkTrail's
+        // segment branches (using OLD peak for segment 1, NEW peak for
+        // segment 3 on adverse-first; new peak unconditionally on
+        // favorable-first). See checkTrail below.
 
         // Evaluate triggers against this bar.
         //
@@ -1290,13 +1317,95 @@ export function processExitOrders(context: any): void {
             }
         };
         const checkTrail = () => {
-            if (triggered || trailTrigger === undefined || trailArmedThisBar) return;
-            const trailHit = isLong ? lowPrice <= trailTrigger : highPrice >= trailTrigger;
-            if (trailHit) {
-                triggered = true;
-                const openPastTrail = isLong ? openPrice <= trailTrigger : openPrice >= trailTrigger;
-                triggerPrice = openPastTrail ? openPrice : trailTrigger;
-                triggerKind = 'trailing';
+            if (triggered) return;
+            if (!order.trail_armed || order.trail_offset === undefined) return;
+
+            // Intra-bar segment model (TV broker emulator):
+            //
+            // Favorable-first (open closer to high for long; open closer to
+            // low for short):
+            //   Phase 1: open → favorable extreme (price rides to bar H for
+            //            long / bar L for short). Peak updates to that.
+            //   Phase 2: favorable extreme → adverse extreme. Trigger
+            //            (= NEW peak ± offset) may be crossed.
+            //   Phase 3: adverse extreme → close. (Already covered.)
+            //
+            // Adverse-first (open closer to adverse extreme):
+            //   Phase 1: open → adverse extreme. Peak is still PRIOR. Check
+            //            trigger using OLD peak; if crossed, fire there.
+            //   Phase 2: adverse → favorable extreme. Peak updates now.
+            //   Phase 3: favorable → close. If close descends/rises
+            //            through the NEW trigger, fire at the NEW trigger.
+            //
+            // Arming THIS bar is a sub-case: the peak was JUST established
+            // at the arming moment (bar's H for long / L for short). The
+            // segment-1 check with OLD peak doesn't apply (trail wasn't
+            // armed yet). Only phase 2 (favorable-first) or phase 3
+            // (adverse-first) can fire on the arming bar.
+            //
+            // The fill is always the LITERAL trigger price — gap-fill at
+            // open is incorrect for trail (the bar's open precedes any
+            // peak update for this trade).
+            const updatePeak = () => {
+                if (isLong) order.trail_peak = Math.max(order.trail_peak ?? -Infinity, highPrice);
+                else        order.trail_peak = Math.min(order.trail_peak ?? Infinity, lowPrice);
+            };
+            const triggerFromPeak = (): number => isLong
+                ? (order.trail_peak as number) - (order.trail_offset as number) * mintick
+                : (order.trail_peak as number) + (order.trail_offset as number) * mintick;
+
+            if (trailArmedThisBar) {
+                // Peak is already the bar's favorable extreme (set by the
+                // arming logic). Don't update again.
+                const trig = triggerFromPeak();
+                if (favorableFirst) {
+                    // Phase 2 (favorable extreme → adverse extreme): low for
+                    // long / high for short crosses trigger.
+                    const hit = isLong ? lowPrice <= trig : highPrice >= trig;
+                    if (hit) {
+                        triggered = true;
+                        triggerPrice = trig;
+                        triggerKind = 'trailing';
+                    }
+                } else {
+                    // Phase 3 (favorable extreme → close): close past trigger.
+                    const seg3 = isLong ? closePrice < trig : closePrice > trig;
+                    if (seg3) {
+                        triggered = true;
+                        triggerPrice = trig;
+                        triggerKind = 'trailing';
+                    }
+                }
+                return;
+            }
+
+            // Already armed in a prior bar. Use the full segment model.
+            if (favorableFirst) {
+                updatePeak();
+                const trig = triggerFromPeak();
+                const hit = isLong ? lowPrice <= trig : highPrice >= trig;
+                if (hit) {
+                    triggered = true;
+                    triggerPrice = trig;
+                    triggerKind = 'trailing';
+                }
+            } else {
+                const oldTrig = triggerFromPeak();
+                const seg1 = isLong ? lowPrice <= oldTrig : highPrice >= oldTrig;
+                if (seg1) {
+                    triggered = true;
+                    triggerPrice = oldTrig;
+                    triggerKind = 'trailing';
+                    return;
+                }
+                updatePeak();
+                const newTrig = triggerFromPeak();
+                const seg3 = isLong ? closePrice < newTrig : closePrice > newTrig;
+                if (seg3) {
+                    triggered = true;
+                    triggerPrice = newTrig;
+                    triggerKind = 'trailing';
+                }
             }
         };
         const checkTp = () => {
@@ -1376,8 +1485,12 @@ export function processExitOrders(context: any): void {
  * pessimistic broker model — the trader is assumed to be liquidated at
  * the worst intra-bar price, since intra-bar tick order is unknown.
  *
- * Skipped entirely when the position's `margin_pct >= 100` (no leverage)
- * or when there are no open positions.
+ * Runs for ALL margin percentages including 100%. At 100% margin the
+ * trader still needs full notional collateral; adverse price movement
+ * that drops account equity below the position's current notional
+ * triggers a margin call. This matches TV's broker-emulator behavior
+ * (the "Margin calls" stat in the Strategy Tester is non-zero on 100%
+ * margin runs whenever a position's mark-to-market loss exceeds equity).
  */
 export function processMarginCall(context: any): void {
     const strategy: StrategyState = context.strategy;
@@ -1389,7 +1502,6 @@ export function processMarginCall(context: any): void {
     const marginPct = positionDir === 1
         ? (strategy.config.margin_long  ?? 100)
         : (strategy.config.margin_short ?? 100);
-    if (marginPct >= 100) return;  // No leverage → no margin call.
 
     const highPrice   = Series.from(context.data.high).get(0);
     const lowPrice    = Series.from(context.data.low).get(0);
