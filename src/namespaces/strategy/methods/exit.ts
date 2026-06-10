@@ -175,6 +175,18 @@ export function exit(context: any) {
         // later trade happens to satisfy the wrong-sided / stale-reversal
         // checks geometrically, the old order fires at a phantom price.
         // Same id + same from_entry scope is the replacement key.
+        //
+        // Trail state carry-over: `trail_armed` and `trail_peak` are NOT
+        // user-supplied parameters — they're engine-accumulated state that
+        // tracks the trail's progress across bars (running high for a long,
+        // running low for a short). When the user calls strategy.exit every
+        // bar (the canonical "persistent" pattern), naive replacement would
+        // reset these to false/NaN every bar, preventing the trail from ever
+        // accumulating beyond a single bar's range. TV's behavior is that
+        // the trail's state persists across re-calls — only the user-tunable
+        // parameters (trail_points, trail_offset, limit, stop, etc.) are
+        // refreshed. Mirror that by copying the trail state forward whenever
+        // the prior order had armed.
         const exitId = order.id;
         const list = context.strategy.pending_orders as Order[];
         for (let i = list.length - 1; i >= 0; i--) {
@@ -182,6 +194,10 @@ export function exit(context: any) {
             if (o.category === 'exit' && o.id === exitId &&
                 (o.from_entry ?? '') === (order.from_entry ?? '') &&
                 o.status === 'pending') {
+                if (o.trail_armed) {
+                    order.trail_armed = true;
+                    order.trail_peak  = o.trail_peak;
+                }
                 list.splice(i, 1);
             }
         }
