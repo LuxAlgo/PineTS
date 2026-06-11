@@ -1,5 +1,9 @@
 # Change Log
 
+## [0.9.22] - 2026-06-11 - Strategy Hotfix for Close-on-Flat and Margin calls
+
+This is a hotfix release for v0.9.21 which did not include the right fixes
+
 ## [0.9.21] - 2026-06-10 - Strategy Broker Emulator — Close-on-Flat, 100% Margin, Trailing Stop & v6 Declaration Parsing
 
 ### Fixed
