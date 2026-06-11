@@ -356,7 +356,27 @@ export function processStrategyOrders(context: any): void {
                     const requiredMargin = computeRequiredMargin(newOpenQty, fillPrice, marginPct, pointValue);
 
                     if (requiredMargin > availableEquity) {
-                        order.status = 'cancelled';
+                        // TV broker emulator: the margin check only guards the
+                        // OPEN leg. On a reversal, the close leg always
+                        // executes (it frees margin / realizes the position) —
+                        // TV's exit shows the reversal order's id as exit id
+                        // while no opposite position appears. Verified against
+                        // QA margin_calls xlsx: after a partial margin-call
+                        // liquidation, the remainder was closed by the next
+                        // reversal order whose open leg was margin-rejected.
+                        const qtyToClose = Math.min(Math.abs(oldSize), order.qty);
+                        if (isReversal && qtyToClose > 0) {
+                            closePartialPosition(context, qtyToClose, fillPrice, currentTime, {
+                                exitId:      order.id,
+                                exitComment: order.comment,
+                            });
+                            order.status = 'filled';
+                            order.fill_price = fillPrice;
+                            order.fill_bar = context.idx;
+                            order.fill_time = currentTime;
+                        } else {
+                            order.status = 'cancelled';
+                        }
                         continue;
                     }
                 }
@@ -585,8 +605,18 @@ export function openTrade(
     // Realize the entry commission immediately as a cash outflow. TV reports
     // strategy.netprofit and strategy.grossloss net of entry commission the
     // moment the trade opens (commission is a real cost paid at fill, not
-    // deferred to close). The exit commission is realized in
-    // closePartialPosition when the trade actually closes.
+    // Entry commission hits strategy.netprofit (and grossloss as a pending
+    // liability) AT FILL TIME — matches TV's `strategy.netprofit` value
+    // during an open trade (verified against xlsx exports: TV's "Net profit"
+    // line during an open position equals closed-trades-total minus the
+    // sum of open trades' entry commissions). The exit commission is
+    // realized in closePartialPosition when the trade actually closes.
+    //
+    // Drawdown compensation: `updateEquityPeaks` adds the open trades'
+    // entry commission BACK to the drawdown formula. This mirrors TV's
+    // drawdown formula which has an explicit `+ openCommission` term —
+    // the result is correct for any peak timing (before vs during open
+    // trade), see math in the QA-drawdown analysis notes.
     if (entryCommission > 0) {
         strategy.netprofit -= entryCommission;
         strategy.grossloss += entryCommission;
@@ -997,7 +1027,23 @@ function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): v
     const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
 
     const realizedEquity = strategy.initial_capital + strategy.netprofit;
-    if (realizedEquity > strategy.equity_peak)   strategy.equity_peak   = realizedEquity;
+
+    // Open-trade entry commissions (already deducted from netprofit at fill).
+    let openCommission = 0;
+    for (const t of strategy.opentrades) openCommission += t.commission ?? 0;
+
+    // PEAK basis excludes the open trades' entry commissions. TV latches the
+    // equity high-water on the intermediate funds state right after a close
+    // settles — BEFORE the entry commission of a trade opened on the same
+    // bar (reversal) is charged. PT processes the reversal close+open
+    // atomically, so the peak basis adds the open entry commissions back.
+    // Verified against QA margin_calls xlsx (1% percent commission): TV's
+    // peak was exactly closed-trades-cum (+148,279.33) while the reversal
+    // trade opened on the peak bar had already cost 2,483.81 in entry
+    // commission. The TROUGH basis keeps the commission deducted
+    // (pessimistic on both sides — matches TV's run-up line exactly).
+    const peakBasis = realizedEquity + openCommission;
+    if (peakBasis > strategy.equity_peak)        strategy.equity_peak   = peakBasis;
     if (realizedEquity < strategy.equity_trough) strategy.equity_trough = realizedEquity;
 
     const posSize = strategy.position_size;
@@ -1014,6 +1060,10 @@ function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): v
         bestExcursion  = posSize * (bestPrice - avgPrice)  * pointValue;
     }
 
+    // Drawdown = realized gap from the high-water + the open position's
+    // intra-bar adverse excursion. No commission correction here: the peak
+    // basis already excludes open entry commissions (see above) while
+    // realizedEquity includes them — the asymmetry IS TV's model.
     const drawDown = (strategy.equity_peak   - realizedEquity) + worstExcursion;
     if (drawDown > strategy.max_drawdown) {
         strategy.max_drawdown = drawDown;
@@ -1119,9 +1169,21 @@ export function processExitOrders(context: any): void {
         if ((order.category ?? 'entry') !== 'exit') continue;
 
         // Gather matching open trades (from_entry filter; '' = all).
-        const matching = strategy.opentrades.filter(
+        // For market closes from strategy.close_all() / strategy.close(id),
+        // additionally restrict to the trade IDs captured at QUEUE time —
+        // these orders are bound to the position state at call time, not
+        // fill time. If a reversal entry implicitly closed the snapshotted
+        // trades before this order fires, the order has no target and gets
+        // cancelled, mirroring TV's behavior of treating
+        // strategy.close_all() as a no-op when its intended position is
+        // already gone.
+        let matching = strategy.opentrades.filter(
             (t) => !order.from_entry || t.entry_id === order.from_entry,
         );
+        if (order._intended_trade_ids) {
+            const snapshot = new Set(order._intended_trade_ids);
+            matching = matching.filter((t) => snapshot.has(t.id));
+        }
         if (matching.length === 0) {
             // Nothing to exit — clear the order.
             order.status = 'cancelled';
@@ -1514,8 +1576,25 @@ export function processMarginCall(context: any): void {
     const requiredMarginAtAdverse = computeRequiredMargin(totalQty, adversePrice, marginPct, pointValue);
 
     if (equityAtAdverse < requiredMarginAtAdverse) {
-        // Liquidate ALL positions at the adverse extreme.
-        closePartialPosition(context, totalQty, adversePrice, currentTime, {
+        // PARTIAL liquidation (TV broker-emulator rule): compute the margin
+        // deficit at the adverse extreme, convert it to contracts at that
+        // price, and liquidate 4× that amount — the 4× buffer prevents the
+        // trimmed position from being immediately margin-called again on
+        // the next tick. The remainder of the position stays open. Capped
+        // at the full position size for catastrophic deficits.
+        //
+        // Verified against TV xlsx exports (MACD/BTCUSDT 1D, 100% margin):
+        // TV liquidated 1.21312 of a 5-contract short (deficit $33,603.64
+        // at price 110,797.38 → 4 × 0.30328) and 0.48244 of another
+        // (deficit $10,924.98 at 90,574.00 → 4 × 0.12061).
+        const deficit = requiredMarginAtAdverse - equityAtAdverse;
+        // TV floors the cover quantity to 5 decimal places BEFORE the 4×
+        // multiplier — both xlsx liquidation quantities reproduce exactly
+        // under this rule (4 × 0.30328 = 1.21312, 4 × 0.12061 = 0.48244)
+        // and under no other truncation placement.
+        const coverQty = Math.floor((deficit / (adversePrice * pointValue)) * 1e5) / 1e5;
+        const qtyToLiquidate = Math.min(totalQty, 4 * coverQty);
+        closePartialPosition(context, qtyToLiquidate, adversePrice, currentTime, {
             exitId:      'Margin call',
             exitComment: 'Margin call',
         });
