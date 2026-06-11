@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (C) 2025 Alaa-eddine KADDOURI
+// Copyright (C) 2026 LuxAlgo
 
 import { Order } from '../types';
 import { Series } from '../../../Series';
@@ -46,9 +46,12 @@ export function close_all(context: any) {
         // / close_all() markets leave all of those undefined.
         const isConditionalExit = (o: Order) =>
             (o.category ?? 'entry') === 'exit' &&
-            (o.profit !== undefined || o.loss !== undefined ||
-             o.limit !== undefined  || o.stop !== undefined ||
-             o.trail_price !== undefined || o.trail_points !== undefined);
+            (o.profit !== undefined ||
+                o.loss !== undefined ||
+                o.limit !== undefined ||
+                o.stop !== undefined ||
+                o.trail_price !== undefined ||
+                o.trail_points !== undefined);
 
         const pending = context.strategy.pending_orders;
         for (const o of pending) {
@@ -58,20 +61,28 @@ export function close_all(context: any) {
         }
         context.strategy.pending_orders = pending.filter((o: Order) => o.status === 'pending');
 
+        // Snapshot the IDs of open trades at CALL time so the close order
+        // remains bound to its originally-intended position. If a reversal
+        // entry queued the same bar fills first on the next bar and
+        // implicitly closes the snapshotted trades, this close_all has no
+        // target left and `processExitOrders` will cancel it instead of
+        // catching the freshly-opened reversal trade. Matches TV's binding
+        // of strategy.close_all() to the position at call time.
         const order: Order = {
             id: 'close_all',
             direction: 0, // resolved at fill time
-            qty: 0,       // resolved at fill time (sum of |all open trades|)
+            qty: 0, // resolved at fill time (sum of |all open trades|)
             type: 'market',
             bar: context.idx,
             time: Series.from(context.data.openTime).get(0),
             status: 'pending',
             category: 'exit',
-            from_entry: '',   // empty == match-all
+            from_entry: '', // empty == match-all (within the snapshot)
             comment: parsed.comment,
             alert_message: parsed.alert_message,
             immediately: parsed.immediately === true,
             disable_alert: parsed.disable_alert,
+            _intended_trade_ids: context.strategy.opentrades.map((t: any) => t.id),
         };
         context.strategy.pending_orders.push(order);
     };
