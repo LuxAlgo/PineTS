@@ -8,26 +8,47 @@ import { Series } from '../../Series';
  * Parse strategy() function arguments
  */
 export function parseStrategyOptions(args: any[]): any {
+    // Pine v5/v6 strategy() signature:
+    //   strategy(title, shorttitle, overlay, format, precision, scale,
+    //            pyramiding, calc_on_order_fills, ...)
+    // The transpiler emits leading POSITIONAL strings (title, optionally
+    // shorttitle) followed by a trailing object with all named args.
+    // Three input shapes show up in practice:
+    //   1. strategy("title")                       — title only
+    //   2. strategy("title", { opts })             — title + named args
+    //   3. strategy("title", "shorttitle", {opts}) — Pine v6 with shorttitle
+    // The original implementation handled #1 and #2 but DROPPED the
+    // trailing options object in #3 (returning only { title }), which
+    // silently lost commission_type, commission_value, overlay, and every
+    // other named arg.
     if (args.length === 0) return {};
 
-    // If first arg is a string, it's the title
-    if (typeof args[0] === 'string') {
-        const options: any = { title: args[0] };
-
-        // If second arg is object, merge it
-        if (args.length > 1 && typeof args[1] === 'object') {
-            return { ...options, ...args[1] };
-        }
-
-        return options;
-    }
-
-    // If first arg is object, use it directly
-    if (typeof args[0] === 'object') {
+    // If first arg is itself an object, treat it as the whole options bag.
+    if (typeof args[0] === 'object' && args[0] !== null) {
         return args[0];
     }
 
-    return {};
+    const options: any = {};
+    if (typeof args[0] === 'string') options.title = args[0];
+
+    // Walk remaining args. Strings are positional (so far only shorttitle
+    // is observed in this position). The LAST object encountered is the
+    // named-args bundle — its keys win over positional fields if there's
+    // overlap (matching Pine's behavior of named args overriding positional).
+    let trailingOptions: any = null;
+    for (let i = 1; i < args.length; i++) {
+        const a = args[i];
+        if (typeof a === 'string') {
+            // Currently only shorttitle slots in as a positional string.
+            // If future Pine versions add more positional strings, extend
+            // here.
+            if (options.shorttitle === undefined) options.shorttitle = a;
+        } else if (typeof a === 'object' && a !== null) {
+            trailingOptions = a;
+        }
+    }
+    if (trailingOptions) Object.assign(options, trailingOptions);
+    return options;
 }
 
 /**
@@ -302,10 +323,15 @@ export function processStrategyOrders(context: any): void {
             // succeeds (frees its prior margin) and only the new open leg
             // is checked. For pyramiding (same-direction adds), held
             // margin from existing positions stays locked.
+            //
+            // Runs for ALL margin percentages. At 100% margin the required
+            // margin equals the full notional (qty * price * pointValue * 1),
+            // matching TV's broker-emulator behavior of rejecting entries
+            // whose notional exceeds available equity even with no leverage.
             const marginPct = direction === 1
                 ? (strategy.config.margin_long  ?? 100)
                 : (strategy.config.margin_short ?? 100);
-            if (marginPct < 100) {
+            {
                 const oldSize = strategy.position_size;
                 const oldSign = Math.sign(oldSize);
                 const isReversal = oldSign !== 0 && oldSign !== direction;
@@ -330,7 +356,27 @@ export function processStrategyOrders(context: any): void {
                     const requiredMargin = computeRequiredMargin(newOpenQty, fillPrice, marginPct, pointValue);
 
                     if (requiredMargin > availableEquity) {
-                        order.status = 'cancelled';
+                        // TV broker emulator: the margin check only guards the
+                        // OPEN leg. On a reversal, the close leg always
+                        // executes (it frees margin / realizes the position) —
+                        // TV's exit shows the reversal order's id as exit id
+                        // while no opposite position appears. Verified against
+                        // QA margin_calls xlsx: after a partial margin-call
+                        // liquidation, the remainder was closed by the next
+                        // reversal order whose open leg was margin-rejected.
+                        const qtyToClose = Math.min(Math.abs(oldSize), order.qty);
+                        if (isReversal && qtyToClose > 0) {
+                            closePartialPosition(context, qtyToClose, fillPrice, currentTime, {
+                                exitId:      order.id,
+                                exitComment: order.comment,
+                            });
+                            order.status = 'filled';
+                            order.fill_price = fillPrice;
+                            order.fill_bar = context.idx;
+                            order.fill_time = currentTime;
+                        } else {
+                            order.status = 'cancelled';
+                        }
                         continue;
                     }
                 }
@@ -559,8 +605,18 @@ export function openTrade(
     // Realize the entry commission immediately as a cash outflow. TV reports
     // strategy.netprofit and strategy.grossloss net of entry commission the
     // moment the trade opens (commission is a real cost paid at fill, not
-    // deferred to close). The exit commission is realized in
-    // closePartialPosition when the trade actually closes.
+    // Entry commission hits strategy.netprofit (and grossloss as a pending
+    // liability) AT FILL TIME — matches TV's `strategy.netprofit` value
+    // during an open trade (verified against xlsx exports: TV's "Net profit"
+    // line during an open position equals closed-trades-total minus the
+    // sum of open trades' entry commissions). The exit commission is
+    // realized in closePartialPosition when the trade actually closes.
+    //
+    // Drawdown compensation: `updateEquityPeaks` adds the open trades'
+    // entry commission BACK to the drawdown formula. This mirrors TV's
+    // drawdown formula which has an explicit `+ openCommission` term —
+    // the result is correct for any peak timing (before vs during open
+    // trade), see math in the QA-drawdown analysis notes.
     if (entryCommission > 0) {
         strategy.netprofit -= entryCommission;
         strategy.grossloss += entryCommission;
@@ -971,7 +1027,23 @@ function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): v
     const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
 
     const realizedEquity = strategy.initial_capital + strategy.netprofit;
-    if (realizedEquity > strategy.equity_peak)   strategy.equity_peak   = realizedEquity;
+
+    // Open-trade entry commissions (already deducted from netprofit at fill).
+    let openCommission = 0;
+    for (const t of strategy.opentrades) openCommission += t.commission ?? 0;
+
+    // PEAK basis excludes the open trades' entry commissions. TV latches the
+    // equity high-water on the intermediate funds state right after a close
+    // settles — BEFORE the entry commission of a trade opened on the same
+    // bar (reversal) is charged. PT processes the reversal close+open
+    // atomically, so the peak basis adds the open entry commissions back.
+    // Verified against QA margin_calls xlsx (1% percent commission): TV's
+    // peak was exactly closed-trades-cum (+148,279.33) while the reversal
+    // trade opened on the peak bar had already cost 2,483.81 in entry
+    // commission. The TROUGH basis keeps the commission deducted
+    // (pessimistic on both sides — matches TV's run-up line exactly).
+    const peakBasis = realizedEquity + openCommission;
+    if (peakBasis > strategy.equity_peak)        strategy.equity_peak   = peakBasis;
     if (realizedEquity < strategy.equity_trough) strategy.equity_trough = realizedEquity;
 
     const posSize = strategy.position_size;
@@ -988,6 +1060,10 @@ function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): v
         bestExcursion  = posSize * (bestPrice - avgPrice)  * pointValue;
     }
 
+    // Drawdown = realized gap from the high-water + the open position's
+    // intra-bar adverse excursion. No commission correction here: the peak
+    // basis already excludes open entry commissions (see above) while
+    // realizedEquity includes them — the asymmetry IS TV's model.
     const drawDown = (strategy.equity_peak   - realizedEquity) + worstExcursion;
     if (drawDown > strategy.max_drawdown) {
         strategy.max_drawdown = drawDown;
@@ -1093,9 +1169,21 @@ export function processExitOrders(context: any): void {
         if ((order.category ?? 'entry') !== 'exit') continue;
 
         // Gather matching open trades (from_entry filter; '' = all).
-        const matching = strategy.opentrades.filter(
+        // For market closes from strategy.close_all() / strategy.close(id),
+        // additionally restrict to the trade IDs captured at QUEUE time —
+        // these orders are bound to the position state at call time, not
+        // fill time. If a reversal entry implicitly closed the snapshotted
+        // trades before this order fires, the order has no target and gets
+        // cancelled, mirroring TV's behavior of treating
+        // strategy.close_all() as a no-op when its intended position is
+        // already gone.
+        let matching = strategy.opentrades.filter(
             (t) => !order.from_entry || t.entry_id === order.from_entry,
         );
+        if (order._intended_trade_ids) {
+            const snapshot = new Set(order._intended_trade_ids);
+            matching = matching.filter((t) => snapshot.has(t.id));
+        }
         if (matching.length === 0) {
             // Nothing to exit — clear the order.
             order.status = 'cancelled';
@@ -1215,10 +1303,11 @@ export function processExitOrders(context: any): void {
         //   trail_points: armed when market moves N ticks in favor from entry
         // After arming, ride at trail_offset ticks behind the running peak.
         //
-        // Pine semantic: the trail cannot arm and trigger on the same
-        // bar. The arming bar establishes the running peak; the trigger
-        // check is suppressed for that bar only. SL and TP triggers are
-        // independent and still fire on the arming bar.
+        // If the trail arms on this bar, there is no prior trigger for
+        // the initial adverse segment. The newly established peak may
+        // still trigger later in the same bar according to the
+        // assumed intra-bar path. SL and TP triggers are independent
+        // and can also fire on the arming bar.
         let trailArmedThisBar = false;
         if (!order.trail_armed && (order.trail_price !== undefined || order.trail_points !== undefined)) {
             let armPrice: number | undefined;
@@ -1237,23 +1326,18 @@ export function processExitOrders(context: any): void {
                 }
             }
         }
+        // Peak update is now deferred to checkTrail so we can split it
+        // around the intra-bar segment that TV's broker emulator assumes
+        // (favorable-first: peak updates BEFORE trigger check;
+        //  adverse-first: peak updates AFTER segment-1 check against the
+        //  OLD peak's trigger). Eager peak update produced phantom early
+        //  fires on adverse-first bars where the bar's high established
+        //  the new peak only AFTER the low had already passed.
 
-        // Determine if open is closer to high vs low (Proximity Rule)
-        const openCloserToHigh = Math.abs(highPrice - openPrice) <= Math.abs(openPrice - lowPrice);
-        const favorableFirst = isLong ? openCloserToHigh : !openCloserToHigh;
-
-        if (order.trail_armed && !trailArmedThisBar && favorableFirst) {
-            // Favorable first: update peak before evaluation
-            if (isLong) order.trail_peak = Math.max(order.trail_peak ?? -Infinity, highPrice);
-            else order.trail_peak = Math.min(order.trail_peak ?? Infinity, lowPrice);
-        }
-
-        let trailTrigger: number | undefined;
-        if (order.trail_armed && order.trail_peak !== undefined && order.trail_offset !== undefined) {
-            trailTrigger = isLong
-                ? order.trail_peak - order.trail_offset * mintick
-                : order.trail_peak + order.trail_offset * mintick;
-        }
+        // The trail trigger is now computed inside checkTrail's
+        // segment branches (using OLD peak for segment 1, NEW peak for
+        // segment 3 on adverse-first; new peak unconditionally on
+        // favorable-first). See checkTrail below.
 
         // Evaluate triggers against this bar.
         //
@@ -1269,6 +1353,8 @@ export function processExitOrders(context: any): void {
         // For a short: open-near-high fires SL first, open-near-low fires TP first.
         // Trail is treated as an adverse-side trigger (it kicks in on a retrace
         // against the favorable peak), so it fires together with SL.
+        const openCloserToHigh = Math.abs(highPrice - openPrice) <= Math.abs(openPrice - lowPrice);
+        const favorableFirst = isLong ? openCloserToHigh : !openCloserToHigh;
 
         let triggered = false;
         let triggerPrice: number = NaN;
@@ -1294,25 +1380,93 @@ export function processExitOrders(context: any): void {
             }
         };
         const checkTrail = () => {
-            if (triggered || trailTrigger === undefined || trailArmedThisBar) return;
-            const trailHit = isLong ? lowPrice <= trailTrigger : highPrice >= trailTrigger;
-            if (trailHit) {
-                triggered = true;
-                const openPastTrail = isLong ? openPrice <= trailTrigger : openPrice >= trailTrigger;
-                triggerPrice = openPastTrail ? openPrice : trailTrigger;
-                triggerKind = 'trailing';
-            } else if (!favorableFirst) {
-                // Adverse first & didn't hit: update peak now
-                if (isLong) order.trail_peak = Math.max(order.trail_peak ?? -Infinity, highPrice);
-                else order.trail_peak = Math.min(order.trail_peak ?? Infinity, lowPrice);
+            if (triggered) return;
+            if (!order.trail_armed || order.trail_offset === undefined) return;
 
-                const updatedTrailTrigger = isLong
-                    ? order.trail_peak - order.trail_offset * mintick
-                    : order.trail_peak + order.trail_offset * mintick;
-                const segment3Hit = isLong ? closePrice <= updatedTrailTrigger : closePrice >= updatedTrailTrigger;
-                if (segment3Hit) {
+            // Intra-bar segment model (TV broker emulator):
+            //
+            // Favorable-first (open closer to high for long; open closer to
+            // low for short):
+            //   Phase 1: open → favorable extreme (price rides to bar H for
+            //            long / bar L for short). Peak updates to that.
+            //   Phase 2: favorable extreme → adverse extreme. Trigger
+            //            (= NEW peak ± offset) may be crossed.
+            //   Phase 3: adverse extreme → close. (Already covered.)
+            //
+            // Adverse-first (open closer to adverse extreme):
+            //   Phase 1: open → adverse extreme. Peak is still PRIOR. Check
+            //            trigger using OLD peak; if crossed, fire there.
+            //   Phase 2: adverse → favorable extreme. Peak updates now.
+            //   Phase 3: favorable → close. If close descends/rises
+            //            through the NEW trigger, fire at the NEW trigger.
+            //
+            // Arming THIS bar is a sub-case: the peak was JUST established
+            // at the arming moment (bar's H for long / L for short). The
+            // segment-1 check with OLD peak doesn't apply (trail wasn't
+            // armed yet). Only phase 2 (favorable-first) or phase 3
+            // (adverse-first) can fire on the arming bar.
+            //
+            // The fill is always the LITERAL trigger price — gap-fill at
+            // open is incorrect for trail (the bar's open precedes any
+            // peak update for this trade).
+            const updatePeak = () => {
+                if (isLong) order.trail_peak = Math.max(order.trail_peak ?? -Infinity, highPrice);
+                else        order.trail_peak = Math.min(order.trail_peak ?? Infinity, lowPrice);
+            };
+            const triggerFromPeak = (): number => isLong
+                ? (order.trail_peak as number) - (order.trail_offset as number) * mintick
+                : (order.trail_peak as number) + (order.trail_offset as number) * mintick;
+
+            if (trailArmedThisBar) {
+                // Peak is already the bar's favorable extreme (set by the
+                // arming logic). Don't update again.
+                const trig = triggerFromPeak();
+                if (favorableFirst) {
+                    // Phase 2 (favorable extreme → adverse extreme): low for
+                    // long / high for short crosses trigger.
+                    const hit = isLong ? lowPrice <= trig : highPrice >= trig;
+                    if (hit) {
+                        triggered = true;
+                        triggerPrice = trig;
+                        triggerKind = 'trailing';
+                    }
+                } else {
+                    // Phase 3 (favorable extreme → close): close past trigger.
+                    const seg3 = isLong ? closePrice <= trig : closePrice >= trig;
+                    if (seg3) {
+                        triggered = true;
+                        triggerPrice = trig;
+                        triggerKind = 'trailing';
+                    }
+                }
+                return;
+            }
+
+            // Already armed in a prior bar. Use the full segment model.
+            if (favorableFirst) {
+                updatePeak();
+                const trig = triggerFromPeak();
+                const hit = isLong ? lowPrice <= trig : highPrice >= trig;
+                if (hit) {
                     triggered = true;
-                    triggerPrice = updatedTrailTrigger;
+                    triggerPrice = trig;
+                    triggerKind = 'trailing';
+                }
+            } else {
+                const oldTrig = triggerFromPeak();
+                const seg1 = isLong ? lowPrice <= oldTrig : highPrice >= oldTrig;
+                if (seg1) {
+                    triggered = true;
+                    triggerPrice = oldTrig;
+                    triggerKind = 'trailing';
+                    return;
+                }
+                updatePeak();
+                const newTrig = triggerFromPeak();
+                const seg3 = isLong ? closePrice <= newTrig : closePrice >= newTrig;
+                if (seg3) {
+                    triggered = true;
+                    triggerPrice = newTrig;
                     triggerKind = 'trailing';
                 }
             }
@@ -1394,8 +1548,12 @@ export function processExitOrders(context: any): void {
  * pessimistic broker model — the trader is assumed to be liquidated at
  * the worst intra-bar price, since intra-bar tick order is unknown.
  *
- * Skipped entirely when the position's `margin_pct >= 100` (no leverage)
- * or when there are no open positions.
+ * Runs for ALL margin percentages including 100%. At 100% margin the
+ * trader still needs full notional collateral; adverse price movement
+ * that drops account equity below the position's current notional
+ * triggers a margin call. This matches TV's broker-emulator behavior
+ * (the "Margin calls" stat in the Strategy Tester is non-zero on 100%
+ * margin runs whenever a position's mark-to-market loss exceeds equity).
  */
 export function processMarginCall(context: any): void {
     const strategy: StrategyState = context.strategy;
@@ -1407,7 +1565,6 @@ export function processMarginCall(context: any): void {
     const marginPct = positionDir === 1
         ? (strategy.config.margin_long  ?? 100)
         : (strategy.config.margin_short ?? 100);
-    if (marginPct >= 100) return;  // No leverage → no margin call.
 
     const highPrice   = Series.from(context.data.high).get(0);
     const lowPrice    = Series.from(context.data.low).get(0);
@@ -1420,8 +1577,25 @@ export function processMarginCall(context: any): void {
     const requiredMarginAtAdverse = computeRequiredMargin(totalQty, adversePrice, marginPct, pointValue);
 
     if (equityAtAdverse < requiredMarginAtAdverse) {
-        // Liquidate ALL positions at the adverse extreme.
-        closePartialPosition(context, totalQty, adversePrice, currentTime, {
+        // PARTIAL liquidation (TV broker-emulator rule): compute the margin
+        // deficit at the adverse extreme, convert it to contracts at that
+        // price, and liquidate 4× that amount — the 4× buffer prevents the
+        // trimmed position from being immediately margin-called again on
+        // the next tick. The remainder of the position stays open. Capped
+        // at the full position size for catastrophic deficits.
+        //
+        // Verified against TV xlsx exports (MACD/BTCUSDT 1D, 100% margin):
+        // TV liquidated 1.21312 of a 5-contract short (deficit $33,603.64
+        // at price 110,797.38 → 4 × 0.30328) and 0.48244 of another
+        // (deficit $10,924.98 at 90,574.00 → 4 × 0.12061).
+        const deficit = requiredMarginAtAdverse - equityAtAdverse;
+        // TV floors the cover quantity to 5 decimal places BEFORE the 4×
+        // multiplier — both xlsx liquidation quantities reproduce exactly
+        // under this rule (4 × 0.30328 = 1.21312, 4 × 0.12061 = 0.48244)
+        // and under no other truncation placement.
+        const coverQty = Math.floor((deficit / (adversePrice * pointValue)) * 1e5) / 1e5;
+        const qtyToLiquidate = Math.min(totalQty, 4 * coverQty);
+        closePartialPosition(context, qtyToLiquidate, adversePrice, currentTime, {
             exitId:      'Margin call',
             exitComment: 'Margin call',
         });

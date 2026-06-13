@@ -1,5 +1,25 @@
 # Change Log
 
+## [0.9.22] - 2026-06-11 - Strategy Hotfix for Close-on-Flat and Margin calls
+
+This is a hotfix release for v0.9.21 which did not include the right fixes
+
+## [0.9.21] - 2026-06-10 - Strategy Broker Emulator — Close-on-Flat, 100% Margin, Trailing Stop & v6 Declaration Parsing
+
+### Fixed
+
+- **`strategy.close_all()` and `strategy.close(id)` no-op when nothing to close at queue time**: Both methods previously queued an exit order unconditionally. On the next bar the queued order survived (via `from_entry = ''` for `close_all` or matching `from_entry = id` for `close`) and caught a fresh entry at its entry price, closing it for **$0 PnL**. Hits common patterns like `if exit_signal: strategy.close_all("close")` — the exit signal can become true on a bar where the book is already flat (after a prior `close_all` fired), queuing a stale order that catches the next reversal entry. Both methods now early-return when `opentrades.length === 0` (close_all) or no matching `entry_id` exists (close).
+- **Pre-trade margin rejection and `processMarginCall` now run for ALL `margin_long` / `margin_short` percentages, not only `< 100`**: Both were previously gated on `marginPct < 100` with the comment "No leverage → no margin call" — incorrect, since the broker still requires the trader to post full notional as collateral at 100% margin. Pre-trade check in `processStrategyOrders` and intra-bar adverse-extreme liquidation in `processMarginCall` now apply unconditionally. The underlying math (`requiredMargin = qty × price × pointvalue × marginPct/100`) was already correct — only the guards needed removal.
+- **`strategy.exit(trail_points=N, trail_offset=M)` accumulates state across bars and fires per the intra-bar segment model**: Two coordinated fixes. (1) In `exit.ts`, `trail_armed` and `trail_peak` now carry over across same-id-replace — they're engine-accumulated state (running high for a long / running low for a short), not user-supplied parameters, and were previously reset to `false` / `NaN` every bar so the trail never accumulated past a single bar's range. (2) In `processExitOrders`, `checkTrail` replaces eager peak update + gap-fill at open with an intra-bar segment model. Four cases handled: favorable-first already-armed (update peak → check trigger), adverse-first already-armed (segment 1 with OLD peak's trigger → update → segment 3 close-vs-NEW-trigger), favorable-first arm-this-bar (peak set at arming → check phase-2 descent), adverse-first arm-this-bar (peak set after the adverse extreme → only phase-3 close-vs-trigger). Fill is the **literal trigger price** in all cases — gap-fill at bar open removed for trail because the open precedes any peak update relevant to this trade.
+- **`parseStrategyOptions` handles Pine v6 `(title, shorttitle, opts)` signature**: Previously only recognized `strategy("title")` and `strategy("title", { opts })`. When the script used `strategy("title", "shorttitle", overlay=true, commission_type=..., commission_value=...)` — a common v6 pattern — the second arg was a string (shorttitle), so the parser returned just `{ title }` and silently dropped the trailing named-args object. Result: `commission_type` / `commission_value` / `overlay` and every other named arg were ignored. New implementation walks all positional string args (capturing `title` then `shorttitle`) and merges any trailing object as named args.
+
+### Notes for users
+
+- **`strategy.netprofit` during open trades**: Entry commission is deducted from `netprofit` at fill time (matching real-broker cash flow). Final aggregate values are unaffected; intermediate per-bar values during an open trade will differ from references that defer commission to close time by the open trade's entry commission. `strategy.opentrades.commission(i)` exposes the open trade's entry commission for inspection.
+- **`strategy.max_drawdown` is the intrabar variant**: Uses bar H/L excursions of surviving positions in addition to realized equity peaks. Reference platforms may expose two drawdown fields (intrabar and close-to-close); only the intrabar is computed here, and it's the conservative number.
+
+---
+
 ## [0.9.20] - 2026-06-08 - Indicator Class as SSOT — `.input` / `.prop` Runtime Overrides
 
 ### Added
@@ -31,7 +51,7 @@
 ### Added
 
 - **Margin-call liquidation (`processMarginCall`)**: After entries and user-defined exits each bar, the engine checks whether intra-bar adverse movement (low for longs, high for shorts) would push equity below required maintenance margin when **`margin_long` / `margin_short` < 100**. If so, all open positions are force-liquidated at the bar's adverse extreme with **`exit_id` / `exit_comment` = `"Margin call"`**. Skipped when no leverage is configured. Helpers **`computeRequiredMargin`**, **`computeEquityAtPrice`**, **`computeHeldMargin`** model collateral in account currency via **`syminfo.pointvalue`**.
-- **Pre-trade margin rejection**: Entry orders that would require more margin than available equity at fill time are silently dropped (TV broker emulator — verified against margin QA oracles).
+- **Pre-trade margin rejection**: Entry orders that would require more margin than available equity at fill time are silently dropped
 - **`finalizeStrategyBar()`**: End-of-bar hook latches **`strategy.max_drawdown`** / **`strategy.max_runup`** once, after all fills settle, so TP/SL closes contribute realized P&L instead of phantom intra-bar excursions against raw H/L.
 - **`roundToMintick()`**: Stop/limit/trail prices on **`strategy.entry`** and **`strategy.exit`** snap to **`syminfo.mintick`** away from the reference close (broker placement convention).
 - **`CALLSITE_ID_NAMESPACES`**: Centralized transpiler list for trailing **`{ __callsiteId }`** injection; **`strategy.exit`** added for per-call-site cadence detection (persistent vs ephemeral exit-parameter capture). Documented known unification gaps with **`plot`**, **`ta.*`**, and **`alert`** patterns in **`settings.ts`**.
