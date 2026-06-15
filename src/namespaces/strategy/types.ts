@@ -245,6 +245,19 @@ export interface StrategyState {
     max_drawdown_percent_value: number;
     max_runup_percent_value: number;
 
+    // Risk-adjusted performance ratios (TV's "Risk-adjusted performance"
+    // panel). Computed ONCE at end-of-run by finalizeStrategyRun from the
+    // monthly equity curve — NOT Pine built-in variables (TV exposes them
+    // only in the Strategy Tester report / xlsx, not to scripts), so they
+    // live on the state object and are read via ctx.strategy.*.
+    sharpe_ratio: number;
+    sortino_ratio: number;
+    // Internal: mark-to-market equity at each calendar month's last bar,
+    // and the month key of the most recent bar (rollover detector). Feed
+    // the Sharpe / Sortino computation.
+    _monthly_equity?: number[];
+    _last_month_key?: number;
+
     // Trade-stat counters — updated each time a trade closes
     wintrades: number; // count of closed trades with profit > 0
     losstrades: number; // count of closed trades with profit < 0

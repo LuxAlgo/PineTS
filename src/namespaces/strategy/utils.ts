@@ -1913,11 +1913,87 @@ export function processMarginCall(context: any, checkpoint: 'open' | 'extreme' |
  */
 export function finalizeStrategyBar(context: any): void {
     if (!context.strategy) return;
+    const strategy: StrategyState = context.strategy;
     const highPrice = Series.from(context.data.high).get(0);
     const lowPrice = Series.from(context.data.low).get(0);
     const closePrice = Series.from(context.data.close).get(0);
     markToMarket(context, closePrice);
     updateEquityPeaks(context, highPrice, lowPrice);
+
+    // Record the MARK-TO-MARKET equity at each calendar month's last bar,
+    // for the end-of-run Sharpe / Sortino ratios (see
+    // finalizeStrategyRun). TV samples the equity curve monthly regardless
+    // of the chart timeframe; we keep the last bar's equity per UTC
+    // calendar month (overwrite within a month, append on rollover).
+    const barTime = Series.from(context.data.openTime).get(0);
+    if (Number.isFinite(barTime)) {
+        const d = new Date(barTime);
+        const monthKey = d.getUTCFullYear() * 12 + d.getUTCMonth();
+        const series = (strategy._monthly_equity ??= []);
+        if (strategy._last_month_key === monthKey && series.length > 0) {
+            series[series.length - 1] = strategy.equity;
+        } else {
+            series.push(strategy.equity);
+            strategy._last_month_key = monthKey;
+        }
+    }
+}
+
+/**
+ * End-of-run finalize: compute the risk-adjusted performance ratios
+ * (Sharpe / Sortino) from the monthly equity curve captured during the
+ * run. Called ONCE after the last bar (see PineTS.class.ts).
+ *
+ * TV broker-emulator formula (confirmed against the Help Center docs and
+ * reverse-engineered to the third decimal across 7 QA datasets,
+ * 2026-06-15):
+ *   - Sample the MARK-TO-MARKET equity at each calendar month's close.
+ *   - Monthly simple returns rᵢ = Eᵢ / Eᵢ₋₁ − 1, anchored at the initial
+ *     capital (the first return runs from initial_capital to month 1).
+ *   - MR = mean(rᵢ);  RFR = risk_free_rate / 100 / 12 (annual % → monthly).
+ *   - Sharpe  = (MR − RFR) / SD,  SD = √(Σ(rᵢ − MR)² / N)   (population).
+ *   - Sortino = (MR − RFR) / DD,  DD = √(Σ min(0, rᵢ − RFR)² / N)
+ *     (downside deviation over ALL N returns, target = RFR — per TV's
+ *     documented DD = sqrt(sum(min(0, Xᵢ − T))² / N)).
+ *   - No annualization.
+ *
+ * Note: the ratios are only as accurate as the bar-by-bar equity path;
+ * they ride on the strategy engine's mark-to-market fidelity. With < 2
+ * monthly returns (very short backtests) they are left at 0.
+ */
+export function finalizeStrategyRun(context: any): void {
+    const strategy: StrategyState = context?.strategy;
+    if (!strategy) return;
+
+    const series = strategy._monthly_equity ?? [];
+    const equities = [strategy.initial_capital, ...series];
+    const returns: number[] = [];
+    for (let i = 1; i < equities.length; i++) {
+        const prev = equities[i - 1];
+        if (prev !== 0 && Number.isFinite(prev) && Number.isFinite(equities[i])) {
+            returns.push(equities[i] / prev - 1);
+        }
+    }
+
+    if (returns.length < 2) {
+        strategy.sharpe_ratio = 0;
+        strategy.sortino_ratio = 0;
+        return;
+    }
+
+    const rfrMonthly = (strategy.config.risk_free_rate ?? 2) / 100 / 12;
+    const n = returns.length;
+    const mean = returns.reduce((s, r) => s + r, 0) / n;
+    const excess = mean - rfrMonthly;
+
+    const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / n;
+    const sd = Math.sqrt(variance);
+
+    const downsideSq = returns.reduce((s, r) => s + Math.min(0, r - rfrMonthly) ** 2, 0) / n;
+    const dd = Math.sqrt(downsideSq);
+
+    strategy.sharpe_ratio = sd > 0 ? excess / sd : 0;
+    strategy.sortino_ratio = dd > 0 ? excess / dd : 0;
 }
 
 /**
@@ -2004,6 +2080,13 @@ export function initializeStrategy(context: any, config: any): void {
         equity_at_drawdown_peak: initialCapital,
         max_drawdown_percent_value: 0,
         max_runup_percent_value: 0,
+
+        // Risk-adjusted ratios (computed at end-of-run) + their internal
+        // monthly-equity accumulator.
+        sharpe_ratio: 0,
+        sortino_ratio: 0,
+        _monthly_equity: [],
+        _last_month_key: -1,
 
         // Trade-stat counters
         wintrades: 0,

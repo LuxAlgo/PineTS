@@ -4,7 +4,7 @@ import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { Context } from './Context.class';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
-import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar, isAdverseFirstBar, applyPendingCloseMarginCall } from './namespaces/strategy/utils';
+import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, isAdverseFirstBar, applyPendingCloseMarginCall } from './namespaces/strategy/utils';
 
 // ── Timeframe duration utility ──────────────────────────────────────
 //prettier-ignore
@@ -1228,6 +1228,13 @@ export class PineTS {
             if (context.lctx) {
                 context.lctx.forEach((lctx: any) => shiftVariables(lctx));
             }
+        }
+
+        // End-of-run: compute the risk-adjusted performance ratios
+        // (Sharpe / Sortino) from the monthly equity curve accumulated
+        // across the bar loop. Runs once, after the last bar.
+        if (context.strategy) {
+            finalizeStrategyRun(context);
         }
     }
 }
