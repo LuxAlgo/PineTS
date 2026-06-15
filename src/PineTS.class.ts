@@ -4,7 +4,7 @@ import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { Context } from './Context.class';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
-import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar } from './namespaces/strategy/utils';
+import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar, isAdverseFirstBar, applyPendingCloseMarginCall } from './namespaces/strategy/utils';
 
 // ── Timeframe duration utility ──────────────────────────────────────
 //prettier-ignore
@@ -1129,18 +1129,38 @@ export class PineTS {
             context.data.bar_index.data.push(i);
 
             // Process strategy orders at the START of the bar (filling at Open).
-            // Entry-category orders fill first (market/limit/stop pending orders),
-            // then exit-category orders evaluate against the bar's open/high/low
-            // (conditional TP/SL/trailing exits + close()/close_all() markets).
+            // Entry-category orders fill first (market/limit/stop pending
+            // orders), then exit-category orders evaluate against the bar's
+            // open/high/low — so an exit gap-firing at the open covers trades
+            // that filled at that same open (entry-first precedence). TV
+            // evidence is majority-but-not-unanimous here: 3 of 4 gap events
+            // in the QA pyramiding xlsx (2021-02-24, 2021-09-08, 2024-02-29)
+            // catch the same-open entry; one (2024-03-21) spares it. The
+            // 'open' phase of processExitOrders implements the minority
+            // (exit-first) semantics and is currently not wired in.
             if (context.strategy) {
+                // Book a second margin call scheduled on the PREVIOUS bar
+                // by the phantom re-check (it fills at that bar's close,
+                // after its script evaluation — see processMarginCall and
+                // applyPendingCloseMarginCall). Must run before entries so
+                // a reversal queued at that close (qty frozen at queue
+                // time) overshoots by exactly the deferred quantity, as TV
+                // does.
+                applyPendingCloseMarginCall(context);
                 processStrategyOrders(context);
-                processExitOrders(context);
-                // Margin-call check (TV broker emulator): after user-defined
-                // exits, if intra-bar adverse movement would have pushed
-                // equity below required margin, FORCE LIQUIDATE all open
-                // positions at the bar's adverse extreme. Skipped when no
-                // leverage (margin_long / margin_short >= 100).
-                processMarginCall(context);
+                // Margin checkpoints along the intra-bar path (TV broker
+                // emulator): first at the OPEN right after entries fill;
+                // then at the adverse extreme — BEFORE exit fills when the
+                // bar's first move is adverse for the position (the
+                // extreme precedes the favorable exits on the path), AFTER
+                // them otherwise (favorable exits free margin first). The
+                // 'extreme' checkpoint may schedule a deferred second
+                // margin call at this bar's close (phantom re-check).
+                processMarginCall(context, 'open');
+                const adverseFirst = isAdverseFirstBar(context);
+                if (adverseFirst) processMarginCall(context, 'extreme');
+                processExitOrders(context, 'intrabar');
+                if (!adverseFirst) processMarginCall(context, 'extreme');
                 // Latch max_drawdown / max_runup ONCE at the end of the bar so
                 // trades closed mid-bar by TP / SL contribute their realized
                 // P&L (not phantom intra-bar excursions against the raw H/L).

@@ -72,6 +72,14 @@ export interface Trade {
     max_drawdown?: number; // per-trade peak drawdown from entry
     max_runup?: number; // per-trade peak runup from entry
     status: 'open' | 'closed';
+    /**
+     * PHYSICAL entry price of this lot, immutable — used to compute
+     * per-lot exit-bracket levels (strategy.exit profit/loss ticks).
+     * Distinct from `entry_price`, which is the LEDGER value and can be
+     * swapped by FIFO entry/exit pairing when a newer lot's bracket fills
+     * before an older lot's (TV ledger convention).
+     */
+    _bracket_entry?: number;
 }
 
 /**
