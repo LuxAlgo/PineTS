@@ -82,9 +82,7 @@ export function roundToMintick(price: number, referencePrice: number, mintick: n
     // Small epsilon guards against float-imprecision flipping an
     // already-on-grid value to the next tick.
     const EPS = 1e-9;
-    return price > referencePrice
-        ? Math.ceil(ticks - EPS) * mintick
-        : Math.floor(ticks + EPS) * mintick;
+    return price > referencePrice ? Math.ceil(ticks - EPS) * mintick : Math.floor(ticks + EPS) * mintick;
 }
 
 /**
@@ -98,7 +96,7 @@ export function roundToMintick(price: number, referencePrice: number, mintick: n
  * 5× leverage, etc.
  */
 export function computeRequiredMargin(qty: number, price: number, marginPct: number, pointValue: number): number {
-    return Math.abs(qty) * price * pointValue * marginPct / 100;
+    return (Math.abs(qty) * price * pointValue * marginPct) / 100;
 }
 
 /**
@@ -132,9 +130,7 @@ export function computeHeldMargin(context: any, atPrice: number): number {
     let total = 0;
     for (const trade of strategy.opentrades) {
         const dir = Math.sign(trade.size);
-        const marginPct = dir === 1
-            ? (strategy.config.margin_long  ?? 100)
-            : (strategy.config.margin_short ?? 100);
+        const marginPct = dir === 1 ? (strategy.config.margin_long ?? 100) : (strategy.config.margin_short ?? 100);
         total += computeRequiredMargin(trade.size, atPrice, marginPct, pointValue);
     }
     return total;
@@ -239,7 +235,7 @@ export function processStrategyOrders(context: any): void {
         const advNet = Math.max(0, advPrice) + entryComm;
         const favNet = Math.max(0, favPrice - entryComm);
         if (advNet > (trade.max_drawdown ?? 0)) trade.max_drawdown = advNet;
-        if (favNet > (trade.max_runup    ?? 0)) trade.max_runup    = favNet;
+        if (favNet > (trade.max_runup ?? 0)) trade.max_runup = favNet;
     }
 
     // Mark-to-market at OPEN price so fill logic / risk checks see accurate equity.
@@ -327,16 +323,12 @@ export function processStrategyOrders(context: any): void {
             // margin equals the full notional (qty * price * pointValue * 1),
             // matching TV's broker-emulator behavior of rejecting entries
             // whose notional exceeds available equity even with no leverage.
-            const marginPct = direction === 1
-                ? (strategy.config.margin_long  ?? 100)
-                : (strategy.config.margin_short ?? 100);
+            const marginPct = direction === 1 ? (strategy.config.margin_long ?? 100) : (strategy.config.margin_short ?? 100);
             {
                 const oldSize = strategy.position_size;
                 const oldSign = Math.sign(oldSize);
                 const isReversal = oldSign !== 0 && oldSign !== direction;
-                const newOpenQty = isReversal
-                    ? Math.max(0, order.qty - Math.abs(oldSize))
-                    : order.qty;
+                const newOpenQty = isReversal ? Math.max(0, order.qty - Math.abs(oldSize)) : order.qty;
 
                 if (newOpenQty > 0) {
                     const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
@@ -366,7 +358,7 @@ export function processStrategyOrders(context: any): void {
                         const qtyToClose = Math.min(Math.abs(oldSize), order.qty);
                         if (isReversal && qtyToClose > 0) {
                             closePartialPosition(context, qtyToClose, fillPrice, currentTime, {
-                                exitId:      order.id,
+                                exitId: order.id,
                                 exitComment: order.comment,
                             });
                             order.status = 'filled';
@@ -521,18 +513,18 @@ export function evaluateCatastrophicRiskHalt(strategy: StrategyState): void {
     const rules = strategy.risk_rules;
 
     if (rules.max_drawdown) {
-        const limit = rules.max_drawdown.type === 'percent_of_equity'
-            ? (rules.max_drawdown.value / 100) * strategy.equity_peak
-            : rules.max_drawdown.value;
+        const limit =
+            rules.max_drawdown.type === 'percent_of_equity' ? (rules.max_drawdown.value / 100) * strategy.equity_peak : rules.max_drawdown.value;
         if (strategy.max_drawdown >= limit) {
             strategy.risk_halted = true;
             return;
         }
     }
     if (rules.max_intraday_loss) {
-        const limit = rules.max_intraday_loss.type === 'percent_of_equity'
-            ? (rules.max_intraday_loss.value / 100) * strategy.initial_capital
-            : rules.max_intraday_loss.value;
+        const limit =
+            rules.max_intraday_loss.type === 'percent_of_equity'
+                ? (rules.max_intraday_loss.value / 100) * strategy.initial_capital
+                : rules.max_intraday_loss.value;
         if (strategy.grossloss >= limit) {
             strategy.risk_halted = true;
             return;
@@ -593,7 +585,7 @@ export function openTrade(
         _bracket_entry: price,
         entry_bar_index: context.idx,
         entry_time: time,
-        size: direction * qty,   // SIGNED — matches Pine's closedtrades.size()
+        size: direction * qty, // SIGNED — matches Pine's closedtrades.size()
         commission: entryCommission,
         max_drawdown: 0,
         max_runup: 0,
@@ -647,11 +639,11 @@ export function openTrade(
     // entry+SL trade records the bar's full low (a phantom excursion that
     // never happened to this trade).
     const highPrice = Series.from(context.data.high).get(0);
-    const lowPrice  = Series.from(context.data.low).get(0);
-    const mintick   = context.pine?.syminfo?.mintick ?? 0.01;
+    const lowPrice = Series.from(context.data.low).get(0);
+    const mintick = context.pine?.syminfo?.mintick ?? 0.01;
 
-    let worstPrice = direction === 1 ? lowPrice  : highPrice;
-    let bestPrice  = direction === 1 ? highPrice : lowPrice;
+    let worstPrice = direction === 1 ? lowPrice : highPrice;
+    let bestPrice = direction === 1 ? highPrice : lowPrice;
     for (const exitOrder of strategy.pending_orders) {
         if ((exitOrder.category ?? 'entry') !== 'exit') continue;
         if (exitOrder.from_entry && exitOrder.from_entry !== entryId) continue;
@@ -672,24 +664,24 @@ export function openTrade(
         if (direction === 1) {
             // Long: worst is low (cap upward by sl), best is high (cap downward by tp).
             if (sl !== undefined && sl > worstPrice) worstPrice = sl;
-            if (tp !== undefined && tp < bestPrice)  bestPrice  = tp;
+            if (tp !== undefined && tp < bestPrice) bestPrice = tp;
         } else {
             // Short: worst is high (cap downward by sl), best is low (cap upward by tp).
             if (sl !== undefined && sl < worstPrice) worstPrice = sl;
-            if (tp !== undefined && tp > bestPrice)  bestPrice  = tp;
+            if (tp !== undefined && tp > bestPrice) bestPrice = tp;
         }
     }
 
     const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
     const adv = direction === 1 ? (price - worstPrice) * qty * pointValue : (worstPrice - price) * qty * pointValue;
-    const fav = direction === 1 ? (bestPrice  - price) * qty * pointValue : (price - bestPrice)  * qty * pointValue;
+    const fav = direction === 1 ? (bestPrice - price) * qty * pointValue : (price - bestPrice) * qty * pointValue;
     // Fold entry-leg commission into BOTH excursions: a trade is "down" by
     // the entry commission the moment it fills (so the adverse excursion
     // includes that cost), and the favorable excursion is the price gain NET
     // of that same cost (the trade has to overcome the commission first
     // before showing any runup). TV reports both metrics commission-netted.
     trade.max_drawdown = Math.max(0, adv) + entryCommission;
-    trade.max_runup    = Math.max(0, fav - entryCommission);
+    trade.max_runup = Math.max(0, fav - entryCommission);
 
     // Update flat position scalars
     const oldSize = strategy.position_size;
@@ -742,7 +734,7 @@ function executeOrder(context: any, order: Order, fillPrice: number, fillTime: n
         // separately to apply the same half-charge.
         const isReversal = remainingQty > 0;
         closePartialPosition(context, qtyToClose, fillPrice, fillTime, {
-            exitId:      order.id,
+            exitId: order.id,
             exitComment: order.comment,
             isImplicitReversal: isReversal,
         });
@@ -805,7 +797,8 @@ function consumeLedger(
     physical: Trade,
     qty: number,
 ): Array<{ qty: number; entry_price: number; entry_time: number; entry_bar_index: number; entry_comment?: string; commission: number }> {
-    const out: Array<{ qty: number; entry_price: number; entry_time: number; entry_bar_index: number; entry_comment?: string; commission: number }> = [];
+    const out: Array<{ qty: number; entry_price: number; entry_time: number; entry_bar_index: number; entry_comment?: string; commission: number }> =
+        [];
     let need = qty;
     const queue: any[] = (strategy as any)._ledger_entries ?? [];
     for (const rec of queue) {
@@ -840,13 +833,7 @@ function consumeLedger(
     return out;
 }
 
-export function closePartialPosition(
-    context: any,
-    qtyToClose: number,
-    exitPrice: number,
-    exitTime: number,
-    closeInfo?: CloseInfo,
-): void {
+export function closePartialPosition(context: any, qtyToClose: number, exitPrice: number, exitTime: number, closeInfo?: CloseInfo): void {
     const strategy: StrategyState = context.strategy;
     const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
     let remainingQty = qtyToClose;
@@ -912,11 +899,11 @@ export function closePartialPosition(
                     exit_price: exitPrice,
                     exit_bar_index: context.idx,
                     exit_time: exitTime,
-                    exit_id:      closeInfo?.exitId      ?? trade.exit_id,
+                    exit_id: closeInfo?.exitId ?? trade.exit_id,
                     exit_comment: closeInfo?.exitComment ?? trade.exit_comment,
                     profit: gross - s.commission - exitCommShare,
                 };
-                if (closeInfo?.triggerKind === 'loss')   row.max_runup    = 0;
+                if (closeInfo?.triggerKind === 'loss') row.max_runup = 0;
                 if (closeInfo?.triggerKind === 'profit') row.max_drawdown = s.commission;
 
                 strategy.netprofit += gross - exitCommShare;
@@ -1099,7 +1086,7 @@ function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): v
     // commission. The TROUGH basis keeps the commission deducted
     // (pessimistic on both sides — matches TV's run-up line exactly).
     const peakBasis = realizedEquity + openCommission;
-    if (peakBasis > strategy.equity_peak)        strategy.equity_peak   = peakBasis;
+    if (peakBasis > strategy.equity_peak) strategy.equity_peak = peakBasis;
     if (realizedEquity < strategy.equity_trough) strategy.equity_trough = realizedEquity;
 
     const posSize = strategy.position_size;
@@ -1108,19 +1095,19 @@ function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): v
     let worstExcursion = 0;
     let bestExcursion = 0;
     if (posSize !== 0 && Number.isFinite(avgPrice)) {
-        const worstPrice = posSize > 0 ? lowPrice  : highPrice;
-        const bestPrice  = posSize > 0 ? highPrice : lowPrice;
+        const worstPrice = posSize > 0 ? lowPrice : highPrice;
+        const bestPrice = posSize > 0 ? highPrice : lowPrice;
         // posSize * (avg - worstPrice) is always >= 0 (a loss); same for gain.
         // Multiplied by pointValue to convert price units → account currency.
         worstExcursion = posSize * (avgPrice - worstPrice) * pointValue;
-        bestExcursion  = posSize * (bestPrice - avgPrice)  * pointValue;
+        bestExcursion = posSize * (bestPrice - avgPrice) * pointValue;
     }
 
     // Drawdown = realized gap from the high-water + the open position's
     // intra-bar adverse excursion. No commission correction here: the peak
     // basis already excludes open entry commissions (see above) while
     // realizedEquity includes them — the asymmetry IS TV's model.
-    const drawDown = (strategy.equity_peak   - realizedEquity) + worstExcursion;
+    const drawDown = strategy.equity_peak - realizedEquity + worstExcursion;
     if (drawDown > strategy.max_drawdown) {
         strategy.max_drawdown = drawDown;
         // Snapshot Max_Equity (the realized high-water in force at this
@@ -1141,7 +1128,7 @@ function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): v
         }
     }
 
-    const runUp   = (realizedEquity - strategy.equity_trough) + bestExcursion;
+    const runUp = realizedEquity - strategy.equity_trough + bestExcursion;
     if (runUp > strategy.max_runup) {
         strategy.max_runup = runUp;
         // Snapshot the total equity at this peak — denominator for max_runup_percent.
@@ -1272,9 +1259,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
         // cancelled, mirroring TV's behavior of treating
         // strategy.close_all() as a no-op when its intended position is
         // already gone.
-        let matching = strategy.opentrades.filter(
-            (t) => !order.from_entry || t.entry_id === order.from_entry,
-        );
+        let matching = strategy.opentrades.filter((t) => !order.from_entry || t.entry_id === order.from_entry);
         if (order._intended_trade_ids) {
             const snapshot = new Set(order._intended_trade_ids);
             matching = matching.filter((t) => snapshot.has(t.id));
@@ -1293,9 +1278,15 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
         const matchingDir = Math.sign(matching[0].size); // direction of the position to close
 
         // ---- Market exits from close() / close_all() ----
-        if (order.type === 'market' && order.profit === undefined && order.loss === undefined &&
-            order.limit === undefined && order.stop === undefined &&
-            order.trail_price === undefined && order.trail_points === undefined) {
+        if (
+            order.type === 'market' &&
+            order.profit === undefined &&
+            order.loss === undefined &&
+            order.limit === undefined &&
+            order.stop === undefined &&
+            order.trail_price === undefined &&
+            order.trail_points === undefined
+        ) {
             // Market closes fill in the intrabar phase (after entries) —
             // their interplay with reversal entries is governed by the
             // _intended_trade_ids snapshot above.
@@ -1316,7 +1307,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             }
 
             closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime, {
-                exitId:      order.id,
+                exitId: order.id,
                 exitComment: order.comment,
             });
             order.status = 'filled';
@@ -1399,7 +1390,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
         // path for if-block-scoped vars).
         if (order._attachedAtReversal && !order._isPersistent) {
             if (order.limit !== undefined) absTp = undefined;
-            if (order.stop  !== undefined) absSl = undefined;
+            if (order.stop !== undefined) absSl = undefined;
         }
 
         // Trailing-stop state.
@@ -1421,9 +1412,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             let armPrice: number | undefined;
             if (order.trail_price !== undefined) armPrice = order.trail_price;
             else if (order.trail_points !== undefined) {
-                armPrice = isLong
-                    ? avgEntry + order.trail_points * mintick
-                    : avgEntry - order.trail_points * mintick;
+                armPrice = isLong ? avgEntry + order.trail_points * mintick : avgEntry - order.trail_points * mintick;
             }
             if (armPrice !== undefined) {
                 const armed = isLong ? highPrice >= armPrice : lowPrice <= armPrice;
@@ -1502,12 +1491,10 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             // In the pre-entry 'open' phase only GAP conditions count (the
             // bar opened already past the trigger); intra-bar crossings
             // belong to the 'intrabar' phase.
-            const tpHit = tp !== undefined && (phase === 'open'
-                ? (isLong ? openPrice >= tp : openPrice <= tp)
-                : (isLong ? highPrice >= tp : lowPrice <= tp));
-            const slHit = sl !== undefined && (phase === 'open'
-                ? (isLong ? openPrice <= sl : openPrice >= sl)
-                : (isLong ? lowPrice <= sl : highPrice >= sl));
+            const tpHit =
+                tp !== undefined && (phase === 'open' ? (isLong ? openPrice >= tp : openPrice <= tp) : isLong ? highPrice >= tp : lowPrice <= tp);
+            const slHit =
+                sl !== undefined && (phase === 'open' ? (isLong ? openPrice <= sl : openPrice >= sl) : isLong ? lowPrice <= sl : highPrice >= sl);
 
             // OCO per trade: when both legs are reachable within the bar,
             // the leg crossed FIRST along the assumed intra-bar path wins
@@ -1527,8 +1514,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                 // always catch (403/403). Suppress the stop leg for
                 // same-bar short entries gapped past at the open; the TP
                 // leg (if also reachable) still applies.
-                const buyStopSparesFreshEntry =
-                    !isLong && openPastSl && t.entry_bar_index === context.idx;
+                const buyStopSparesFreshEntry = !isLong && openPastSl && t.entry_bar_index === context.idx;
                 if (!buyStopSparesFreshEntry) {
                     slEvents.push({ qty: tQty, price: openPastSl ? openPrice : (sl as number), kind: 'loss', tradeId: t.id });
                 } else if (tpHit) {
@@ -1580,11 +1566,12 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
         if (phase === 'intrabar' && !mcLocked && order.trail_armed && order.trail_offset !== undefined) {
             const updatePeak = () => {
                 if (isLong) order.trail_peak = Math.max(order.trail_peak ?? -Infinity, highPrice);
-                else        order.trail_peak = Math.min(order.trail_peak ?? Infinity, lowPrice);
+                else order.trail_peak = Math.min(order.trail_peak ?? Infinity, lowPrice);
             };
-            const triggerFromPeak = (): number => isLong
-                ? (order.trail_peak as number) - (order.trail_offset as number) * mintick
-                : (order.trail_peak as number) + (order.trail_offset as number) * mintick;
+            const triggerFromPeak = (): number =>
+                isLong
+                    ? (order.trail_peak as number) - (order.trail_offset as number) * mintick
+                    : (order.trail_peak as number) + (order.trail_offset as number) * mintick;
             const emitTrail = (price: number) => {
                 trailEvent = { qty: Infinity, price, kind: 'trailing' };
             };
@@ -1600,7 +1587,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                     if (hit) emitTrail(trig);
                 } else {
                     // Phase 3 (favorable extreme → close): close past trigger.
-                    const seg3 = isLong ? closePrice < trig : closePrice > trig;
+                    const seg3 = isLong ? closePrice <= trig : closePrice >= trig;
                     if (seg3) emitTrail(trig);
                 }
             } else if (favorableFirst) {
@@ -1617,7 +1604,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                 } else {
                     updatePeak();
                     const newTrig = triggerFromPeak();
-                    const seg3 = isLong ? closePrice < newTrig : closePrice > newTrig;
+                    const seg3 = isLong ? closePrice <= newTrig : closePrice >= newTrig;
                     if (seg3) emitTrail(newTrig);
                 }
             }
@@ -1638,9 +1625,8 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                 capRemaining = matchingQty * (order.qty_percent / 100);
             }
 
-            const remainingMatchingQty = () => strategy.opentrades
-                .filter((t) => !order.from_entry || t.entry_id === order.from_entry)
-                .reduce((sum, t) => sum + Math.abs(t.size), 0);
+            const remainingMatchingQty = () =>
+                strategy.opentrades.filter((t) => !order.from_entry || t.entry_id === order.from_entry).reduce((sum, t) => sum + Math.abs(t.size), 0);
 
             let lastFill = NaN;
             let closedAny = false;
@@ -1657,17 +1643,27 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                 // comment_loss / comment_trailing — each fires only when
                 // its leg triggers. Fall back to the generic `comment`.
                 const legComment =
-                    ev.kind === 'profit' ? (order.comment_profit ?? order.comment) :
-                    ev.kind === 'loss'   ? (order.comment_loss   ?? order.comment) :
-                                           (order.comment_trailing ?? order.comment);
+                    ev.kind === 'profit'
+                        ? (order.comment_profit ?? order.comment)
+                        : ev.kind === 'loss'
+                          ? (order.comment_loss ?? order.comment)
+                          : (order.comment_trailing ?? order.comment);
 
                 // Bracket fills close their SOURCE lot (per-lot binding);
                 // the trail event has no source lot and closes FIFO.
-                closeMatching(context, order.from_entry, qtyThis, fillPrice, currentTime, {
-                    triggerKind: ev.kind,
-                    exitId:      order.id,
-                    exitComment: legComment,
-                }, ev.tradeId);
+                closeMatching(
+                    context,
+                    order.from_entry,
+                    qtyThis,
+                    fillPrice,
+                    currentTime,
+                    {
+                        triggerKind: ev.kind,
+                        exitId: order.id,
+                        exitComment: legComment,
+                    },
+                    ev.tradeId,
+                );
                 capRemaining -= qtyThis;
                 lastFill = fillPrice;
                 closedAny = true;
@@ -1722,14 +1718,13 @@ export function applyPendingCloseMarginCall(context: any): void {
     if (strategy.opentrades.length === 0 || Math.sign(strategy.position_size) !== pending.dir) return;
 
     closePartialPosition(context, Math.min(pending.qty, Math.abs(strategy.position_size)), pending.price, pending.time, {
-        exitId:      'Margin call',
+        exitId: 'Margin call',
         exitComment: 'Margin call',
     });
 
     if (Math.abs(strategy.position_size) > 1e-9) {
         for (const o of strategy.pending_orders) {
-            if (o.status === 'pending' && (o.category ?? 'entry') === 'entry' &&
-                !o._isReversalEntry && parseDirection(o.direction) === pending.dir) {
+            if (o.status === 'pending' && (o.category ?? 'entry') === 'entry' && !o._isReversalEntry && parseDirection(o.direction) === pending.dir) {
                 o.status = 'cancelled';
             }
         }
@@ -1749,7 +1744,7 @@ export function isAdverseFirstBar(context: any): boolean {
     if (dir === 0) return false;
     const openPrice = Series.from(context.data.open).get(0);
     const highPrice = Series.from(context.data.high).get(0);
-    const lowPrice  = Series.from(context.data.low).get(0);
+    const lowPrice = Series.from(context.data.low).get(0);
     const openCloserToHigh = Math.abs(highPrice - openPrice) <= Math.abs(openPrice - lowPrice);
     return dir === 1 ? !openCloserToHigh : openCloserToHigh;
 }
@@ -1793,21 +1788,16 @@ export function processMarginCall(context: any, checkpoint: 'open' | 'extreme' |
     const positionDir = Math.sign(strategy.position_size);
     if (positionDir === 0) return;
 
-    const marginPct = positionDir === 1
-        ? (strategy.config.margin_long  ?? 100)
-        : (strategy.config.margin_short ?? 100);
+    const marginPct = positionDir === 1 ? (strategy.config.margin_long ?? 100) : (strategy.config.margin_short ?? 100);
 
-    const openPrice   = Series.from(context.data.open).get(0);
-    const highPrice   = Series.from(context.data.high).get(0);
-    const lowPrice    = Series.from(context.data.low).get(0);
-    const closePrice  = Series.from(context.data.close).get(0);
+    const openPrice = Series.from(context.data.open).get(0);
+    const highPrice = Series.from(context.data.high).get(0);
+    const lowPrice = Series.from(context.data.low).get(0);
+    const closePrice = Series.from(context.data.close).get(0);
     const currentTime = Series.from(context.data.openTime).get(0);
-    const pointValue  = context.pine?.syminfo?.pointvalue ?? 1;
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
 
-    const adversePrice =
-        checkpoint === 'open'  ? openPrice :
-        checkpoint === 'close' ? closePrice :
-        (positionDir === 1 ? lowPrice : highPrice);
+    const adversePrice = checkpoint === 'open' ? openPrice : checkpoint === 'close' ? closePrice : positionDir === 1 ? lowPrice : highPrice;
     const totalQty = Math.abs(strategy.position_size);
     const equityAtAdverse = computeEquityAtPrice(context, adversePrice);
     const requiredMarginAtAdverse = computeRequiredMargin(totalQty, adversePrice, marginPct, pointValue);
@@ -1848,11 +1838,11 @@ export function processMarginCall(context: any, checkpoint: 'open' | 'extreme' |
         // one it bit into).
         const fifoBefore = [...strategy.opentrades];
         const frontPiece = fifoBefore[0];
-        const frontQty   = Math.abs(frontPiece.size);
+        const frontQty = Math.abs(frontPiece.size);
         const frontEntry = frontPiece.entry_price;
 
         closePartialPosition(context, qtyToLiquidate, adversePrice, currentTime, {
-            exitId:      'Margin call',
+            exitId: 'Margin call',
             exitComment: 'Margin call',
         });
 
@@ -1879,9 +1869,7 @@ export function processMarginCall(context: any, checkpoint: 'open' | 'extreme' |
         // Single-piece margin calls can never fire this (D2 < 0
         // algebraically) — only calls that consume the whole front piece
         // and span into deeper lots qualify, and even then rarely.
-        if (checkpoint === 'extreme' &&
-            qtyToLiquidate >= frontQty - 1e-9 &&
-            Math.abs(strategy.position_size) > 1e-9) {
+        if (checkpoint === 'extreme' && qtyToLiquidate >= frontQty - 1e-9 && Math.abs(strategy.position_size) > 1e-9) {
             const freedMargin = computeRequiredMargin(frontQty, adversePrice, marginPct, pointValue);
             const u1 = frontQty * (adversePrice - frontEntry) * positionDir * pointValue;
             const d2 = deficit - freedMargin + u1;
@@ -1925,8 +1913,8 @@ export function processMarginCall(context: any, checkpoint: 'open' | 'extreme' |
  */
 export function finalizeStrategyBar(context: any): void {
     if (!context.strategy) return;
-    const highPrice  = Series.from(context.data.high).get(0);
-    const lowPrice   = Series.from(context.data.low).get(0);
+    const highPrice = Series.from(context.data.high).get(0);
+    const lowPrice = Series.from(context.data.low).get(0);
     const closePrice = Series.from(context.data.close).get(0);
     markToMarket(context, closePrice);
     updateEquityPeaks(context, highPrice, lowPrice);
@@ -1995,7 +1983,7 @@ export function initializeStrategy(context: any, config: any): void {
 
         // Flat position scalars
         position_size: 0,
-        position_avg_price: NaN,        // Pine returns NaN when flat
+        position_avg_price: NaN, // Pine returns NaN when flat
         position_entry_name: '',
 
         // Account info
