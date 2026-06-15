@@ -1303,10 +1303,11 @@ export function processExitOrders(context: any): void {
         //   trail_points: armed when market moves N ticks in favor from entry
         // After arming, ride at trail_offset ticks behind the running peak.
         //
-        // Pine semantic: the trail cannot arm and trigger on the same
-        // bar. The arming bar establishes the running peak; the trigger
-        // check is suppressed for that bar only. SL and TP triggers are
-        // independent and still fire on the arming bar.
+        // If the trail arms on this bar, there is no prior trigger for
+        // the initial adverse segment. The newly established peak may
+        // still trigger later in the same bar according to the
+        // assumed intra-bar path. SL and TP triggers are independent
+        // and can also fire on the arming bar.
         let trailArmedThisBar = false;
         if (!order.trail_armed && (order.trail_price !== undefined || order.trail_points !== undefined)) {
             let armPrice: number | undefined;
@@ -1431,7 +1432,7 @@ export function processExitOrders(context: any): void {
                     }
                 } else {
                     // Phase 3 (favorable extreme → close): close past trigger.
-                    const seg3 = isLong ? closePrice < trig : closePrice > trig;
+                    const seg3 = isLong ? closePrice <= trig : closePrice >= trig;
                     if (seg3) {
                         triggered = true;
                         triggerPrice = trig;
@@ -1462,7 +1463,7 @@ export function processExitOrders(context: any): void {
                 }
                 updatePeak();
                 const newTrig = triggerFromPeak();
-                const seg3 = isLong ? closePrice < newTrig : closePrice > newTrig;
+                const seg3 = isLong ? closePrice <= newTrig : closePrice >= newTrig;
                 if (seg3) {
                     triggered = true;
                     triggerPrice = newTrig;
