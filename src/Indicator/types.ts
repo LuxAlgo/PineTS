@@ -49,6 +49,12 @@ export interface IPineInput {
     type: PineInputType;
     defval: unknown;
 
+    // Variable the input is assigned to (`len = input.int(…)` → "len"). Present
+    // for every scanned input (the scanner only captures `var = input.*()`
+    // forms). It is the PRIMARY, stable key for `.input[...]` overrides — title
+    // is a secondary alias (titles can be empty or duplicated; varId can't).
+    varId?: string;
+
     // Universal optional
     title?: string;
     tooltip?: string;

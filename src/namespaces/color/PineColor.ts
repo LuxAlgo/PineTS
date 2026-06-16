@@ -72,6 +72,51 @@ const COLOR_CONSTANTS = {
 } as const;
 
 /**
+ * Resolve any static color value to its `[r, g, b, a]` components (a in
+ * 0..1). Accepts:
+ *   - `#RRGGBB` / `#RRGGBBAA` hex
+ *   - `rgb(r,g,b)` / `rgba(r,g,b,a)` strings
+ *   - a named constant, with or without the namespace: `color.red` / `red`
+ * Returns null for anything it can't parse as a color.
+ */
+export function resolveColorToRgba(value: unknown): [number, number, number, number] | null {
+    if (typeof value !== 'string') return null;
+    let s = value.trim();
+    // Resolve a named constant first: "color.red" → "#F23645", or a bare "red".
+    const name = s.startsWith('color.') ? s.slice(6) : s;
+    if (Object.prototype.hasOwnProperty.call(COLOR_CONSTANTS, name)) {
+        s = (COLOR_CONSTANTS as Record<string, string>)[name];
+    }
+    return parseColorToRGBA(s);
+}
+
+/**
+ * Format `[r, g, b, a]` (a in 0..1) as a canonical 8-digit RGBA hex string
+ * `#RRGGBBAA` (uppercase, alpha byte ALWAYS present — `FF` = fully opaque).
+ */
+export function rgbaToHex8(r: number, g: number, b: number, a: number): string {
+    const byte = (n: number) =>
+        Math.round(Math.max(0, Math.min(255, n)))
+            .toString(16)
+            .padStart(2, '0');
+    return `#${byte(r)}${byte(g)}${byte(b)}${byte(a * 255)}`.toUpperCase();
+}
+
+/**
+ * Normalize any color value to a canonical 8-digit RGBA hex string
+ * `#RRGGBBAA` (see {@link rgbaToHex8}). Accepts every shape a color input
+ * can carry (hex, rgb()/rgba(), named constant). Values it can't parse as
+ * a color are returned unchanged, so non-color data passes through
+ * untouched. Used by `Indicator.getInputsMeta()` to present color-input
+ * defaults in a single canonical form.
+ */
+export function normalizeColorToRgbaHex(value: unknown): unknown {
+    const rgba = resolveColorToRgba(value);
+    if (!rgba) return value;
+    return rgbaToHex8(rgba[0], rgba[1], rgba[2], rgba[3]);
+}
+
+/**
  * Resolve a color argument: unwrap Series/functions to a raw value.
  */
 function resolveColor(color: any): any {
