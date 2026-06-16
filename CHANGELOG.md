@@ -1,5 +1,38 @@
 # Change Log
 
+## [0.9.23] - 2026-06-16 - Strategy Pyramiding Parity, Indicator Input varId & Sharpe/Sortino
+
+### Added
+
+- **`context.strategy.sharpe_ratio` / `sortino_ratio`**: Report-only risk-adjusted performance ratios computed once at end-of-run in `finalizeStrategyRun`, from the monthly equity curve accumulated across the bar loop. Matching TradingView's documented formula — simple monthly returns anchored at `initial_capital`, population SD / downside deviation, no annualization. Not Pine built-ins — available on `context.strategy` after the run only, not inside the run callback.
+- **`risk_free_rate` strategy declaration option** (default `2`, annual %): Converted to a monthly figure (`rate / 100 / 12`) as the denominator input for Sharpe / Sortino.
+- **`.input` keyed by `varId`**: The primary override key is now the variable each input is assigned to (`length = input.int(…)` → `"length"`). The input's **`title`** still resolves as a secondary alias. Recommended for scripts with empty or duplicated titles — `ind.input['slow']` targets the second `"Length"` input precisely while `ind.input['Length']` aliases the first.
+- **`varId` in `getInputsMeta()` / `IPineInput`**: Every scanned input carries its assigned variable name; `Object.keys(ind.input)` enumerates varIds.
+- **Transpiler `{ __varId }` injection**: `input.*(...)` calls in Pine source get a trailing varId sentinel so the runtime resolves overrides by varId before title.
+- **Color default normalization in input scanner**: `color`-typed inputs report `defval` as a canonical **8-digit RGBA hex `#RRGGBBAA`** (uppercase) regardless of source form — hex literals, named constants (`color.red` → `#F23645FF`), or statically evaluable `color.new()` / `color.rgb()` calls. Gives UI color pickers a single parseable format.
+- **Constant resolution in `scanInputs`**: When an input argument references a top-level constant or simple variable (`const DEF = 14; len = input.int(DEF, …)`), the scanner resolves `defval`, `group`, `inline`, `tooltip`, `options`, etc. to the declared value rather than the bare identifier.
+- **Tests**: `indicator_inputs.test.ts` (varId keying, color normalization, constant resolution), `close-snapshot.test.ts`, `equity-peak-basis.test.ts`, `margin-call.test.ts`, `risk-adjusted.test.ts`, `trailing-parity.test.ts`.
+- **Docs**: `docs/indicator.md` rewritten for varId-first `.input` API; `docs/strategy.md` gains Sharpe / Sortino section and `risk_free_rate` in the options table.
+
+### Fixed
+
+- **`strategy.close_all()` snapshot binding**: TV binds `close_all` / `close(id)` to the position at **call time**. When a reversal entry queued the same bar fills first on the next bar's open — implicitly closing the snapshotted trades — the pending `close_all` is now **cancelled** instead of catching the freshly-opened reversal trade at its entry price for **$0 PnL**. Implemented via `_intended_trade_ids` captured at queue time and re-checked in `processExitOrders`. (QA close_all xlsx, BTCUSDT 1D — trade #13's $5,512.65 divergence.)
+- **`strategy.position_avg_price` ghost position after partial liquidation**: Fractional qty residuals from margin-call partial liquidations left `position_avg_price` alive on a near-zero position. Epsilon-snap to flat (`|newSize| < 1e-9 → 0`) now sets `position_avg_price = NaN` and clears `position_entry_name`, preventing phantom TP/SL exits at the next entry's own price. (QA pyramiding xlsx, 2021-11-09 BTCUSDC.)
+- **Pyramiding tick-based exit brackets per trade**: When `strategy.exit()` matches multiple open trades, TP/SL levels in ticks are now computed from **each trade's own entry price**, not `strategy.position_avg_price`. Verified against QA pyramiding xlsx (BTCUSDC 1D).
+- **Equity peak basis for `max_drawdown`**: Peak latch now uses realized equity **plus open entry commissions** (excludes the commission deduction from the peak side). Trough basis keeps commission deducted. Fixes a degeneracy that hid the bug on constant-commission QA data but diverged on reversal bars with different entry commissions. (QA margin_calls xlsx — matches TV to the cent.)
+- **Margin-call partial liquidation (TV 4× rule)**: Intra-bar adverse movement now liquidates **4× the contracts needed to cover the deficit** (floored), not the entire position — remainder stays open.
+- **Reversal close-leg margin semantics**: When a reversal entry's **open** leg fails the pre-trade margin check, the **close** leg of the reversal still executes.
+- **Deferred close margin call (`applyPendingCloseMarginCall`)**: Phantom re-check scheduled on the previous bar fills at that bar's close, before entries — so a reversal queued at that close overshoots by exactly the deferred quantity, as TV does.
+- **Intra-bar margin checkpoint ordering**: Margin checks now run at the bar **open** (after entries fill) and at the **adverse extreme** — before exit fills on adverse-first bars, after them on favorable-first bars (`isAdverseFirstBar`). Exit processing moved to an explicit `'intrabar'` phase in `processExitOrders`.
+- **Trailing stop adverse-first segment model** (PR #213): On bars where the adverse extreme precedes the favorable move, an already-armed trail now checks segment 1 against the **old** peak's trigger, updates the peak, then checks segment 3 against the **new** trigger — keeping the order pending when both segments miss. Fill price remains the literal trigger level.
+
+### Changed
+
+- **`.input` override precedence**: Runtime resolves **varId before title**. A varId-keyed `.input['len'] = 3` write wins over a constructor-map `{ Length: 21 }` title override. Both keys coexist in `ctx.inputs`; the script picks up the varId one.
+- **Bar-loop strategy processing order**: Entries → deferred close margin call → open checkpoint → (adverse-first extreme checkpoint) → intrabar exits → (favorable-first extreme checkpoint) → `finalizeStrategyBar` peak latch → end-of-run `finalizeStrategyRun` for Sharpe / Sortino.
+
+---
+
 ## [0.9.22] - 2026-06-11 - Strategy Hotfix for Close-on-Flat and Margin calls
 
 This is a hotfix release for v0.9.21 which did not include the right fixes
