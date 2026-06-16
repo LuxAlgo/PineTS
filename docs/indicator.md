@@ -240,6 +240,17 @@ Each entry carries everything the scanner harvested — `type`, `defval`, **`var
 
 Reading the same key back via `.input['Line']` returns the identical normalized string. This gives UI color pickers a single, parseable format to bind to. (The normalization is presentational — it doesn't affect what the running script computes when the input isn't overridden.) A color default that can't be resolved statically — e.g. one built from a runtime variable or `color.from_gradient(...)` — is reported as `undefined`.
 
+**Constant arguments are resolved.** When an input argument references a top-level constant or simple variable rather than a literal, the scanner resolves it to the declared value — so `defval`, `group`, `inline`, `tooltip`, `options`, etc. report the value, not the variable name. This composes with the enum, color, and chained-const logic.
+
+```pine
+const string GRP = "Indicator Settings"
+const int    DEF = 14
+len = input.int(DEF, "Length", group = GRP)
+// → { type: 'int', varId: 'len', title: 'Length', defval: 14, group: 'Indicator Settings' }
+```
+
+References that can't be resolved to a static value (e.g. a computed series like `ta.sma(close, 5)`) fall back to the bare variable name.
+
 ---
 
 ## Declaration props — `.prop` and `getPropsMeta()`

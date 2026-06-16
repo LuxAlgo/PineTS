@@ -80,10 +80,11 @@ export function scanInputs(source: unknown): IPineInput[] {
     if (!parsed.success || !parsed.ast) return [];
 
     const enumTable = collectEnumTable(parsed.ast);
+    const constTable = collectConstTable(parsed.ast);
     const inputs: IPineInput[] = [];
     const seenVarIds = new Set<string>();
     walk(parsed.ast, (node) => {
-        const meta = decodeInputCall(node, enumTable);
+        const meta = decodeInputCall(node, enumTable, constTable);
         if (!meta) return;
         // De-duplicate by VARID (the variable name), not by title. Titles may
         // legitimately be empty or repeated across inputs; the variable name is
@@ -131,6 +132,34 @@ function collectEnumTable(ast: any): EnumTable {
     return table;
 }
 
+// Maps a local const/variable name → its initializer AST node. resolveValue
+// looks names up here and resolves the init recursively, so an input argument
+// written as `input.int(DEF_LENGTH, …)` reports the const's VALUE, not its name.
+type ConstTable = Map<string, any>;
+
+/**
+ * Collect top-level `name = <expr>` / `const T name = <expr>` declarations so
+ * input arguments referencing them resolve to the declared value. Stores the
+ * initializer AST node (not a pre-resolved value) so resolveValue composes the
+ * usual literal / enum / color / chained-const logic. First declaration wins.
+ *
+ * Enum objects and input-call declarations land here too, but are harmless:
+ * resolveValue returns `undefined` for an ObjectExpression or a non-color
+ * call, so such references just fall back to the bare name.
+ */
+function collectConstTable(ast: any): ConstTable {
+    const table: ConstTable = new Map();
+    walk(ast, (node) => {
+        if (node.type !== 'VariableDeclaration') return;
+        for (const decl of node.declarations ?? []) {
+            if (decl?.id?.type === 'Identifier' && decl.init && !table.has(decl.id.name)) {
+                table.set(decl.id.name, decl.init);
+            }
+        }
+    });
+    return table;
+}
+
 /**
  * Decode a single AST node into an `IPineInput`, or return `null` if the node
  * is not a top-level `input.<fn>(...)` call assigned to something.
@@ -142,7 +171,7 @@ function collectEnumTable(ast: any): EnumTable {
  *
  * Anything else returns null and is skipped.
  */
-function decodeInputCall(node: any, enumTable: EnumTable): IPineInput | null {
+function decodeInputCall(node: any, enumTable: EnumTable, constTable: ConstTable): IPineInput | null {
     if (node.type !== 'VariableDeclaration') return null;
     for (const decl of node.declarations ?? []) {
         const init = decl?.init;
@@ -186,7 +215,7 @@ function decodeInputCall(node: any, enumTable: EnumTable): IPineInput | null {
         // Now turn raw AST values into JS primitives, resolving enum + source refs.
         const resolved: any = {};
         for (const k of Object.keys(raw)) {
-            resolved[k] = resolveValue(raw[k], enumTable);
+            resolved[k] = resolveValue(raw[k], enumTable, constTable);
         }
 
         // Determine the type tag. For bare `input(...)`, infer from defval.
@@ -245,15 +274,24 @@ function decodePositionals(layout: readonly string[], positionals: any[], raw: R
  * Anything we can't resolve becomes `undefined` — better than recording
  * an opaque AST node that the JS caller can't inspect.
  */
-function resolveValue(node: any, enumTable: EnumTable): unknown {
+function resolveValue(node: any, enumTable: EnumTable, constTable?: ConstTable, visited: Set<string> = new Set()): unknown {
     if (node == null) return undefined;
     switch (node.type) {
         case 'Literal':
             return node.value;
         case 'Identifier':
             if (SOURCE_BUILTINS.has(node.name)) return node.name; // input.source(close, …)
-            // Could be a display constant if used without the `display.` prefix
-            // (rare but valid in Pine). Treat as the bare name.
+            // Resolve a local const/variable reference to its declared value,
+            // recursively (so chained consts, enum refs and color constructors
+            // compose). Cycle-guarded via `visited`.
+            if (constTable?.has(node.name) && !visited.has(node.name)) {
+                visited.add(node.name);
+                const resolved = resolveValue(constTable.get(node.name), enumTable, constTable, visited);
+                visited.delete(node.name);
+                if (resolved !== undefined) return resolved;
+            }
+            // Fallback: a display constant used without the `display.` prefix,
+            // or an unresolved reference — surface the bare name.
             return node.name;
         case 'MemberExpression': {
             // Enum field — tz.utc → "UTC"
@@ -285,7 +323,7 @@ function resolveValue(node: any, enumTable: EnumTable): unknown {
                 callee.property?.type === 'Identifier'
             ) {
                 const fn = callee.property.name;
-                const args = (node.arguments ?? []).map((a: any) => resolveValue(a, enumTable));
+                const args = (node.arguments ?? []).map((a: any) => resolveValue(a, enumTable, constTable, visited));
                 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
                 if (fn === 'rgb') {
                     const [r, g, b, transp] = args;
@@ -305,7 +343,7 @@ function resolveValue(node: any, enumTable: EnumTable): unknown {
             return undefined;
         }
         case 'ArrayExpression':
-            return (node.elements ?? []).map((el: any) => resolveValue(el, enumTable));
+            return (node.elements ?? []).map((el: any) => resolveValue(el, enumTable, constTable, visited));
         case 'UnaryExpression':
             // -3.14 ends up here for negative number literals.
             if (node.operator === '-' && node.argument?.type === 'Literal' && typeof node.argument.value === 'number') {

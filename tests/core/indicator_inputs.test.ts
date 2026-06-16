@@ -81,6 +81,66 @@ describe('PineTS Indicator Inputs', () => {
     });
 });
 
+describe('Const/variable resolution in input arguments', () => {
+    const metaFor = (code: string, title: string) =>
+        new Indicator(code).getInputsMeta().find((m) => m.title === title);
+
+    it('resolves const references in defval and string args', () => {
+        const code = `//@version=6
+indicator("C")
+const string GRP = "Indicator Settings"
+const string INL = "Moving Average"
+const string TT  = "Lookback period."
+const int    DEF = 14
+len = input.int(DEF, "Length", group = GRP, inline = INL, tooltip = TT)
+plot(close)`;
+        const m = metaFor(code, 'Length');
+        expect(m?.defval).toBe(14);
+        expect(m?.group).toBe('Indicator Settings');
+        expect(m?.inline).toBe('Moving Average');
+        expect(m?.tooltip).toBe('Lookback period.');
+    });
+
+    it('resolves a non-const (simple) literal assignment too', () => {
+        const code = `//@version=6
+indicator("C")
+MY_STRING = "STRING"
+s = input.string(MY_STRING, "Str")
+plot(close)`;
+        expect(metaFor(code, 'Str')?.defval).toBe('STRING');
+    });
+
+    it('resolves chained const references', () => {
+        const code = `//@version=6
+indicator("C")
+const int BASE = 5
+const int LEN  = BASE
+n = input.int(LEN, "N")
+plot(close)`;
+        expect(metaFor(code, 'N')?.defval).toBe(5);
+    });
+
+    it('resolves a const color (incl. color.new) to #RRGGBBAA', () => {
+        const code = `//@version=6
+indicator("C")
+const color LINE = color.new(#26a69a, 50)
+c = input.color(LINE, "Line")
+plot(close)`;
+        expect(metaFor(code, 'Line')?.defval).toBe('#26A69A80');
+    });
+
+    it('falls back to the bare name for unresolvable (computed) references', () => {
+        const code = `//@version=6
+indicator("C")
+ma = ta.sma(close, 5)
+n = input.int(20, "N", tooltip = ma)
+plot(close)`;
+        // ma is a computed series, not a literal const → tooltip stays the name.
+        expect(metaFor(code, 'N')?.tooltip).toBe('ma');
+        expect(metaFor(code, 'N')?.defval).toBe(20);
+    });
+});
+
 describe('Input varId resolution (.input keyed by variable name)', () => {
     const ind = (code: string) => new Indicator(code);
 
