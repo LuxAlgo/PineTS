@@ -115,7 +115,14 @@ export function entry(context: any) {
             oca_type: ocaType as 'cancel' | 'reduce' | 'none' | undefined,
             comment: commentValue,
             _isReversalEntry: isReversal,
-        };
+            // Ordered base size (before the reversal close-qty addition).
+            // executeOrder uses it to split a reversal OVERSHOOT into its
+            // own lot when a deferred close-margin-call shrank the
+            // position between queue and fill — TV books the base and the
+            // overshoot as two separate lots (xlsx 2021-10-02: 5 +
+            // 0.263108 longs at the same fill).
+            _base_qty: baseQty,
+        } as any;
 
         strategy.pending_orders.push(orderObj);
     };

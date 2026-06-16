@@ -23,12 +23,20 @@ export type KeyedType =
     | 'symbol' | 'timeframe' | 'text_area';
 
 export interface KeyedSchemaEntry {
-    key:      string;             // 'Length' for an input title, 'pyramiding' for a prop name
+    key:      string;             // canonical key — input varId, or prop name
     type:     KeyedType;
     defval:   unknown;
     options?: unknown[];
     minval?:  number;
     maxval?:  number;
+    /**
+     * Secondary keys that also resolve to this entry (e.g. an input's title
+     * aliasing its varId). The canonical `key` always takes priority; an alias
+     * is registered only if not already claimed by a canonical key or an
+     * earlier entry. Values/overrides are stored under the canonical key, so
+     * reading or writing via an alias hits the same slot.
+     */
+    aliases?: string[];
 }
 
 export interface BuildKeyedProxyResult {
@@ -57,14 +65,25 @@ export function buildKeyedProxy(
     const values: Record<string, unknown> = {};
     const entryByKey = new Map<string, KeyedSchemaEntry>();
 
+    // Canonical keys first (they win over any alias), values seeded under them.
     for (const e of entries) {
         entryByKey.set(e.key, e);
         values[e.key] = seedValues && e.key in seedValues ? seedValues[e.key] : e.defval;
+    }
+    // Then aliases — only where they don't shadow a canonical key or an
+    // already-registered alias (first entry wins the alias).
+    for (const e of entries) {
+        for (const alias of e.aliases ?? []) {
+            if (!alias || entryByKey.has(alias)) continue;
+            entryByKey.set(alias, e);
+        }
     }
 
     const proxy = new Proxy(values, {
         get(target, prop) {
             if (typeof prop === 'symbol') return (target as any)[prop];
+            const entry = entryByKey.get(prop as string);
+            if (entry) return target[entry.key]; // canonicalize alias → key
             return target[prop as string];
         },
         set(target, prop, value) {
@@ -74,8 +93,8 @@ export function buildKeyedProxy(
                 throw new Error(`[${label}] unknown ${keyNoun} "${prop}". Known: ${[...entryByKey.keys()].join(', ') || '(none)'}`);
             }
             validate(entry, value, label);
-            target[prop] = value;
-            onSet?.(prop);
+            target[entry.key] = value; // store under canonical key
+            onSet?.(entry.key);
             return true;
         },
         deleteProperty(_target, prop) {
@@ -84,9 +103,9 @@ export function buildKeyedProxy(
         defineProperty() {
             throw new Error(`[${label}] cannot define new properties — keys are fixed by the script's source.`);
         },
-        ownKeys(target) { return Reflect.ownKeys(target); },
+        ownKeys(target) { return Reflect.ownKeys(target); }, // canonical keys only
         getOwnPropertyDescriptor(target, prop) { return Reflect.getOwnPropertyDescriptor(target, prop); },
-        has(target, prop) { return typeof prop === 'string' && prop in target; },
+        has(_target, prop) { return typeof prop === 'string' && entryByKey.has(prop); },
     });
 
     return { proxy, values, entryByKey };

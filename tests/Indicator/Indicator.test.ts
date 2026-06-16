@@ -50,7 +50,7 @@ plot(close)
             expect(view['Timeframe']).toBe('1D');
             expect(view['Session']).toBe('0930-1600');
             expect(view['Type']).toBe('EMA');
-            expect(view['Color']).toBe('#ff0000');
+            expect(view['Color']).toBe('#FF0000FF'); // color defaults normalize to #RRGGBBAA
             expect(view['Message']).toBe('hi');
         });
 
@@ -118,9 +118,9 @@ plot(close)
             expect(() => { (ind as any).input = { Length: 5 }; }).toThrow(/cannot be replaced/i);
         });
 
-        it('rejects unknown titles', () => {
+        it('rejects unknown keys', () => {
             const ind = new Indicator(code);
-            expect(() => { (ind.input as any)['Nope'] = 1; }).toThrow(/unknown input title/i);
+            expect(() => { (ind.input as any)['Nope'] = 1; }).toThrow(/unknown input key/i);
         });
 
         it('rejects deletion', () => {
@@ -160,29 +160,42 @@ if not barstate.islast
     log.info('{0}', len)
 `;
             const ind = new Indicator(code);
+            // Write via the title alias; it canonicalizes to the varId.
             (ind.input as any)['Length'] = 33;
 
             const pine = new PineTS(makeData(5));
             await pine.run(ind);
 
+            // Overrides are forwarded under the canonical varId ('len').
             const inputs = ind.getRuntimeInputs();
-            expect(inputs['Length']).toBe(33);
+            expect(inputs['len']).toBe(33);
+            // Reading back through either key reflects the override.
+            expect((ind.input as any)['len']).toBe(33);
+            expect((ind.input as any)['Length']).toBe(33);
         });
 
-        it('explicit .input override takes priority over legacy constructor inputs', () => {
+        it('explicit .input override takes priority over legacy constructor inputs', async () => {
             const code = `
 //@version=6
 indicator("Demo")
 len = input.int(14, "Length")
-plot(close)
+plot(len, "out")
 `;
+            // Legacy constructor map is TITLE-keyed; resolveInput falls back to it.
             const ind = new Indicator(code, { 'Length': 7 });
-            // Before any .input write, legacy wins.
             expect(ind.getRuntimeInputs()['Length']).toBe(7);
 
-            // After explicit write, .input wins.
+            // Explicit .input write is VARID-keyed and resolveInput checks varId
+            // BEFORE title, so it wins at runtime even though the legacy title
+            // entry is still present in the map.
             (ind.input as any)['Length'] = 20;
-            expect(ind.getRuntimeInputs()['Length']).toBe(20);
+            const rt = ind.getRuntimeInputs();
+            expect(rt['len']).toBe(20);       // canonical override
+            expect(rt['Length']).toBe(7);     // legacy entry untouched
+
+            const ctx = await new PineTS(makeData(5)).run(ind);
+            const out = ctx.plots['out'].data;
+            expect(out[out.length - 1].value).toBe(20); // varId override wins at runtime
         });
     });
 
@@ -231,8 +244,8 @@ plot(close)
         });
     });
 
-    describe('duplicate-title collision', () => {
-        it('warns and keeps the first declaration', () => {
+    describe('duplicate titles', () => {
+        it('keeps both (distinguished by varId), no warning', () => {
             const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
             try {
                 const code = `
@@ -242,10 +255,17 @@ a = input.int(14, "Length")
 b = input.int(20, "Length")
 plot(close)
 `;
-                const meta = new Indicator(code).getInputsMeta();
-                expect(meta).toHaveLength(1);
-                expect(meta[0].defval).toBe(14);
-                expect(warn).toHaveBeenCalled();
+                const ind = new Indicator(code);
+                const meta = ind.getInputsMeta();
+                // Both surface now — distinct varIds, shared title.
+                expect(meta).toHaveLength(2);
+                expect(meta.map((m) => m.varId)).toEqual(['a', 'b']);
+                expect(meta.map((m) => m.defval)).toEqual([14, 20]);
+                expect(meta.every((m) => m.title === 'Length')).toBe(true);
+                // No duplicate-varId collision → no warning.
+                expect(warn).not.toHaveBeenCalled();
+                // Each is addressable by its varId; title aliases the first.
+                expect(Object.keys(ind.input)).toEqual(['a', 'b']);
             } finally {
                 warn.mockRestore();
             }
