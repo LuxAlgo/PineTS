@@ -1452,6 +1452,25 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
             });
         }
 
+        // Inject a trailing `{ __varId }` sentinel on input.* calls that
+        // initialize a variable (tagged by transformVariableDeclaration). The
+        // runtime (parseInputOptions) pops it so `.input[varId]` overrides can
+        // target this exact input — the primary override key, robust to empty
+        // or duplicated titles. Added AFTER arg-wrapping so it stays a literal.
+        if (namespace === 'input' && node._varId !== undefined) {
+            node.arguments.push({
+                type: 'ObjectExpression',
+                properties: [{
+                    type: 'Property',
+                    key: { type: 'Identifier', name: '__varId' },
+                    value: { type: 'Literal', value: node._varId },
+                    kind: 'init',
+                    computed: false,
+                    shorthand: false,
+                }],
+            });
+        }
+
         // Inject unique callsite ID for alert calls (per-callsite frequency gating)
         if (namespace === 'alert') {
             const callsiteId = scopeManager.getNextAlertCallId();

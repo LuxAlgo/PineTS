@@ -5,6 +5,7 @@ import { transpile } from '../transpiler/index';
 import { VIEWPORT_DEPENDENT_BUILTINS } from '../transpiler/settings';
 import { scanInputs } from './scanInputs';
 import { buildInputProxy } from './inputProxy';
+import { normalizeColorToRgbaHex } from '../namespaces/color/PineColor';
 import { scanDeclaration } from './scanDeclaration';
 import { propsForDeclaration } from './propsSchema';
 import { buildPropProxy } from './propProxy';
@@ -127,22 +128,23 @@ export class Indicator {
     }
 
     /**
-     * Title-keyed input map used by the runtime (read by
+     * Input override map used by the runtime (read by
      * `input.utils.resolveInput`). Composed at call time so live mutations
      * to `.input` between `pine.run()` calls are picked up automatically.
      *
-     * Precedence:
-     *   1. Legacy constructor `inputs`            (back-compat)
-     *   2. Explicit writes to `.input[...]`       (new API; takes priority)
+     * Keys are mixed by design and resolved in this precedence by the runtime:
+     *   1. Legacy constructor `inputs` map        — TITLE-keyed (back-compat)
+     *   2. Explicit `.input[...]` writes          — VARID-keyed (canonical);
+     *      resolveInput checks varId before title, so these take priority.
      *
-     * Defaults are NOT included — the runtime falls back to `defval` when a
-     * title is absent.
+     * Defaults are NOT included — the runtime falls back to `defval` when no
+     * override key matches.
      */
     public getRuntimeInputs(): Record<string, unknown> {
         const out: Record<string, unknown> = { ...(this.inputs ?? {}) };
         if (this._inputMeta) {
-            for (const title of this._explicitOverrides) {
-                out[title] = this._inputValues[title];
+            for (const key of this._explicitOverrides) {
+                out[key] = this._inputValues[key];
             }
         }
         return out;
@@ -196,6 +198,17 @@ export class Indicator {
     private _ensureInputsScanned(): void {
         if (this._inputMeta) return;
         this._inputMeta = scanInputs(this.source);
+        // Present color-input defaults in one canonical form: an 8-digit
+        // RGBA hex string (#RRGGBBAA). The scanner records them verbatim —
+        // `#ff0000`, a `color.red` path, `rgb(...)`, etc. — so normalize
+        // here, before the proxy seeds its default values, so getInputsMeta()
+        // and `.input` reads agree. Runtime is unaffected (getRuntimeInputs()
+        // only forwards explicit overrides, never these defaults).
+        for (const m of this._inputMeta) {
+            if (m.type === 'color' && m.defval !== undefined) {
+                m.defval = normalizeColorToRgbaHex(m.defval);
+            }
+        }
         const built = buildInputProxy(this._inputMeta, (title) => this._explicitOverrides.add(title));
         this._inputValues = built.values;
         this._inputProxy = built.proxy;

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { pineToJS } from '../transpiler/pineToJS/pineToJS.index';
+import { resolveColorToRgba, rgbaToHex8 } from '../namespaces/color/PineColor';
 import type { IPineInput, PineInputType, PineInputDisplay } from './types';
 
 /**
@@ -80,20 +81,22 @@ export function scanInputs(source: unknown): IPineInput[] {
 
     const enumTable = collectEnumTable(parsed.ast);
     const inputs: IPineInput[] = [];
-    const seenTitles = new Set<string>();
+    const seenVarIds = new Set<string>();
     walk(parsed.ast, (node) => {
         const meta = decodeInputCall(node, enumTable);
         if (!meta) return;
-        if (meta.title !== undefined) {
-            if (seenTitles.has(meta.title)) {
-                // Pine allows multiple inputs sharing the same title (last wins
-                // at runtime). For the JS-side overview, the first one wins
-                // and we surface a warning so the collision is visible.
+        // De-duplicate by VARID (the variable name), not by title. Titles may
+        // legitimately be empty or repeated across inputs; the variable name is
+        // the unique handle. Two inputs sharing a title now both appear (with
+        // distinct varIds). A genuinely duplicated varId (pathological — e.g.
+        // the same name reassigned to another input) keeps the first and warns.
+        if (meta.varId !== undefined) {
+            if (seenVarIds.has(meta.varId)) {
                 // eslint-disable-next-line no-console
-                console.warn(`[Indicator] duplicate input title "${meta.title}" — first declaration wins for .input access`);
+                console.warn(`[Indicator] duplicate input variable "${meta.varId}" — first declaration wins for .input access`);
                 return;
             }
-            seenTitles.add(meta.title);
+            seenVarIds.add(meta.varId);
         }
         inputs.push(meta);
     });
@@ -191,6 +194,9 @@ function decodeInputCall(node: any, enumTable: EnumTable): IPineInput | null {
         if (!type) continue;
 
         const meta: IPineInput = { type, defval: resolved.defval };
+        // The assigned variable name — the primary override key. Only simple
+        // `name = input.*()` assignments carry one (Identifier id).
+        if (decl.id?.type === 'Identifier' && typeof decl.id.name === 'string') meta.varId = decl.id.name;
         if (resolved.title !== undefined) meta.title = String(resolved.title);
         if (resolved.tooltip !== undefined) meta.tooltip = String(resolved.tooltip);
         if (resolved.group !== undefined) meta.group = String(resolved.group);
@@ -261,6 +267,40 @@ function resolveValue(node: any, enumTable: EnumTable): unknown {
                 // color.red, color.blue, etc. — return as the qualified path,
                 // the caller-facing string is good enough for overrides.
                 return key;
+            }
+            return undefined;
+        }
+        case 'CallExpression': {
+            // Statically evaluate the two color-constructor calls that show
+            // up as input.color() defaults: color.new(col, transp) and
+            // color.rgb(r, g, b, transp?). Both yield an 8-digit RGBA hex so
+            // the meta defval is populated (the generic CallExpression case
+            // is otherwise unresolvable → undefined). transp is Pine's 0..100
+            // transparency (0 = opaque), so alpha = 1 − transp/100.
+            const callee = node.callee;
+            if (
+                callee?.type === 'MemberExpression' &&
+                callee.object?.type === 'Identifier' &&
+                callee.object.name === 'color' &&
+                callee.property?.type === 'Identifier'
+            ) {
+                const fn = callee.property.name;
+                const args = (node.arguments ?? []).map((a: any) => resolveValue(a, enumTable));
+                const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+                if (fn === 'rgb') {
+                    const [r, g, b, transp] = args;
+                    if (typeof r === 'number' && typeof g === 'number' && typeof b === 'number') {
+                        const a = clamp01(1 - (typeof transp === 'number' ? transp : 0) / 100);
+                        return rgbaToHex8(r, g, b, a);
+                    }
+                } else if (fn === 'new') {
+                    const base = resolveColorToRgba(args[0]); // base color's [r,g,b,a]
+                    const transp = args[1];
+                    if (base && typeof transp === 'number') {
+                        // color.new REPLACES the base's transparency with transp.
+                        return rgbaToHex8(base[0], base[1], base[2], clamp01(1 - transp / 100));
+                    }
+                }
             }
             return undefined;
         }

@@ -250,6 +250,19 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
     if (varNode._skipTransformation) return;
 
     varNode.declarations.forEach((decl: any) => {
+        // Tag `name = input.*(…)` / `name = input(…)` with the assigned
+        // variable name, BEFORE any rename, so transformCallExpression can
+        // inject it as a `{ __varId }` sentinel on the input call. This is the
+        // runtime handle that lets `.input[varId]` overrides target a specific
+        // input even when titles are empty or duplicated.
+        if (decl.init?.type === 'CallExpression' && decl.id?.type === 'Identifier') {
+            const c = decl.init.callee;
+            const isInputCall =
+                (c?.type === 'MemberExpression' && c.object?.type === 'Identifier' && c.object.name === 'input') ||
+                (c?.type === 'Identifier' && c.name === 'input');
+            if (isInputCall) decl.init._varId = decl.id.name;
+        }
+
         // Rewrite NAMESPACES_LIKE entries (na, time, etc.) to .__value in variable initializers
         if (decl.init && decl.init.type === 'Identifier' && NAMESPACES_LIKE.includes(decl.init.name) && scopeManager.isContextBound(decl.init.name)) {
             const originalName = decl.init.name;

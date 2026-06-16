@@ -139,7 +139,7 @@ See **[Initialization and Usage → Host Environment (Visible Range)](initializa
 
 ### Reading and writing values
 
-`.input` is a title-keyed Proxy. Keys are the **`title`** argument of each `input.*(...)` call in the Pine source. The container itself is frozen — you can mutate values per key, but you can't replace the whole object.
+`.input` is a Proxy keyed primarily by **`varId`** — the variable each input is assigned to (`length = input.int(…)` → `"length"`). **Keying by varId is the recommended way to read and override inputs**: the variable name is always present and always unique, so it works even when titles are empty or duplicated. The input's **`title`** also resolves as a *secondary alias* for the common case. The container is frozen — you mutate values per key, but you can't replace the whole object.
 
 ```javascript
 const code = `
@@ -152,13 +152,20 @@ plot(close)
 `;
 const ind = new Indicator(code);
 
-ind.input['Length']; // → 14         (default from source)
-ind.input['Source']; // → "close"
-ind.input['MA Type']; // → "EMA"
+// Recommended: key by varId (the variable name).
+ind.input['length']; // → 14         (default from source)
+ind.input['src'];    // → "close"
+ind.input['maType']; // → "EMA"
 
-ind.input['Length'] = 50; // ✓ valid override
-ind.input['Length']; // → 50
+ind.input['length'] = 50; // ✓ valid override
+ind.input['length'];      // → 50
+
+// Title still works as a fallback alias (same underlying slot).
+ind.input['Length'];      // → 50
+ind.input['MA Type'] = 'SMA';
 ```
+
+> **varId takes priority.** Resolution tries the varId first, then falls back to title. If a varId and some other input's title happen to collide, the varId wins. `Object.keys(ind.input)` enumerates varIds; titles resolve but aren't listed.
 
 When you pass the Indicator to `pine.run()`, the override flows into the runtime:
 
@@ -170,10 +177,32 @@ len = input.int(14, "Length")
 plot(ta.sma(close, len))
 `;
 const ind = new Indicator(code);
-ind.input['Length'] = 5;
+ind.input['len'] = 5;              // by varId (recommended)
 const ctx = await pine.run(ind);
-// ctx.inputs.Length === 5
+// ctx.inputs.len === 5            (overrides are forwarded under the varId)
 // the SMA in the script was computed with length=5
+```
+
+### Empty or duplicated titles
+
+Because varId is the primary key, inputs that are awkward to address by title still have a stable handle:
+
+```javascript
+const code = `
+//@version=6
+indicator("Dup")
+fast = input.int(10, "Length")
+slow = input.int(20, "Length")   // same title as 'fast'
+hidden = input.int(5, "")        // empty title
+plot(close)
+`;
+const ind = new Indicator(code);
+
+ind.input['slow']   = 50;  // ✓ targets the second input precisely
+ind.input['hidden'] = 7;   // ✓ overridable despite the empty title
+ind.input['Length'];       // → 10  (a shared title aliases the FIRST input, 'fast')
+
+ind.getInputsMeta().length; // → 3  (duplicates and empty-titled inputs all appear)
 ```
 
 ### Validation
@@ -181,10 +210,10 @@ const ctx = await pine.run(ind);
 Writes are validated against the input's schema. Failures throw immediately with a tailored message:
 
 ```javascript
-ind.input['Unknown'] = 1; // ✗ Error: [Indicator.input] unknown input title "Unknown". Known: Length, Source, MA Type
-ind.input['Length'] = 1; // ✗ Error: [Indicator.input] "Length" value 1 is below minval 2
-ind.input['MA Type'] = 'HMA'; // ✗ Error: [Indicator.input] "MA Type" value "HMA" is not one of: "EMA", "SMA", "WMA"
-ind.input = { foo: 1 }; // ✗ Error: [Indicator.input] .input cannot be replaced — mutate individual keys (…)
+ind.input['nope'] = 1;      // ✗ Error: [Indicator.input] unknown input key "nope". Known: length, src, maType, Length, Source, MA Type
+ind.input['length'] = 1;    // ✗ Error: [Indicator.input] "length" value 1 is below minval 2
+ind.input['maType'] = 'HMA';// ✗ Error: [Indicator.input] "maType" value "HMA" is not one of: "EMA", "SMA", "WMA"
+ind.input = { foo: 1 };     // ✗ Error: [Indicator.input] .input cannot be replaced — mutate individual keys (…)
 ```
 
 ### Schema introspection — `getInputsMeta()`
@@ -194,19 +223,28 @@ Returns the parsed schema as an array of `IPineInput`. Useful for UI builders th
 ```javascript
 const meta = ind.getInputsMeta();
 // [
-//   { type: 'int',    title: 'Length',  defval: 14,    minval: 2, maxval: 200 },
-//   { type: 'source', title: 'Source',  defval: 'close' },
-//   { type: 'string', title: 'MA Type', defval: 'EMA', options: ['EMA','SMA','WMA'] },
+//   { type: 'int',    varId: 'length', title: 'Length',  defval: 14, minval: 2, maxval: 200 },
+//   { type: 'source', varId: 'src',    title: 'Source',  defval: 'close' },
+//   { type: 'string', varId: 'maType', title: 'MA Type', defval: 'EMA', options: ['EMA','SMA','WMA'] },
+//   { type: 'color',  varId: 'lineCol',title: 'Line',    defval: '#F23645FF' },
 // ]
 ```
 
-Each entry carries everything the scanner harvested — `type`, `defval`, `title`, `tooltip`, `group`, `inline`, `display`, `options`, `minval`, `maxval`, `step`, `active`, `confirm`. The exported types `IPineInput`, `PineInputType`, and `PineInputDisplay` describe the shape.
+Each entry carries everything the scanner harvested — `type`, `defval`, **`varId`**, `title`, `tooltip`, `group`, `inline`, `display`, `options`, `minval`, `maxval`, `step`, `active`, `confirm`. `varId` (the assigned variable name) is present for every scanned input and is the primary `.input` override key; `title` may be empty or repeated across inputs, but `varId` is unique. The exported types `IPineInput`, `PineInputType`, and `PineInputDisplay` describe the shape.
+
+**Color defaults are normalized.** `color`-typed inputs report `defval` as a canonical **8-digit RGBA hex string `#RRGGBBAA`** (uppercase; `FF` = fully opaque), regardless of how the source wrote it:
+
+- `#RRGGBB` / `#RRGGBBAA` hex literals
+- a named constant — `color.red` → `#F23645FF`
+- the constructor calls `color.new(col, transp)` and `color.rgb(r, g, b, transp?)`, statically evaluated (Pine's `transp` is 0–100 transparency, so `color.new(#26a69a, 50)` → `#26A69A80`, `color.rgb(6, 162, 47)` → `#06A22FFF`)
+
+Reading the same key back via `.input['Line']` returns the identical normalized string. This gives UI color pickers a single, parseable format to bind to. (The normalization is presentational — it doesn't affect what the running script computes when the input isn't overridden.) A color default that can't be resolved statically — e.g. one built from a runtime variable or `color.from_gradient(...)` — is reported as `undefined`.
 
 ---
 
 ## Declaration props — `.prop` and `getPropsMeta()`
 
-The script's `indicator(...)` or `strategy(...)` declaration takes its own set of arguments — `overlay`, `precision`, `initial_capital`, `pyramiding`, `currency`, etc. The `.prop` view exposes those for read/override, mirroring the `.input` API but keyed by **arg name** instead of title.
+The script's `indicator(...)` or `strategy(...)` declaration takes its own set of arguments — `overlay`, `precision`, `initial_capital`, `pyramiding`, `currency`, etc. The `.prop` view exposes those for read/override, mirroring the `.input` API but keyed by **arg name** (each arg name is unique, so there's no varId/title distinction here).
 
 ### Reading source-code defaults
 
@@ -338,7 +376,7 @@ This matters for hosts that run the same script across many datasets (e.g. a cha
 
 ## JS-function source
 
-When the source is a JS callback, the AST scan for inputs returns `[]` (Pine inputs are written in Pine syntax; the JS form expresses them differently). The `.input` view is empty and writes throw "unknown title". The legacy `inputs` constructor map still works for runtime overrides via the JS path.
+When the source is a JS callback, the AST scan for inputs returns `[]` (Pine inputs are written in Pine syntax; the JS form expresses them differently). The `.input` view is empty and writes throw "unknown input key". The legacy `inputs` constructor map still works for runtime overrides via the JS path.
 
 ```javascript
 const fn = ($) => {
@@ -360,7 +398,7 @@ Declaration detection works for the JS path because the function body is parsed 
 
 ## Backward compatibility — constructor `inputs` map
 
-The legacy second constructor argument (a title-keyed override map) is still honored. It's most useful when you build an Indicator and want to ship a default override set up front, without touching `.input` later.
+The legacy second constructor argument (a **title-keyed** override map) is still honored. It's most useful when you build an Indicator and want to ship a default override set up front, without touching `.input` later.
 
 ```javascript
 const code = `
@@ -369,21 +407,22 @@ indicator("BC")
 len = input.int(14, "Length")
 plot(ta.sma(close, len))
 `;
-const ind = new Indicator(code, { Length: 21 });
+const ind = new Indicator(code, { Length: 21 });   // keyed by title
 const ctx = await pine.run(ind);
-// ctx.inputs.Length === 21
+// ctx.inputs.Length === 21    (the runtime resolves it via the title fallback)
 ```
 
-Precedence rule when both are set: `.input` overrides win over the constructor map. The constructor map is the baseline; `.input` writes layer on top.
+Precedence when both are set: a `.input` write (varId-keyed) wins over the constructor map (title-keyed), because the runtime resolves **varId before title**. Both entries coexist in `ctx.inputs` — they're distinct keys — and the varId one is chosen:
 
 ```javascript
 const ind = new Indicator(code, { Length: 21 });
-ind.input['Length'] = 3;
+ind.input['len'] = 3;            // varId override
 const ctx = await pine.run(ind);
-// ctx.inputs.Length === 3   ← .input wins
+// ctx.inputs === { Length: 21, len: 3 }
+// resolveInput checks varId 'len' first → the script computes ta.sma(close, 3)
 ```
 
-New code should prefer the `.input` API. The constructor `inputs` argument stays for callers that have existing code relying on it.
+New code should prefer the **varId**-keyed `.input` API. The constructor `inputs` argument (and title-keyed `.input` access) stay for callers that have existing code relying on them.
 
 ---
 

@@ -241,13 +241,17 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     title: 'Fast Length',
     defval: 12
   }, undefined, 'p0');
-  const temp_1 = input.int(p0);
+  const temp_1 = input.int(p0, {
+    __varId: "_int"
+  });
   $.let.glb1__int = $.init($.let.glb1__int, temp_1);
   const p1 = input.param({
     title: 'String Input',
     defval: "Hello"
   }, undefined, 'p1');
-  const temp_2 = input.string(p1);
+  const temp_2 = input.string(p1, {
+    __varId: "_string"
+  });
   $.let.glb1__string = $.init($.let.glb1__string, temp_2);
   const p2 = input.param(10.0, undefined, 'p2');
   const p3 = input.param("float input", undefined, 'p3');
@@ -256,19 +260,25 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     maxval: 100.0,
     step: 0.1
   }, undefined, 'p4');
-  const temp_3 = input.float(p2, p3, p4);
+  const temp_3 = input.float(p2, p3, p4, {
+    __varId: "_float"
+  });
   $.let.glb1__float = $.init($.let.glb1__float, temp_3);
   const p5 = input.param({
     title: 'Close Source',
     defval: close
   }, undefined, 'p5');
-  const temp_4 = input.any(p5);
+  const temp_4 = input.any(p5, {
+    __varId: "src_close"
+  });
   $.let.glb1_src_close = $.init($.let.glb1_src_close, temp_4);
   const p6 = input.param({
     title: 'Open Source',
     defval: open
   }, undefined, 'p6');
-  const temp_5 = input.any(p6);
+  const temp_5 = input.any(p6, {
+    __varId: "src_open"
+  });
   $.let.glb1_src_open = $.init($.let.glb1_src_open, temp_5);
 }`;
 

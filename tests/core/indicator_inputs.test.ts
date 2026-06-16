@@ -80,3 +80,198 @@ describe('PineTS Indicator Inputs', () => {
         }
     });
 });
+
+describe('Input varId resolution (.input keyed by variable name)', () => {
+    const ind = (code: string) => new Indicator(code);
+
+    it('exposes varId on every scanned input', () => {
+        const metas = ind(`//@version=6
+indicator("T")
+length = input.int(14, "Length")
+src    = input.source(close, "Source")
+plot(close)`).getInputsMeta();
+        expect(metas.map((m) => m.varId)).toEqual(['length', 'src']);
+    });
+
+    it('keys .input by varId (primary) and forwards overrides under the varId', () => {
+        const i = ind(`//@version=6
+indicator("T")
+length = input.int(14, "Length")
+plot(close)`);
+        i.input['length'] = 99;
+        expect(i.input['length']).toBe(99);
+        expect(i.getRuntimeInputs()['length']).toBe(99); // canonical varId key
+    });
+
+    it('still resolves by title as a fallback alias (back-compat)', () => {
+        const i = ind(`//@version=6
+indicator("T")
+length = input.int(14, "Length")
+plot(close)`);
+        i.input['Length'] = 77;             // title alias
+        expect(i.input['Length']).toBe(77);
+        expect(i.input['length']).toBe(77); // same slot as the varId
+        expect(i.getRuntimeInputs()['length']).toBe(77); // stored under the canonical varId
+    });
+
+    it('Object.keys lists varIds; title alias is accessible but not enumerated', () => {
+        const i = ind(`//@version=6
+indicator("T")
+length = input.int(14, "Length")
+plot(close)`);
+        expect(Object.keys(i.input)).toEqual(['length']);
+        expect('Length' in i.input).toBe(true);  // alias resolves
+        expect('length' in i.input).toBe(true);
+    });
+
+    it('isolates duplicate titles by varId', () => {
+        const i = ind(`//@version=6
+indicator("T")
+a = input.int(10, "Length")
+b = input.int(20, "Length")
+plot(close)`);
+        i.input['b'] = 555;
+        const rt = i.getRuntimeInputs();
+        expect(rt['b']).toBe(555);
+        expect(rt['a']).toBeUndefined();    // 'a' untouched
+        // title aliases the FIRST input only
+        i.input['Length'] = 1;
+        expect(i.input['a']).toBe(1);
+    });
+
+    it('makes empty/untitled inputs overridable by varId', () => {
+        const i = ind(`//@version=6
+indicator("T")
+x = input.int(5, "")
+y = input.int(6)
+plot(close)`);
+        i.input['x'] = 42;
+        i.input['y'] = 43;
+        const rt = i.getRuntimeInputs();
+        expect(rt['x']).toBe(42);
+        expect(rt['y']).toBe(43);
+        expect(Object.keys(i.input)).toEqual(['x', 'y']);
+    });
+
+    it('rejects an unknown key (neither varId nor title)', () => {
+        const i = ind(`//@version=6
+indicator("T")
+length = input.int(14, "Length")
+plot(close)`);
+        expect(() => { (i.input as any)['nope'] = 1; }).toThrow(/unknown input key/i);
+    });
+});
+
+import { normalizeColorToRgbaHex } from '../../src/namespaces/color/PineColor';
+
+describe('Color input defval normalization (getInputsMeta)', () => {
+    const metaFor = (code: string, title: string) =>
+        new Indicator(code).getInputsMeta().find((m) => m.title === title);
+
+    it('normalizes a #RRGGBB hex literal to #RRGGBBAA (opaque alpha)', () => {
+        const m = metaFor(`//@version=6
+indicator("C")
+c = input.color(#ff0000, "Line")
+plot(close)`, 'Line');
+        expect(m?.type).toBe('color');
+        expect(m?.defval).toBe('#FF0000FF');
+    });
+
+    it('resolves a named color constant to its RGBA hex', () => {
+        const m = metaFor(`//@version=6
+indicator("C")
+c = input.color(color.red, "Line")
+plot(close)`, 'Line');
+        expect(m?.defval).toBe('#F23645FF'); // color.red = #F23645
+    });
+
+    it('preserves an explicit alpha byte and uppercases the result', () => {
+        const m = metaFor(`//@version=6
+indicator("C")
+c = input.color(#00bcd480, "Line")
+plot(close)`, 'Line');
+        expect(m?.defval).toBe('#00BCD480');
+    });
+
+    it('normalizes the bare input() auto-detected color form', () => {
+        const m = metaFor(`//@version=6
+indicator("C")
+c = input(#336699, "Line")
+plot(close)`, 'Line');
+        expect(m?.type).toBe('color');
+        expect(m?.defval).toBe('#336699FF');
+    });
+
+    it('keeps .input reads consistent with the normalized meta', () => {
+        const ind = new Indicator(`//@version=6
+indicator("C")
+c = input.color(color.blue, "Line")
+plot(close)`);
+        ind.getInputsMeta(); // trigger scan
+        expect(ind.input['Line']).toBe('#2196F3FF'); // color.blue = #2196F3
+    });
+
+    it('statically evaluates color.new(col, transp) defaults', () => {
+        // transp 50 → alpha 0.5 → 0x80
+        const m = metaFor(`//@version=6
+indicator("C")
+c = input.color(color.new(#26a69a, 50), "Line")
+plot(close)`, 'Line');
+        expect(m?.defval).toBe('#26A69A80');
+    });
+
+    it('evaluates color.new with a named-constant base', () => {
+        const m = metaFor(`//@version=6
+indicator("C")
+c = input.color(color.new(color.teal, 0), "Line")
+plot(close)`, 'Line');
+        expect(m?.defval).toBe('#089981FF'); // color.teal = #089981, transp 0 = opaque
+    });
+
+    it('statically evaluates color.rgb(r,g,b) and color.rgb(r,g,b,transp)', () => {
+        const opaque = metaFor(`//@version=6
+indicator("C")
+c = input.color(color.rgb(6, 162, 47), "Line")
+plot(close)`, 'Line');
+        expect(opaque?.defval).toBe('#06A22FFF');
+
+        const withTransp = metaFor(`//@version=6
+indicator("C")
+c = input.color(color.rgb(207, 23, 23, 50), "Line")
+plot(close)`, 'Line');
+        expect(withTransp?.defval).toBe('#CF171780');
+    });
+
+    it('leaves non-color input defaults untouched', () => {
+        const ind = new Indicator(`//@version=6
+indicator("C")
+len = input.int(14, "Length")
+src = input.string("EMA", "Type")
+plot(close)`);
+        const metas = ind.getInputsMeta();
+        expect(metas.find((m) => m.title === 'Length')?.defval).toBe(14);
+        expect(metas.find((m) => m.title === 'Type')?.defval).toBe('EMA');
+    });
+});
+
+describe('normalizeColorToRgbaHex (unit)', () => {
+    it('expands 6-digit hex to opaque RGBA', () => {
+        expect(normalizeColorToRgbaHex('#ff0000')).toBe('#FF0000FF');
+    });
+    it('passes 8-digit hex through (uppercased)', () => {
+        expect(normalizeColorToRgbaHex('#aabbccdd')).toBe('#AABBCCDD');
+    });
+    it('resolves named constants with and without the namespace', () => {
+        expect(normalizeColorToRgbaHex('color.green')).toBe('#4CAF50FF');
+        expect(normalizeColorToRgbaHex('teal')).toBe('#089981FF');
+    });
+    it('converts rgb()/rgba() to RGBA hex (a in 0..1 → alpha byte)', () => {
+        expect(normalizeColorToRgbaHex('rgb(255, 0, 0)')).toBe('#FF0000FF');
+        expect(normalizeColorToRgbaHex('rgba(255, 0, 0, 0.5)')).toBe('#FF000080');
+    });
+    it('returns non-color / unparseable values unchanged', () => {
+        expect(normalizeColorToRgbaHex('not a color')).toBe('not a color');
+        expect(normalizeColorToRgbaHex(42)).toBe(42);
+        expect(normalizeColorToRgbaHex(undefined)).toBe(undefined);
+    });
+});
