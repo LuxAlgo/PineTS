@@ -1290,8 +1290,15 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                 // For context-bound identifiers, add [0] array access if not already an array access
                 node.argument = ASTFactory.createArrayAccess(node.argument, 0);
             } else if (node.argument.type === 'MemberExpression') {
+                // `func(...)[N]` as a direct return value: route through
+                // transformMemberExpression so the call-result history ref is
+                // lowered to `$.get($.param(...), N)` (a scalar). Otherwise the
+                // return path leaves a raw subscript on a scalar (→ NaN).
+                if (node.argument.computed && node.argument.object.type === 'CallExpression') {
+                    transformMemberExpression(node.argument, '', scopeManager);
+                }
                 // For member expressions, check if the object is context-bound
-                if (
+                else if (
                     node.argument.object.type === 'Identifier' &&
                     scopeManager.isContextBound(node.argument.object.name) &&
                     !scopeManager.isRootParam(node.argument.object.name)
