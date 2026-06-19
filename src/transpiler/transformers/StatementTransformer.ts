@@ -39,6 +39,9 @@ export function createLoopGuardNodes(guardName: string): { counterDecl: any; gua
         test: {
             type: 'BinaryExpression',
             operator: '>',
+            // Generated loop-counter guard: operands are never `na`, so keep it
+            // a native `>` (transformEqualityChecks skips `_skipCompare` nodes).
+            _skipCompare: true,
             left: {
                 type: 'UpdateExpression',
                 operator: '++',

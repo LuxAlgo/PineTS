@@ -150,6 +150,16 @@ export const ASTFactory = {
         return this.createCallExpression(neqMethod, [left, right]);
     },
 
+    // Create $.pine.math.<method>(left, right) — na-aware comparison helpers
+    // (__eq/__neq/__lt/__le/__gt/__ge). Routes relational/equality operators
+    // through the runtime so `na` propagates and the 1e-10 tolerance applies.
+    createMathCompareCall(method: string, left: any, right: any): any {
+        const pineObj = this.createMemberExpression(this.createContextIdentifier(), this.createIdentifier('pine'), false);
+        const mathObj = this.createMemberExpression(pineObj, this.createIdentifier('math'), false);
+        const fn = this.createMemberExpression(mathObj, this.createIdentifier(method), false);
+        return this.createCallExpression(fn, [left, right]);
+    },
+
     createWrapperFunction(body: any): any {
         return {
             type: 'FunctionDeclaration',
