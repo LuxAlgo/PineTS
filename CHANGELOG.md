@@ -1,5 +1,22 @@
 # Change Log
 
+## [0.9.24] - 2026-06-22 - `na` Comparison Parity, History on Call Results & Drawing Coordinate Scalars
+
+### Added
+
+- **`math.__lt` / `__le` / `__gt` / `__ge`**: New na-aware relational helpers with TradingView's **1e-10** absolute tie tolerance. Transpiler rewrites `<`, `<=`, `>`, `>=` to these helpers (alongside existing **`__eq` / `__neq`** rewrites).
+- **Tests**: **`tests/namespaces/math/na-comparison.test.ts`** — full Pine-source path for `na` propagation through `==`, `!=`, and relational ops plus float-equality tolerance probes; **`tests/transpiler/history-on-call.test.ts`** — characterization tests for **`EXPR[N]`** on call results (`ta.sma(close, 3)[1]`, reassignment, function return, lookback depth) with regression guards for identifier/var history and tuple destructure.
+
+### Fixed
+
+- **`na` propagation through comparisons**: Any comparison with an **`na`** operand now evaluates to **`na`** ( **`NaN`** ), not boolean **`false`** — matching TradingView (`na(x==x)`, `na(x<1)`, etc.). Observable via **`na()`** / **`nz()`** / arithmetic; branch/ternary outcomes unchanged because **`na`** is falsy. Lockstep with pine-vm-opti fix (commit dcf0531).
+- **Float equality tolerance**: **`__eq` / `__neq`** epsilon tightened **1e-9 → 1e-10** absolute (TV: `1.0+5e-11 == 1.0` → true, `1.0+5e-10 == 1.0` → false).
+- **History operator on call results (`func(...)[N]`)**: Pine **`[]`** on a function-call result is always the history reference, never a tuple index. Transpiler now lowers **`ta.sma(close, 3)[1]`** (and any **`CallExpression[N]`**) to **`$.get($.param(call, …), N)`** — accumulates the per-bar scalar into a series and reads N bars back. Previously the subscript was dropped or left as raw JS indexing on a scalar → **`NaN`**. Return-statement path in **`StatementTransformer`** routes call-result history refs through the same transform.
+- **`chart.point.*` coordinate resolution**: **`ChartHelper`** resolves Series/function args to creation-bar scalars in **`new`**, **`from_index`**, **`from_time`**, and **`now`** — e.g. **`chart.point.from_index(bar_index, close)`** captures the bar's value instead of storing a live series handle.
+- **`line.new()` / `label.new()` coordinate resolution**: **`x1`/`y1`/`x2`/`y2`** and **`x`/`y`** now pass through **`_resolve()`** at creation time, matching **`box.new()`** — bare-series args like **`line.new(x1 = bar_index, …)`** no longer read offset 0 on every bar.
+
+---
+
 ## [0.9.23] - 2026-06-16 - Strategy Pyramiding Parity, Indicator Input varId & Sharpe/Sortino
 
 ### Added

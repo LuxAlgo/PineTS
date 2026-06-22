@@ -353,7 +353,7 @@ PineTS aims for complete Pine Script® API compatibility. Current status:
 | ✅     | Multi-timeframe with `request.security()` |
 | ✅     | Strategy namespace                        |
 | ✅     | Market data Providers                     |
-| 🚧     | Additional data providers                 |
+| ✅     | Additional data providers                 |
 | 🎯     | Pine Script® v6 full compatibility        |
 
 ---
