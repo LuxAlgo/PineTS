@@ -160,28 +160,62 @@ export function propagateAsyncAwait(ast: any): void {
     }
 }
 
+// Pine comparison operators → na-aware runtime helpers. Includes the
+// relational operators (<, <=, >, >=), which native JS would evaluate against
+// NaN as `false`; routing them through the helpers makes `na` propagate and
+// applies TradingView's 1e-10 tolerance.
+const COMPARISON_METHODS: Record<string, string> = {
+    '==': '__eq',
+    '===': '__eq',
+    '!=': '__neq',
+    '!==': '__neq',
+    '<': '__lt',
+    '<=': '__le',
+    '>': '__gt',
+    '>=': '__ge',
+};
+
+const RELATIONAL_OPERATORS = new Set(['<', '<=', '>', '>=']);
+
+// Loop-control comparisons whose operands are integer counters (never `na`):
+// the `test`/`update` of for/while/do-while headers, and the generated loop
+// guard (flagged `_skipCompare`). Routing these through the helpers would add
+// a per-iteration call for no benefit, so relational ops here stay native.
+// `==`/`!=` still transform everywhere (unchanged from prior behavior).
+function isLoopControlRelational(node: any, ancestors: any[]): boolean {
+    if (node._skipCompare) return true;
+    // ancestors = [root, ..., parent, node]. A for-header lowers `for i = 0 to n`
+    // to `(0 <= n ? i <= n : i >= n)` / `(0 <= n ? i++ : i--)`, so the counter
+    // comparisons live nested inside ForStatement.test / .update — walk the whole
+    // chain and skip anything inside an enclosing loop header's test/update.
+    for (let k = 0; k < ancestors.length - 1; k++) {
+        const anc = ancestors[k];
+        const child = ancestors[k + 1];
+        if (anc.type === 'ForStatement' && (child === anc.test || child === anc.update)) return true;
+        if ((anc.type === 'WhileStatement' || anc.type === 'DoWhileStatement') && child === anc.test) return true;
+    }
+    return false;
+}
+
 export function transformEqualityChecks(ast: any): void {
     const baseVisitor = { ...walk.base, LineComment: () => {} };
-    walk.simple(
+    walk.ancestor(
         ast,
         {
-            BinaryExpression(node: any) {
-                // Transform equality/inequality operators to na-aware versions.
-                // In Pine Script, any comparison with na returns false:
-                //   na == na → false,  na != na → false
-                //   1 == na  → false,  1 != na  → false
-                // JavaScript's != treats NaN specially (NaN != x is always true),
-                // so we route through math.__eq / math.__neq which check for NaN
-                // and return false when either operand is na.
-                if (node.operator === '==' || node.operator === '===') {
-                    const callExpr = ASTFactory.createMathEqCall(node.left, node.right);
-                    callExpr._transformed = true;
-                    Object.assign(node, callExpr);
-                } else if (node.operator === '!=' || node.operator === '!==') {
-                    const callExpr = ASTFactory.createMathNeqCall(node.left, node.right);
-                    callExpr._transformed = true;
-                    Object.assign(node, callExpr);
-                }
+            BinaryExpression(node: any, _state: any, ancestors: any[]) {
+                // Transform equality/inequality AND relational operators to
+                // na-aware versions. In Pine Script, any comparison with `na`
+                // evaluates to `na` (not false) — for ==, !=, and <, <=, >, >=
+                // (verified against TradingView). Native JS would give false
+                // (NaN < 1, NaN == NaN, ...), so we route through the runtime
+                // helpers which propagate `na` and apply the 1e-10 tolerance.
+                // `na` is falsy, so branch/ternary outcomes are unchanged.
+                const method = COMPARISON_METHODS[node.operator];
+                if (!method) return;
+                if (RELATIONAL_OPERATORS.has(node.operator) && isLoopControlRelational(node, ancestors)) return;
+                const callExpr = ASTFactory.createMathCompareCall(method, node.left, node.right);
+                callExpr._transformed = true;
+                Object.assign(node, callExpr);
             },
         },
         baseVisitor
