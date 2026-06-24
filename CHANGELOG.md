@@ -1,5 +1,17 @@
 # Change Log
 
+## [0.9.25] - 2026-06-24 - Hotfix for strategy.entry reversal
+
+### Fixed
+
+- **Pyramiding reversal over-sizing (simultaneous opposite entries)**: Multiple opposite-direction **`strategy.entry`** calls queued on the **same bar** while a pyramided position is open each read the stale pre-fill **`strategy.position_size`** and were each classified as a reversal — so each added the full close-qty (**`|position| + baseQty`**) and bypassed the pyramiding cap. A short **-3** reversed by three long entries reached **+9** in PineTS vs **+3** in TradingView (only the first entry reverses — close 3 + open 1 — and the rest are plain pyramiding adds of qty 1). **`methods/entry.ts`** now **projects the position forward** over same-bar already-queued **market** entry orders (**`Δpos = direction × qty`**, exact even for reversal orders since their qty bakes in the close-qty) before classifying reversal/qty, so only the first opposite entry reverses. The queue-time qty freeze that the **`_base_qty`** margin-call overshoot-split depends on is preserved (a single reversal order is unchanged). (QA "Sim Pyramiding" xlsx, BTCUSDT 1D — **`strategy.position_size`** matches TV across full history; the bug only surfaces when an opposite signal fires while a pyramided position is still open.)
+
+### Added
+
+- **Tests**: **`tests/namespaces/strategy/pyramiding-reversal.test.ts`** — queue-level order sizing (first opposite entry reverses with qty **`|pos|+base`**, subsequent entries are adds of **`base`**), a full fill cycle to position **+3**, and regression guards for three-entries-from-flat and single-reversal (margin-call overshoot intact).
+
+---
+
 ## [0.9.24] - 2026-06-22 - `na` Comparison Parity, History on Call Results & Drawing Coordinate Scalars
 
 ### Added
