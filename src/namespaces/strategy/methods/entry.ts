@@ -62,7 +62,24 @@ export function entry(context: any) {
 
         const dir = parseDirection(directionVal);
         const strategy = context.strategy;
-        const currentSize = strategy.position_size;
+
+        // Project the position forward over MARKET entry orders already queued
+        // on THIS bar: they fill (in queue order) before this one, so the
+        // reversal/add classification AND the reversal close-qty must be
+        // computed against the position they will leave behind — not the stale
+        // pre-fill position_size. Without this, several opposite-direction
+        // entries queued on the same bar EACH re-add the full close-qty and
+        // EACH bypass the pyramiding cap (QA "Sim Pyramiding": short -3 + three
+        // long entries → PineTS +9 vs TradingView +3, where only the first
+        // entry reverses and the rest are plain pyramiding adds). The net
+        // position change per queued order is `direction × qty`, which is exact
+        // even for a reversal order since its qty already bakes in the close-qty.
+        let currentSize = strategy.position_size;
+        for (const o of strategy.pending_orders) {
+            if (o.bar === context.idx && o.category === 'entry' && o.type === 'market') {
+                currentSize += parseDirection(o.direction) * o.qty;
+            }
+        }
 
         // Pyramiding cap: only enforced when ADDING to a same-direction position
         // (not when opening from flat or reversing). Pine's semantic.
