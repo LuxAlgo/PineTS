@@ -1,5 +1,15 @@
 # Change Log
 
+## [Unreleased]
+
+### Added
+
+- **`context.strategy.cagr`**: Report-only Compound Annual Growth Rate (%) of strategy equity over the backtest window, computed once at end-of-run in `finalizeStrategyRun`. Not a Pine built-in — available on `context.strategy` after the run only.
+- **Tests**: `tests/namespaces/strategy/cagr.test.ts` — unit coverage of the CAGR formula and `NaN` edge cases, plus an integration run of the MACD strategy on BINANCE:BTCUSDT 1D (3235 bars) asserting a strategy CAGR of ≈ 2.12%.
+- **Docs**: `docs/strategy.md` gains a Compound Annual Growth Rate (CAGR) section.
+
+---
+
 ## [0.9.25] - 2026-06-24 - Hotfix for strategy.entry reversal
 
 ### Fixed

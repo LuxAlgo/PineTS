@@ -1965,6 +1965,11 @@ export function finalizeStrategyRun(context: any): void {
     const strategy: StrategyState = context?.strategy;
     if (!strategy) return;
 
+    // CAGR is independent of the monthly equity curve (it only needs the
+    // first/last bar times and the realized P&L), so compute it before the
+    // Sharpe / Sortino short-circuit below.
+    strategy.cagr = computeCagr(context);
+
     const series = strategy._monthly_equity ?? [];
     const equities = [strategy.initial_capital, ...series];
     const returns: number[] = [];
@@ -1994,6 +1999,45 @@ export function finalizeStrategyRun(context: any): void {
 
     strategy.sharpe_ratio = sd > 0 ? excess / sd : 0;
     strategy.sortino_ratio = dd > 0 ? excess / dd : 0;
+}
+
+/**
+ * Compound Annual Growth Rate (%) of strategy equity over the full backtest
+ * window. Mirrors the LuxAlgo `cagr()` Pine helper applied to the strategy
+ * leg: entry = (firstBarTime, initial_capital), exit = (lastBarTime,
+ * initial_capital + netprofit).
+*
+*   daysBetween = (lastBarTime − firstBarTime) / MS_IN_ONE_DAY
+*   years       = daysBetween / 365
+*   CAGR%       = 100 × ((exit / entry) ^ (1 / years) − 1)
+*
+* The window spans the FIRST to the LAST loaded bar's open time (Pine's
+* `var int firstTime = time` latched on bar 0, and `last_bar_time`). With a
+* span under one day, or non-finite capital figures, the result is NaN —
+* matching the Pine helper's `na` branch.
+*/
+const MS_IN_ONE_DAY = 24 * 60 * 60 * 1000;
+
+function computeCagr(context: any): number {
+    const strategy: StrategyState = context?.strategy;
+    if (!strategy) return NaN;
+
+    const candles = context?.marketData;
+    if (!Array.isArray(candles) || candles.length === 0) return NaN;
+
+    const firstTime = candles[0]?.openTime;
+    const lastTime = candles[candles.length - 1]?.openTime;
+    if (!Number.isFinite(firstTime) || !Number.isFinite(lastTime)) return NaN;
+
+    const entryPrice = strategy.initial_capital ?? 0;
+    const exitPrice = entryPrice + (strategy.netprofit ?? 0);
+    const daysBetween = (lastTime - firstTime) / MS_IN_ONE_DAY;
+    if (daysBetween < 1 || !Number.isFinite(entryPrice) || !Number.isFinite(exitPrice) || entryPrice === 0) {
+        return NaN;
+    }
+
+    const years = daysBetween / 365;
+    return 100 * (Math.pow(exitPrice / entryPrice, 1 / years) - 1);
 }
 
 /**
@@ -2085,6 +2129,7 @@ export function initializeStrategy(context: any, config: any): void {
         // monthly-equity accumulator.
         sharpe_ratio: 0,
         sortino_ratio: 0,
+        cagr: NaN,
         _monthly_equity: [],
         _last_month_key: -1,
 
