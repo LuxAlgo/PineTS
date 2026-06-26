@@ -210,6 +210,13 @@ export interface StrategyState {
     grossprofit: number;
     grossloss: number;
     openprofit: number; // unrealized P&L of open positions
+    // Compound Annual Growth Rate (%) of strategy equity over the backtest
+    // window. Computed ONCE at end-of-run by finalizeStrategyRun from
+    // initial_capital, netprofit, and the first/last bar open times. Like
+    // Sharpe / Sortino this is a report-only field (NOT a Pine built-in),
+    // read via ctx.strategy.cagr after the run. NaN when the window is
+    // shorter than one day or the figures are non-finite.
+    cagr: number;
 
     // Peaks — used by strategy.max_drawdown / strategy.max_runup
     max_drawdown: number;
