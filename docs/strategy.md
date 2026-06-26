@@ -27,6 +27,7 @@ Every example below is exercised by a verification harness at `PineTS/.scratchpa
 - [Trade collections](#trade-collections)
 - [Read-only getters](#read-only-getters)
 - [Risk-adjusted performance (Sharpe / Sortino)](#risk-adjusted-performance-sharpe--sortino)
+- [Compound annual growth rate (CAGR)](#compound-annual-growth-rate-cagr)
 - [Constants](#constants)
 - [Risk management](#risk-management)
 - [Conversion helpers](#conversion-helpers)
@@ -282,6 +283,9 @@ interface StrategyState {
     sharpe_ratio:     number;
     sortino_ratio:    number;
 
+    // Capital efficiency
+    cagr:             number;           // annualized return %, report-only (NaN if window < 1 day)
+
     // Trade-stat counters
     wintrades:                number;
     losstrades:               number;
@@ -476,6 +480,35 @@ strategy('RFR example', { initial_capital: 100000, risk_free_rate: 4 });  // 4% 
 ### Accuracy
 
 The formula matches TradingView's exactly, but the ratios are **derivatives of the bar-by-bar equity curve** — so their fidelity rides on the engine's mark-to-market accuracy, not on the formula. Across the TV oracle datasets they land within roughly the second decimal (most within ~0.01; strategies with heavy margin-call activity diverge a little more, since their intra-month equity path is where PineTS and TV differ most even when final net profit matches). They are intended as a faithful summary metric, **not** a cent-exact reproduction like `netprofit`.
+
+---
+
+## Capital Efficiency - Compound annual growth rate (CAGR)
+
+PineTS also reports the **annualized return (%)** of strategy equity over the whole backtest window:
+
+```javascript
+const ctx = await pine.run(/* ... */);
+const s = ctx.strategy;
+
+console.log('Strategy CAGR:', s.cagr, '%');
+```
+
+Like Sharpe / Sortino, `strategy.cagr` is a **report-only field, not a Pine built-in** — it lives on `context.strategy` after the run, computed once in `finalizeStrategyRun`.
+
+### How it's calculated
+
+Mirrors TradingView calculations:
+
+```
+daysBetween = (lastBarTime − firstBarTime) / 86_400_000   // ms per day
+years       = daysBetween / 365
+CAGR%       = 100 × ( (initial_capital + netprofit) / initial_capital ) ^ ((1 / years) − 1 )
+```
+
+`firstBarTime` / `lastBarTime` are the open times of the first and last loaded bars (matching Pine's `var int firstTime = time` and `last_bar_time`).
+
+Edge cases: the result is `NaN` when the window is shorter than one day, when there is no loaded data, or when the capital figures are non-finite.
 
 ---
 

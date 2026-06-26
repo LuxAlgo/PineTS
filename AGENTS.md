@@ -16,6 +16,17 @@
 -   **Stateful Calculations**: Supports incremental technical analysis calculations
 -   **Series-Based Architecture**: Everything is a time-series with forward storage and reverse access
 
+## Golden Rule: Verify, Don't Assume
+
+PineTS exists to reproduce TradingView's Pine Script behavior **exactly**. A change that *looks* correct but was never executed is not a contribution — it's a guess. Treat every statement about behavior as unverified until you have run it and seen the output.
+
+-   **Never assume a function is correct** because the code reads well. Run it and inspect the actual values.
+-   **Never assume your change fixed the bug.** Reproduce the bug first, then prove the fix against that reproduction.
+-   **Never assume your change broke nothing.** Run the full suite (`npm test -- --run`) before calling the work done.
+-   **The reference for "correct" is TradingView.** When unsure what a Pine function *should* return, run the same script on TradingView and compare. Expected values in tests must come from an independent source of truth — never from "whatever PineTS currently prints."
+
+Everything below — especially **[Testing Discipline](#testing-discipline)** and **[How to Fix a Reported Bug](#how-to-fix-a-reported-bug)** — exists to support this rule.
+
 ## Architecture Documentation
 
 Before making changes, familiarize yourself with the architecture:
@@ -92,6 +103,8 @@ No version marker. Uses JavaScript syntax with the `$` context object.
 };
 ```
 
+> **Runtime accessor note**: `$.data` (OHLCV series) and `$.pine` (namespaces: `ta`, `math`, `plot`, …) are the **current** API. Some older test fixtures use the bare `context.ta` / `context.core` accessors — those are **deprecated** (they emit a runtime deprecation warning). Always write new code against `$.data` / `$.pine`.
+
 #### JavaScript Function (Direct)
 
 Functions are converted to string and treated as PineTS syntax.
@@ -138,7 +151,7 @@ The transpiler operates in two stages depending on input type:
 │     - Pre-process context-bound variables                               │
 │  4. Analysis pass (ScopeManager):                                       │
 │     - Build scope hierarchy                                             │
-│     - Rename variables: x → glb1_x, if2_y, fn3_z                        │
+│     - Rename variables: x → glb1_x, if2_y, fn1_z (per-type counters)    │
 │     - Generate TA call IDs: _ta0, _ta1, _ta2...                         │
 │     - Track variable kinds (const/let/var)                              │
 │  5. Transformation pass:                                                │
@@ -146,8 +159,9 @@ The transpiler operates in two stages depending on input type:
 │     - x = val        →  $.set($.let.glb1_x, val)                        │
 │     - close[1]       →  $.get(close, 1)                                 │
 │     - ta.ema(c, 9)   →  ta.ema(p0, p1, '_ta0')  (with param wrapping)   │
-│  6. Post-process: a == b → $.pine.math.__eq(a, b)                       │
-│  7. Generate code (astring)                                             │
+│  6. Post-process comparisons:  ==/!=/</<=/>/>= →                        │
+│        $.pine.math.__eq/__neq/__lt/__le/__gt/__ge                       │
+│  7. Generate code (astring)                                            │
 │  8. Create executable function                                          │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -195,6 +209,8 @@ const currentValue = Series.from(source).get(0); // Current bar
 const previousValue = Series.from(source).get(1); // Previous bar
 ```
 
+`get(index)` reverse-indexes internally (`data[data.length - 1 - (offset + index)]`) and returns `NaN` when the index is out of bounds.
+
 ### 5. Incremental Calculation
 
 TA functions MUST use incremental calculation with state, not recalculation:
@@ -203,6 +219,7 @@ TA functions MUST use incremental calculation with state, not recalculation:
 // ✅ CORRECT: O(1) per bar
 export function sma(context: any) {
     return (source: any, period: any, _callId?: string) => {
+        if (!context.taState) context.taState = {};
         const stateKey = _callId || `sma_${period}`;
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = { window: [], sum: 0 };
@@ -212,6 +229,8 @@ export function sma(context: any) {
     };
 }
 ```
+
+> Real implementations (see `src/namespaces/ta/methods/ema.ts`, `sma.ts`) keep a richer committed/tentative state object keyed by `context.idx` so live (still-forming) bars don't corrupt history. The minimal `{ window, sum }` above is illustrative of the *mechanism*, not a literal template.
 
 ### 6. Unique Call IDs
 
@@ -230,7 +249,7 @@ The transpiler automatically generates unique call IDs (`_ta0`, `_ta1`, etc.) fo
 
 ### 7. Tuple Returns
 
-Functions returning tuples MUST use double bracket convention:
+Functions returning tuples MUST use the double-bracket convention (the runtime's `init`/`initVar` detect `Array.isArray(src[0])` to unwrap the outer bracket):
 
 ```typescript
 // ✅ CORRECT
@@ -242,135 +261,180 @@ return [value1, value2, value3];
 
 ### 8. Precision
 
-Always use `context.precision()` for numeric outputs:
+Always use `context.precision()` for numeric outputs. It rounds to 10 decimals by default (`Math.round(value * 1e10) / 1e10`), matching TradingView's float behavior:
 
 ```typescript
-return context.precision(result); // Rounds to 10 decimals
+return context.precision(result);
 ```
 
 ## Development Workflow
 
-### Running Tests
+### Build System
 
-**IMPORTANT**: PineTS uses **vitest**, not Jest. Use the correct flags:
+The browser/Node test runner uses TypeScript source directly (via `vite-tsconfig-paths`), so unit tests do **not** require a build. You only need a build when testing through a bundled artifact (e.g. browser dist):
 
 ```bash
-# ✅ CORRECT: Run tests once (non-interactive)
+npm run build:dev:all     # All dev bundles (CJS, ES, Browser, Browser-ES)
+npm run build:prod:all    # All prod bundles (minified)
+```
+
+`build:*:all` first runs every `generate:*-index` script to regenerate namespace barrel files. If you edit a built bundle's behavior, **rebuild before testing the bundle** — a stale bundle is a classic source of "my fix isn't working."
+
+### Running Tests
+
+**IMPORTANT**: PineTS uses **Vitest**, not Jest. Use the correct flags:
+
+```bash
+# ✅ CORRECT: Run all tests once (non-interactive)
 npm test -- --run
 
-# ✅ CORRECT: Run specific test file
+# ✅ CORRECT: Run tests whose path matches a substring
 npm test -- ta-stress.test.ts --run
 
 # ✅ CORRECT: Run with coverage
 npm run test:coverage
 
-# ❌ WRONG: These are Jest flags, not vitest
+# ✅ Watch mode (during local development)
+npm test
+
+# ❌ WRONG: These are Jest flags, not Vitest
 npm test -- --no-watch        # Won't work
 npm test -- --watchAll=false  # Won't work
 ```
 
+(`npm test` runs `vitest --reporter verbose`, which defaults to watch mode in a TTY; `--run` forces a single non-interactive run.)
+
 ### Adding New TA Functions
 
 1. Create implementation in `src/namespaces/ta/methods/yourfunction.ts`
-2. Follow the factory pattern with `_callId` parameter
+2. Follow the factory pattern with `_callId` parameter (`export function yourfunction(context) { return (source, period, _callId?) => { ... } }`)
 3. Use incremental calculation with `context.taState`
-4. Return `NaN` during initialization period
+4. Return `NaN` during the initialization period (insufficient data)
 5. Use `context.precision()` for output
-6. Add tests in `tests/compatibility/namespace/ta/methods/indicators/yourfunction.pine.ts`
-7. **Regenerate barrel file**: `npm run generate:ta-index`
+6. **Write a real test** for it — see **[Testing Discipline](#testing-discipline)**. A `.pine.ts` fixture alone is *not* a test.
+7. **Regenerate the barrel file**: `npm run generate:ta-index` (other namespaces: `generate:math-index`, `generate:array-index`, `generate:input-index`, `generate:request-index`, `generate:map-index`, `generate:matrix-index`)
 
 ### File Structure
+
+The tree below shows the important locations. It is intentionally **not** exhaustive — `namespaces/` has one folder (or file) per Pine namespace, and `methods/` folders hold one file per built-in.
 
 ```
 src/
 ├── index.ts                  # Main entry point
-├── PineTS.class.ts           # Main execution engine
-├── Context.class.ts          # Runtime context ($.data, $.pine, $.let, etc.)
-├── Series.ts                 # Series wrapper for reverse indexing
-├── Indicator.ts              # Indicator wrapper class (runtime inputs)
+├── PineTS.class.ts           # Main execution engine (run loop, pagination)
+├── Context.class.ts          # Runtime context ($.data, $.pine, $.let/$.var, taState, idx, precision)
+├── Series.ts                 # Series wrapper (forward storage, reverse indexing)
+├── Indicator.ts              # Indicator wrapper (runtime input/prop overrides)
+├── Indicator/                # Indicator internals (input/prop proxies, declaration scanning)
 ├── transpiler/
-│   ├── index.ts              # Main transpiler entry point
-│   ├── settings.ts           # Configuration and known namespaces
-│   ├── pineToJS/             # Pine Script → PineTS converter
-│   │   ├── pineToJS.index.ts # Pipeline entry point
-│   │   ├── lexer.ts          # Tokenization with indentation tracking
-│   │   ├── parser.ts         # AST generation from tokens
-│   │   ├── codegen.ts        # JavaScript code generation
-│   │   ├── ast.ts            # AST node type definitions
-│   │   └── tokens.ts         # Token type definitions
-│   ├── analysis/             # Code analysis
-│   │   ├── ScopeManager.ts   # Variable scoping and renaming
-│   │   └── AnalysisPass.ts   # Pre-processing analysis
-│   ├── transformers/         # AST transformers
-│   │   ├── MainTransformer.ts
-│   │   ├── ExpressionTransformer.ts
-│   │   ├── StatementTransformer.ts
-│   │   ├── WrapperTransformer.ts
-│   │   ├── InjectionTransformer.ts
-│   │   └── NormalizationTransformer.ts
-│   └── utils/
-│       └── ASTFactory.ts     # AST node factory utilities
-├── namespaces/               # Pine Script built-in functions
-│   ├── Core.ts               # Core functions (na, nz, color, indicator)
-│   ├── Barstate.ts           # Bar state information
-│   ├── Log.ts                # Logging functions
-│   ├── Str.ts                # String utilities
-│   ├── Timeframe.ts          # Timeframe utilities
-│   ├── Types.ts              # Type utilities and enums
-│   ├── Plots.ts              # Plotting functions
-│   ├── utils.ts              # Argument parsing utilities
-│   ├── ta/                   # Technical Analysis
-│   │   ├── ta.index.ts       # Auto-generated barrel file
-│   │   └── methods/          # Individual TA functions
-│   ├── math/                 # Mathematical operations
-│   │   ├── math.index.ts     # Auto-generated barrel file
-│   │   └── methods/
-│   ├── array/                # Array operations
-│   │   ├── array.index.ts    # Auto-generated barrel file
-│   │   ├── PineArrayObject.ts
-│   │   └── methods/
-│   ├── map/                  # Map collection type
-│   │   ├── map.index.ts      # Auto-generated barrel file
-│   │   └── PineMapObject.ts
-│   ├── matrix/               # Matrix collection type
-│   │   ├── matrix.index.ts   # Auto-generated barrel file
-│   │   └── PineMatrixObject.ts
-│   ├── input/                # User inputs
-│   │   ├── input.index.ts    # Auto-generated barrel file
-│   │   └── methods/
-│   └── request/              # Multi-timeframe (request.security)
-│       ├── request.index.ts  # Auto-generated barrel file
-│       └── methods/
+│   ├── index.ts              # transpile() entry point
+│   ├── settings.ts           # NAMESPACES_LIKE, FACTORY_METHODS, known namespaces
+│   ├── pineToJS/             # Pine Script → PineTS (lexer, parser, codegen, ast, tokens)
+│   ├── analysis/             # ScopeManager.ts, AnalysisPass.ts
+│   ├── transformers/         # Main / Expression / Statement / Wrapper / Injection / Normalization
+│   ├── slicing/              # buildLtfSlices.ts (lower-timeframe request.security slicing)
+│   └── utils/                # ASTFactory.ts
+├── namespaces/               # Pine Script built-ins — one folder/file per namespace
+│   ├── Core.ts Barstate.ts Log.ts Str.ts Time.ts Timeframe.ts Ticker.ts Types.ts Plots.ts utils.ts
+│   ├── ta/ math/ array/ map/ matrix/ input/ request/   # each: <ns>.index.ts (barrel) + methods/
+│   └── line/ label/ box/ table/ linefill/ polyline/ color/ chart/ strategy/   # drawing / color / strategy
 ├── marketData/               # Data providers
-│   ├── IProvider.ts          # Provider interface
-│   ├── Provider.class.ts     # Base provider and registry
-│   ├── Binance/              # Binance exchange provider
-│   └── Mock/                 # Mock provider for testing
-└── types/
-    └── PineTypes.ts          # Type definitions (plot options, etc.)
+│   ├── IProvider.ts BaseProvider.ts Provider.class.ts aggregation.ts
+│   └── Binance/ Mock/ Alpaca/ FMP/
+├── core/  errors/  utils/  types/   # shared runtime helpers, error types, utilities, type defs
+└── ...                        # (chart/, editor/, pinescript/, ui/, assets/ — peripheral)
 
-tests/
-├── compatibility/            # Main test suite
-│   ├── namespace/            # Namespace compatibility tests
-│   │   ├── ta/methods/indicators/    # TA function tests
-│   │   ├── math/methods/indicators/  # Math function tests
-│   │   └── array/methods/indicators/ # Array function tests
-│   └── misc/indicators/      # Miscellaneous indicator tests
-├── namespaces/               # Additional namespace tests
-│   └── ta/                   # TA-specific tests
-├── indicators/               # Real-world indicator tests
-├── transpiler/               # Transpiler tests
-├── core/                     # Core functionality tests
-└── _local/                   # Local development tests (gitignored)
+tests/                         # Vitest collects ONLY tests/**/*.test.ts (see vitest.config.ts)
+├── core/           # Core runtime tests
+├── namespaces/     # Per-namespace tests (ta, math, array, map, matrix, plot, fill, line, label, box, strategy, ...)
+├── indicators/     # Real-world indicator accuracy tests
+├── transpiler/     # Transpiler transformation tests
+├── compatibility/  # Generated regression suite (.pine.ts fixtures + .expect.json + namespace runners)
+├── marketData/     # Provider / aggregation tests
+├── Indicator/      # Indicator-wrapper tests
+├── automated/      # Generated test suites
+└── _local/         # Local dev tests (gitignored, excluded from coverage)
 
 docs/
-├── architecture/             # Architecture documentation
-│   ├── transpiler/
-│   ├── runtime/
-│   ├── namespaces/
-│   └── specifics/            # Special topics (tuples, request.security)
-└── api-coverage/             # Pine Script API coverage tracking
+├── architecture/   # transpiler/, runtime/, namespaces/, specifics/, best-practices.md, debugging.md
+├── api-coverage/   # Pine Script API coverage tracking
+└── *.md            # Published guide pages (getting-started, strategy, alerts, pagination, ...)
 ```
+
+## Testing Discipline
+
+PineTS reproduces a third-party platform, so **every behavior must be backed by an executable test**. This is not bureaucracy — it is the only way to know your code does what you think it does (see [Golden Rule](#golden-rule-verify-dont-assume)).
+
+### How the suite is organized
+
+-   **`*.test.ts`** — the **only** files Vitest runs (`vitest.config.ts` → `include: ['tests/**/*.test.ts']`). A test uses `describe`/`it`, builds a `PineTS` instance, runs a script, and asserts on the result.
+-   **`*.pine.ts`** — **not tests.** They are bare Pine-body fixtures (`(context) => { ...; return {...}; }`) with no `describe`/`it`/`import`. Vitest never executes them directly; they feed the compatibility regression generator. **Adding a `.pine.ts` file alone adds nothing runnable.**
+-   **`tests/compatibility/`** — a regression-snapshot suite. Each namespace has a runner (e.g. `tests/compatibility/namespace/ta/methods/ta.test.ts`) with one `it()` per indicator that compares live output against a committed `data/<name>.expect.json` snapshot.
+
+> The compatibility snapshots capture *current* PineTS output, so they guard against **regressions** but do not by themselves prove **correctness**. For new functionality and bug fixes, the expected values must come from an independent reference (TradingView, a hand calculation), not from a snapshot of possibly-wrong output.
+
+### Writing a test
+
+Standard pattern — deterministic `Mock` provider, assert on `plots`/`result`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { PineTS } from '../../../src/PineTS.class';        // or: import { PineTS } from 'index';
+import { Provider } from '@pinets/marketData/Provider.class';
+
+describe('ta.myfunc', () => {
+    it('matches the expected series', async () => {
+        const pineTS = new PineTS(
+            Provider.Mock,
+            'BTCUSDC',
+            '60',
+            null,
+            new Date('2024-01-01').getTime(),
+            new Date('2024-01-10').getTime()
+        );
+
+        const { plots, result } = await pineTS.run(($) => {
+            const { close } = $.data;
+            const { ta, plotchar } = $.pine;
+
+            const r = ta.myfunc(close, 14);
+            plotchar(r, 'r');
+            return { r };
+        });
+
+        const data = plots['r'].data;
+        expect(data.length).toBeGreaterThan(0);
+
+        // EXPECTED comes from an INDEPENDENT reference (e.g. TradingView), never from PineTS itself.
+        expect(data[data.length - 1].value).toBeCloseTo(EXPECTED, 8);
+    });
+});
+```
+
+-   Use `$.data` / `$.pine` (the bare `context.ta` / `context.core` style is deprecated).
+-   `Provider.Mock` generates deterministic synthetic OHLCV (no network, no fixtures) — ideal for reproducible tests.
+-   Expected values come from a **source of truth**, not from copying current output, or the test only certifies "the bug is still here."
+
+### Every test should cover
+
+1.  **Basic functionality**: correct calculation with known inputs
+2.  **Edge cases**: NaN inputs, single bar, empty/insufficient data
+3.  **Multiple calls**: same parameters and different parameters
+4.  **Initialization period**: returns `NaN` until there is enough data
+5.  **State isolation**: independent state across different call sites / `_callId`s
+
+## How to Fix a Reported Bug
+
+When a user reports an issue, **do not jump straight to a fix.** Follow this loop — it proves the bug is real, proves the fix works, and makes sure the bug can never silently return:
+
+1.  **Reproduce it first.** Write the smallest Pine/PineTS script that triggers the reported behavior and run it. If you cannot reproduce it, you do not yet understand it — get more detail (script, symbol, timeframe, expected vs actual) before touching code. Confirm the output is actually wrong by comparing against TradingView or the user's expected value.
+2.  **Capture it as a *failing* test.** Turn the reproduction into a `*.test.ts` that asserts the **correct** (expected) value, and run it — it must **fail** for the right reason. A bug you can't express as a failing test is a bug you can't prove you fixed. The expected value comes from the reference, not from current PineTS output.
+3.  **Implement the fix** in `src/`.
+4.  **Re-run that test — it must now pass.** If it doesn't, the fix is wrong or incomplete; iterate. (If you're testing a built bundle, rebuild first.)
+5.  **Run the full suite** (`npm test -- --run`) to confirm you didn't break anything else.
+6.  **Keep the test.** It is now a permanent **regression guard**: any future change that reintroduces the bug fails immediately. Commit it alongside the fix.
+
+This **reproduce → fail → fix → pass → guard** loop is the expected workflow for every bug fix, no exceptions.
 
 ## Common Mistakes to Avoid
 
@@ -450,10 +514,10 @@ pineTS.run(`
 
 ## Transpiler Rules
 
-### DO NOT modify transpiler unless absolutely necessary
+### DO NOT modify the transpiler unless absolutely necessary
 
 -   The transpiler is complex and fragile
--   Always run full test suite after transpiler changes
+-   Always run the full test suite after transpiler changes
 -   Understand scope management before making changes
 -   Consult [Transpiler Documentation](docs/architecture/transpiler/index.md)
 
@@ -466,66 +530,30 @@ pineTS.run(`
 | `var x = value`        | `$.var.glb1_x = $.initVar($.var.glb1_x, val)`  | Persistent state       |
 | `x = value`            | `$.set($.let.glb1_x, value)`                   | Update current value   |
 | `x[1]`                 | `$.get(x, 1)`                                  | Pine Script indexing   |
-| `ta.func(arg)`         | `ta.func(p0, '_ta0')` with param wrapping      | State isolation        |
+| `ta.func(a, b)`        | `ta.func(p0, p1, '_ta0')` (each arg wrapped)   | State isolation        |
 | `a == b`               | `$.pine.math.__eq(a, b)`                       | NaN-safe comparison    |
 | `const [a, b] = f()`   | Split into individual inits                    | Tuple destructuring    |
 
+Notes:
+
+-   The storage namespace (`$.let` / `$.var` / `$.const`) matches the variable's actual declaration kind; `$.let` above is illustrative.
+-   **TA calls wrap each argument** into its own hoisted temp via `ta.param(...)`, then append the generated call-id literal: `ta.ema(close, 9)` → `const p0 = ta.param(close, …); const p1 = ta.param(9, …); ta.ema(p0, p1, '_ta0')`.
+-   **All comparisons** are rewritten to na-aware helpers with a `1e-10` tolerance: `==`/`===` → `__eq`, `!=`/`!==` → `__neq`, `<` → `__lt`, `<=` → `__le`, `>` → `__gt`, `>=` → `__ge`. Relational operators inside `for`/`while` loop headers and the generated loop guard are left as native JS (their operands are integer counters that are never `na`).
+
 ### Scope Prefixes
 
-Variables are renamed based on their scope:
+Variables are renamed by scope. **Each scope *type* keeps its own counter**, so the number is how many scopes of that type have been opened so far during transpilation (order-dependent) — it is **not** a single global `1, 2, 3, 4` sequence across types. The counter for a type can also advance by more than one when nested block scopes are pushed.
 
-| Scope Type   | Prefix Example | Description                    |
-| ------------ | -------------- | ------------------------------ |
-| Global       | `glb1_`        | Top-level scope                |
-| If block     | `if2_`         | Inside if statements           |
-| Function     | `fn3_`         | Inside function declarations   |
-| For loop     | `for4_`        | Inside for loops               |
+| Scope Type    | Prefix pattern | Example (first of its type) |
+| ------------- | -------------- | --------------------------- |
+| Global        | `glb<n>_`      | `glb1_x`                    |
+| Function      | `fn<n>_`       | `fn1_x`                     |
+| For loop      | `for<n>_`      | `for1_i`                    |
+| While loop    | `whl<n>_`      | `whl1_n`                    |
+| If block      | `if<n>_`       | `if2_y` (count may skip)    |
+| Else block    | `els<n>_`      | `els1_z`                    |
 
-## Testing Requirements
-
-### Unit Tests Must Include
-
-1. **Basic functionality**: Correct calculation with known inputs
-2. **Edge cases**: NaN inputs, single bar, empty data
-3. **Multiple calls**: Same parameters, different call IDs
-4. **Initialization period**: Return NaN when insufficient data
-5. **State isolation**: Independent state for different calls
-
-### Test Pattern
-
-```typescript
-import { describe, it, expect } from 'vitest';
-import { PineTS } from '../../../src/PineTS.class';
-import { Provider } from '@pinets/marketData/Provider.class';
-
-describe('My TA Function', () => {
-    it('should calculate correctly', async () => {
-        const pineTS = new PineTS(
-            Provider.Mock,
-            'BTCUSDC',
-            '60',
-            null,
-            new Date('2024-01-01').getTime(),
-            new Date('2024-01-10').getTime()
-        );
-
-        const { plots } = await pineTS.run(($) => {
-            const { close } = $.data;
-            const { ta, plotchar } = $.pine;
-
-            const result = ta.myFunc(close, 14);
-            plotchar(result, 'result');
-        });
-
-        expect(plots['result']).toBeDefined();
-        expect(plots['result'].data.length).toBeGreaterThan(0);
-
-        // Check specific values
-        const lastValue = plots['result'].data[plots['result'].data.length - 1].value;
-        expect(lastValue).toBeCloseTo(expectedValue, 8);
-    });
-});
-```
+To see the real prefixes a script produces, transpile it and inspect the generated code (see [View Transpiled Code](#view-transpiled-code)).
 
 ## Code Style
 
@@ -540,7 +568,7 @@ describe('My TA Function', () => {
 -   TA functions: lowercase (e.g., `ema`, `sma`, `rsi`)
 -   Classes: PascalCase (e.g., `Series`, `Context`)
 -   Private methods: prefix with `_` (e.g., `_initializeState`)
--   State keys: use `_callId` or descriptive string
+-   State keys: use `_callId` or a descriptive string
 
 ### Comments
 
@@ -555,6 +583,7 @@ describe('My TA Function', () => {
 -   Write clear, descriptive commit messages
 -   Reference issue numbers when applicable
 -   Keep commits focused and atomic
+-   Commit the regression test alongside the fix it guards
 
 ### Branches
 
@@ -564,29 +593,31 @@ describe('My TA Function', () => {
 
 ### Pull Requests
 
--   Include test coverage
--   Update documentation if needed
+-   Include test coverage for every change
+-   Update documentation if you changed public APIs
 -   Regenerate barrel files if adding namespace methods
 -   Ensure all tests pass: `npm test -- --run`
 
 ## Performance Considerations
 
-1. **Incremental Calculation**: O(1) per bar, not O(n)
-2. **State Management**: Store only necessary data
-3. **Series Wrapping**: Reuse Series objects when possible
-4. **Avoid Redundant Calculations**: Cache expensive operations
+1.  **Incremental Calculation**: O(1) per bar, not O(n)
+2.  **State Management**: Store only necessary data
+3.  **Series Wrapping**: Reuse Series objects when possible
+4.  **Avoid Redundant Calculations**: Cache expensive operations
 
 ## Debugging
 
 ### Enable Debug Output
 
 ```javascript
-// In TA function
+// In a TA function
 console.log(`[${_callId}] Current value:`, currentValue);
 console.log(`[${_callId}] State:`, state);
 ```
 
 ### View Transpiled Code
+
+`transpile(source, { debug: true })` returns the executable function and, with `debug: true`, **annotates the generated code with inline source-line comments** (`// [Line N] ...`). It does **not** print anything itself — inspect the returned function to read the generated JS:
 
 ```javascript
 import { transpile } from './src/transpiler';
@@ -598,7 +629,7 @@ const userCode = ($) => {
 };
 
 const transpiledFn = transpile(userCode, { debug: true });
-// debug: true prints the transpiled code to console during transpilation
+console.log(transpiledFn.toString()); // <- prints the generated JS (with debug comments)
 ```
 
 ### Check Context State
@@ -609,7 +640,7 @@ console.log('TA State:', context.taState);
 console.log('Current Index:', context.idx);
 ```
 
-See [Debugging Guide](docs/architecture/debugging.md) for more techniques.
+See the [Debugging Guide](docs/architecture/debugging.md) for more techniques.
 
 ## Resources
 
@@ -618,30 +649,28 @@ See [Debugging Guide](docs/architecture/debugging.md) for more techniques.
 -   **Examples**: [docs/architecture/transpiler/examples.md](docs/architecture/transpiler/examples.md)
 -   **Best Practices**: [docs/architecture/best-practices.md](docs/architecture/best-practices.md)
 
-## Questions?
+## When in Doubt
 
-When in doubt:
-
-1. Read the [Architecture Guide](docs/architecture/index.md)
-2. Check [Best Practices](docs/architecture/best-practices.md)
-3. Look at existing implementations in `src/namespaces/ta/methods/`
-4. Run tests: `npm test -- --run`
+1.  Reproduce and run it — don't reason about behavior, observe it ([Golden Rule](#golden-rule-verify-dont-assume))
+2.  Read the [Architecture Guide](docs/architecture/index.md) and [Best Practices](docs/architecture/best-practices.md)
+3.  Look at existing implementations in `src/namespaces/ta/methods/`
+4.  Run tests: `npm test -- --run`
 
 ## Summary
 
 **Key Takeaways for AI Agents:**
 
+-   ✅ **Verify, don't assume** — run it, observe the output, compare against TradingView
+-   ✅ **Fix bugs via reproduce → failing test → fix → pass → keep as regression guard**
+-   ✅ Only `*.test.ts` files run under Vitest; `*.pine.ts` are fixtures, not tests
+-   ✅ Expected values come from an independent reference, never from current output
 -   ✅ Understand the two input types: Pine Script (with `//@version=5`) vs PineTS syntax
--   ✅ Pine Script goes through pineToJS first, then both paths merge in main transpiler
 -   ✅ Forward storage, reverse access (use `$.get()` or `Series.from()`)
 -   ✅ Incremental calculation with state (not recalculation)
--   ✅ Always use `_callId` parameter for state isolation
--   ✅ Return tuples as `[[...]]` (double brackets)
--   ✅ Use `context.precision()` for numeric outputs
--   ✅ Handle NaN inputs gracefully
--   ✅ Run tests with `npm test -- --run`
--   ✅ Regenerate barrel files after adding methods
--   ❌ Don't modify transpiler without deep understanding
+-   ✅ Always use `_callId` for state isolation; return tuples as `[[...]]`
+-   ✅ Use `context.precision()` for numeric outputs; handle NaN inputs
+-   ✅ Run tests with `npm test -- --run`; regenerate barrel files after adding methods
+-   ❌ Don't modify the transpiler without deep understanding
 -   ❌ Don't use direct array access for time-series data
 -   ❌ Don't share state between function calls
 -   ❌ Don't mix Pine Script and PineTS syntax in the same input
