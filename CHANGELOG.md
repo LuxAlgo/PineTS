@@ -1,6 +1,6 @@
 # Change Log
 
-## [Unreleased]
+## [0.9.26] - 2026-06-24 - Strategy update, add context.strategy.cagr
 
 ### Added
 
