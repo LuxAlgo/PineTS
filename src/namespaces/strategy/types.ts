@@ -259,6 +259,31 @@ export interface StrategyState {
     // live on the state object and are read via ctx.strategy.*.
     sharpe_ratio: number;
     sortino_ratio: number;
+
+    // Buy-and-hold benchmark (TV's "Buy & Hold Return" report figures).
+    // Computed ONCE at end-of-run by finalizeStrategyRun. Not Pine built-in
+    // variables (TV exposes them only in the Strategy Tester report), so they
+    // live on the state object and are read via ctx.strategy.* after the run.
+    //
+    // Model: a single long position bought with the ENTIRE initial capital at
+    // the FIRST trade's entry price (slippage already baked into that fill
+    // price) and held open through the last bar — never sold, so commissions
+    // never apply and the exit leg carries no slippage.
+    //   qty                  = initial_capital / first_entry_price
+    //   buy_and_hold_pnl      = qty × (last_close − first_entry_price)
+    //                         = initial_capital × per_gain / 100
+    //   buy_and_hold_per_gain = (last_close − first_entry_price)
+    //                            / first_entry_price × 100
+    //   strategy_outperformance = netprofit − buy_and_hold_pnl
+    // All NaN until the first trade opens (no entry price to anchor on).
+    buy_and_hold_pnl: number;
+    buy_and_hold_per_gain: number;
+    strategy_outperformance: number;
+    // Internal: entry price (slippage-adjusted) of the FIRST trade ever
+    // opened in the run — the anchor for the buy-and-hold benchmark. Latched
+    // once in openTrade and never overwritten.
+    _first_entry_price?: number;
+
     // Internal: mark-to-market equity at each calendar month's last bar,
     // and the month key of the most recent bar (rollover detector). Feed
     // the Sharpe / Sortino computation.

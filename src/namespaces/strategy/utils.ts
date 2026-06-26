@@ -594,6 +594,12 @@ export function openTrade(
 
     strategy.opentrades.push(trade);
 
+    // Latch the slippage-adjusted entry price of the FIRST trade ever opened —
+    // the anchor for the buy-and-hold benchmark (see finalizeStrategyRun).
+    if (strategy._first_entry_price === undefined) {
+        strategy._first_entry_price = price;
+    }
+
     // FIFO ledger-entry record for TV-style exit pairing (see
     // consumeLedger / closePartialPosition): TV's xlsx pairs exit fills
     // with entry records oldest-first, splitting at record boundaries.
@@ -1970,6 +1976,9 @@ export function finalizeStrategyRun(context: any): void {
     // Sharpe / Sortino short-circuit below.
     strategy.cagr = computeCagr(context);
 
+    // Buy-and-hold benchmark (independent of the monthly equity curve too).
+    computeBuyAndHold(context);
+
     const series = strategy._monthly_equity ?? [];
     const equities = [strategy.initial_capital, ...series];
     const returns: number[] = [];
@@ -2038,6 +2047,49 @@ function computeCagr(context: any): number {
 
     const years = daysBetween / 365;
     return 100 * (Math.pow(exitPrice / entryPrice, 1 / years) - 1);
+}
+
+/**
+ * Buy-and-hold benchmark statistics (TV's "Buy & Hold Return" report).
+ *
+ * Models a single long position bought with the ENTIRE initial capital at the
+ * FIRST trade's entry price and held open through the last bar:
+ *   - The anchor (price_start) is strategy._first_entry_price — the first
+ *     trade's fill price, with slippage ALREADY applied by the engine. This
+ *     is why the benchmark is affected by the slippage property.
+ *   - The position is never sold (always open), so there is no exit leg:
+ *     commissions never apply and price_end carries no slippage.
+ *   - price_end is the last bar's close.
+ *
+ *   qty                     = initial_capital / price_start
+ *   buy_and_hold_pnl        = qty × (price_end − price_start)
+ *                           = initial_capital × (price_end − price_start) / price_start
+ *   buy_and_hold_per_gain   = (price_end − price_start) / price_start × 100
+ *   strategy_outperformance = netprofit − buy_and_hold_pnl
+ *
+ * Left at NaN when no trade ever opened (no entry price to anchor on) or the
+ * figures are non-finite.
+ */
+function computeBuyAndHold(context: any): void {
+    const strategy: StrategyState = context?.strategy;
+    if (!strategy) return;
+
+    const priceStart = strategy._first_entry_price;
+    const candles = context?.marketData;
+    const priceEnd = Array.isArray(candles) && candles.length > 0 ? candles[candles.length - 1]?.close : NaN;
+
+    if (!Number.isFinite(priceStart) || !Number.isFinite(priceEnd) || (priceStart as number) === 0) {
+        strategy.buy_and_hold_pnl = NaN;
+        strategy.buy_and_hold_per_gain = NaN;
+        strategy.strategy_outperformance = NaN;
+        return;
+    }
+
+    const start = priceStart as number;
+    const ratio = (priceEnd - start) / start;
+    strategy.buy_and_hold_per_gain = ratio * 100;
+    strategy.buy_and_hold_pnl = (strategy.initial_capital ?? 0) * ratio;
+    strategy.strategy_outperformance = (strategy.netprofit ?? 0) - strategy.buy_and_hold_pnl;
 }
 
 /**
@@ -2130,6 +2182,13 @@ export function initializeStrategy(context: any, config: any): void {
         sharpe_ratio: 0,
         sortino_ratio: 0,
         cagr: NaN,
+
+        // Buy-and-hold benchmark (computed at end-of-run; NaN until then).
+        buy_and_hold_pnl: NaN,
+        buy_and_hold_per_gain: NaN,
+        strategy_outperformance: NaN,
+        _first_entry_price: undefined,
+
         _monthly_equity: [],
         _last_month_key: -1,
 
