@@ -1,13 +1,21 @@
 # Change Log
 
+## [0.9.27] - 2026-06-29 - Strategy update : buy_and_hold_pnl buy_and_hold_per_gain strategy_outperformance
+
+### Added
+
+- **`context.strategy.buy_and_hold_pnl` / `buy_and_hold_per_gain` / `strategy_outperformance`**: Report-only buy-and-hold benchmark (TV's "Buy & Hold Return"), computed once at end-of-run in `finalizeStrategyRun`. Models a single long position bought with the entire `initial_capital` at the first trade's (slippage-adjusted) entry price and held open through the last bar — affected by `initial_capital` and `slippage`, never by commissions (no exit leg). `strategy_outperformance = netprofit − buy_and_hold_pnl`. `NaN` until the first trade opens. Not Pine built-ins — available on `context.strategy` after the run only.
+- **Docs**: `docs/strategy.md` Buy-and-hold return sections.
+
+---
+
 ## [0.9.26] - 2026-06-24 - Strategy update, add context.strategy.cagr
 
 ### Added
 
 - **`context.strategy.cagr`**: Report-only Compound Annual Growth Rate (%) of strategy equity over the backtest window, computed once at end-of-run in `finalizeStrategyRun`. Not a Pine built-in — available on `context.strategy` after the run only.
-- **`context.strategy.buy_and_hold_pnl` / `buy_and_hold_per_gain` / `strategy_outperformance`**: Report-only buy-and-hold benchmark (TV's "Buy & Hold Return"), computed once at end-of-run in `finalizeStrategyRun`. Models a single long position bought with the entire `initial_capital` at the first trade's (slippage-adjusted) entry price and held open through the last bar — affected by `initial_capital` and `slippage`, never by commissions (no exit leg). `strategy_outperformance = netprofit − buy_and_hold_pnl`. `NaN` until the first trade opens. Not Pine built-ins — available on `context.strategy` after the run only.
 - **Tests**: `tests/namespaces/strategy/cagr.test.ts` — unit coverage of the CAGR formula and `NaN` edge cases, plus an integration run of the MACD strategy on BINANCE:BTCUSDT 1D (3235 bars) asserting a strategy CAGR of ≈ 2.12%.
-- **Docs**: `docs/strategy.md` gains Compound Annual Growth Rate (CAGR) and Buy-and-hold return sections.
+- **Docs**: `docs/strategy.md` gains Compound Annual Growth Rate (CAGR).
 
 ---
 
