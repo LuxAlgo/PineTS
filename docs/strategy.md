@@ -28,6 +28,7 @@ Every example below is exercised by a verification harness at `PineTS/.scratchpa
 - [Read-only getters](#read-only-getters)
 - [Risk-adjusted performance (Sharpe / Sortino)](#risk-adjusted-performance-sharpe--sortino)
 - [Compound annual growth rate (CAGR)](#compound-annual-growth-rate-cagr)
+- [Benchmark - Buy-and-hold return](#benchmark---buy-and-hold-return)
 - [Constants](#constants)
 - [Risk management](#risk-management)
 - [Conversion helpers](#conversion-helpers)
@@ -286,6 +287,13 @@ interface StrategyState {
     // Capital efficiency
     cagr:             number;           // annualized return %, report-only (NaN if window < 1 day)
 
+    // Buy-and-hold benchmark — report-only, computed ONCE at end-of-run.
+    // Models a long position bought with the entire initial capital at the
+    // first trade's (slippage-adjusted) entry price and held to the last bar.
+    buy_and_hold_pnl:        number;    // initial_capital × per_gain / 100
+    buy_and_hold_per_gain:   number;    // (last_close − first_entry) / first_entry × 100
+    strategy_outperformance: number;    // netprofit − buy_and_hold_pnl
+
     // Trade-stat counters
     wintrades:                number;
     losstrades:               number;
@@ -509,6 +517,39 @@ CAGR%       = 100 × ( (initial_capital + netprofit) / initial_capital ) ^ ((1 /
 `firstBarTime` / `lastBarTime` are the open times of the first and last loaded bars (matching Pine's `var int firstTime = time` and `last_bar_time`).
 
 Edge cases: the result is `NaN` when the window is shorter than one day, when there is no loaded data, or when the capital figures are non-finite.
+
+---
+
+## Benchmark - Buy-and-hold return
+
+PineTS reports how the strategy fared against simply **buying and holding** the instrument over the same window:
+
+```javascript
+const ctx = await pine.run(/* ... */);
+const s = ctx.strategy;
+
+console.log('Buy & hold P&L:',     s.buy_and_hold_pnl);        // currency
+console.log('Buy & hold % gain:',  s.buy_and_hold_per_gain);   // percent
+console.log('Outperformance:',     s.strategy_outperformance); // netprofit − buy&hold
+```
+
+Like CAGR / Sharpe / Sortino these are **report-only fields, not Pine built-ins** — computed once in `finalizeStrategyRun` and read off `context.strategy` after the run.
+
+### How it's calculated
+
+The benchmark models a single **long** position bought with the **entire initial capital** at the **first trade's entry price** and held open through the last bar — it is never sold:
+
+```
+price_start   = first trade's entry price   // slippage already applied at fill
+price_end     = last bar's close
+qty           = initial_capital / price_start
+buy_and_hold_pnl        = qty × (price_end − price_start)
+                        = initial_capital × (price_end − price_start) / price_start
+buy_and_hold_per_gain   = (price_end − price_start) / price_start × 100
+strategy_outperformance = netprofit − buy_and_hold_pnl
+```
+
+Because the anchor is the first trade's actual fill price, the benchmark **is affected by the `slippage` property** (slippage shifts that fill). Since the position is never closed, there is **no exit leg**: commissions never apply and `price_end` carries no slippage. The figures are `NaN` until the first trade opens.
 
 ---
 
