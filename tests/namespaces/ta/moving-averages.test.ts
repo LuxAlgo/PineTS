@@ -504,4 +504,39 @@ plot(res, "plot")
         console.log('STDEV plotdata_str\n', plotdata_str);
         expect(plotdata_str.trim()).toEqual(expected_plot.trim());
     });
+
+    it('HMA - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        
+        context.idx = 3;
+        context.data.close = new SeriesClass([10, 12, 11, 14]);
+        
+        const wmaMethod = (await import('../../../src/namespaces/ta/methods/wma')).wma(context);
+        context.pine = { ta: { wma: wmaMethod } };
+        
+        const hmaMethod = (await import('../../../src/namespaces/ta/methods/hma')).hma(context) as any;
+        
+        let res1 = hmaMethod(context.data.close, 4, 'hma_rollback_test');
+        expect(res1).toBeNaN();
+        
+        context.idx = 4;
+        context.data.close = new SeriesClass([10, 12, 11, 14, 15]);
+        let res2 = hmaMethod(context.data.close, 4, 'hma_rollback_test');
+        expect(context.precision(res2)).toBe(context.precision(15.055555555555555));
+        
+        context.data.close.set(0, 12);
+        let res3 = hmaMethod(context.data.close, 4, 'hma_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(13.18888888888889));
+        
+        context.idx = 6;
+        context.data.close = new SeriesClass([10, 12, 11, 14, 12, 17, 19]);
+        let res4 = hmaMethod(context.data.close, 4, 'hma_rollback_test');
+        expect(context.precision(res4)).toBe(context.precision(18.9));
+    });
 });
