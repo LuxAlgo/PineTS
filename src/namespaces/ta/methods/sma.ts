@@ -2,6 +2,16 @@
 
 import { Series } from '../../../Series';
 
+/**
+ * Simple Moving Average (SMA)
+ *
+ * Formula:
+ * - SMA = Sum(source, length) / length
+ *
+ * @param source - Source series
+ * @param length - Length of SMA
+ * @returns SMA value
+ */
 export function sma(context: any) {
     return (source: any, _period: any, _callId?: string) => {
         const period = Series.from(_period).get(0);
