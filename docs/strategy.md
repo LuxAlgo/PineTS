@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Strategy Namespace
-nav_order: 7
+nav_order: 9
 permalink: /strategy/
 ---
 
@@ -26,6 +26,9 @@ Every example below is exercised by a verification harness at `PineTS/.scratchpa
 - [The `context.strategy` object](#the-contextstrategy-object)
 - [Trade collections](#trade-collections)
 - [Read-only getters](#read-only-getters)
+- [Risk-adjusted performance (Sharpe / Sortino)](#risk-adjusted-performance-sharpe--sortino)
+- [Compound annual growth rate (CAGR)](#compound-annual-growth-rate-cagr)
+- [Benchmark - Buy-and-hold return](#benchmark---buy-and-hold-return)
 - [Constants](#constants)
 - [Risk management](#risk-management)
 - [Conversion helpers](#conversion-helpers)
@@ -92,7 +95,7 @@ const ctx2 = await pine.run(new Indicator(code));                    // no overr
 const ctx3 = await pine.run(new Indicator(code, { Qty: 5 }));        // override input.int(1, "Qty")
 ```
 
-The `Indicator()` wrapper is the same one used for indicator scripts — strategies and indicators share the runtime, so there's nothing strategy-specific to do. See **[Initialization and Usage → Running with Runtime Inputs](initialization-and-usage.md#running-with-runtime-inputs)** for the full input-keying rules.
+The `Indicator()` wrapper is the same one used for indicator scripts — strategies and indicators share the runtime, so there's nothing strategy-specific to do. See **[Indicator](indicator.md)** for the full API (per-key overrides via `ind.input[...]` / `ind.prop[...]`, schema introspection, etc.), or **[Initialization and Usage → Running with Runtime Inputs](initialization-and-usage.md#running-with-runtime-inputs)** for a quick overview.
 
 ---
 
@@ -133,6 +136,7 @@ After the call, `context.strategy.config` holds the merged options (defaults + y
 | `commission_value` | `number` | `0` | |
 | `slippage` | `number` | `0` | Ticks against trade direction |
 | `margin_long` / `margin_short` | `number` | `100` | Margin % (used by `margin_liquidation_price`) |
+| `risk_free_rate` | `number` | `2` | Annual %, denominator input for [Sharpe / Sortino](#risk-adjusted-performance-sharpe--sortino) |
 | `process_orders_on_close` | `boolean` | `false` | Affects `strategy.close({immediately: true})` |
 | `max_lines_count` / `max_labels_count` / `max_boxes_count` / `max_polylines_count` | `number` | `50` | Pass-through to drawing engine |
 
@@ -273,6 +277,22 @@ interface StrategyState {
     max_runup:        number;
     equity_peak:      number;           // internal high-water mark
     equity_trough:    number;
+
+    // Risk-adjusted performance — computed ONCE at end-of-run from the
+    // monthly equity curve (report-only; see the section below). These are
+    // NOT Pine built-in variables, so they're read off context.strategy only.
+    sharpe_ratio:     number;
+    sortino_ratio:    number;
+
+    // Capital efficiency
+    cagr:             number;           // annualized return %, report-only (NaN if window < 1 day)
+
+    // Buy-and-hold benchmark — report-only, computed ONCE at end-of-run.
+    // Models a long position bought with the entire initial capital at the
+    // first trade's (slippage-adjusted) entry price and held to the last bar.
+    buy_and_hold_pnl:        number;    // initial_capital × per_gain / 100
+    buy_and_hold_per_gain:   number;    // (last_close − first_entry) / first_entry × 100
+    strategy_outperformance: number;    // netprofit − buy_and_hold_pnl
 
     // Trade-stat counters
     wintrades:                number;
@@ -424,6 +444,115 @@ console.log('Max contracts held (long):', s.max_contracts_held_long);
 
 ---
 
+## Risk-adjusted performance (Sharpe / Sortino)
+
+PineTS reports the two risk-adjusted ratios from TradingView's **Risk-adjusted performance** panel:
+
+```javascript
+const ctx = await pine.run(/* ... */);
+const s = ctx.strategy;
+
+console.log('Sharpe ratio:',  s.sharpe_ratio);
+console.log('Sortino ratio:', s.sortino_ratio);
+```
+
+**These are report-only fields, not getters.** Unlike `netprofit` or `max_drawdown`, Sharpe and Sortino are **not** Pine built-in variables — TradingView surfaces them only in the Strategy Tester report (and xlsx export), never to scripts. So there is no `strategy.sharpe_ratio` accessor inside the run callback; the values live on `context.strategy` after the run and nowhere else.
+
+They are computed **once at the end of the run** (in `finalizeStrategyRun`), from the strategy's monthly equity curve.
+
+### How they're calculated
+
+Matching TradingView's documented methodology:
+
+1. **Sample equity monthly.** The mark-to-market `strategy.equity` is captured at the last bar of each calendar month.
+2. **Monthly returns.** Simple returns `rᵢ = Eᵢ / Eᵢ₋₁ − 1`, anchored at `initial_capital` (the first return runs from initial capital to the first month-end).
+3. **Risk-free rate.** `RFR = risk_free_rate / 100 / 12` — the annual `risk_free_rate` declaration option (default **2**, i.e. 2%) converted to a monthly figure.
+4. **Ratios** (no annualization):
+
+   ```
+   Sharpe  = (mean(r) − RFR) / SD
+   Sortino = (mean(r) − RFR) / DD
+
+   SD = √( Σ (rᵢ − mean(r))² / N )           — population standard deviation
+   DD = √( Σ min(0, rᵢ − RFR)²   / N )        — downside deviation over all N returns, target = RFR
+   ```
+
+Edge cases: with fewer than two monthly returns both ratios are `0`; a zero-variance (flat) curve yields Sharpe `0`; a curve with no downside (every return above the RFR) yields Sortino `0`.
+
+Set the risk-free rate via the declaration:
+
+```javascript
+strategy('RFR example', { initial_capital: 100000, risk_free_rate: 4 });  // 4% annual
+```
+
+### Accuracy
+
+The formula matches TradingView's exactly, but the ratios are **derivatives of the bar-by-bar equity curve** — so their fidelity rides on the engine's mark-to-market accuracy, not on the formula. Across the TV oracle datasets they land within roughly the second decimal (most within ~0.01; strategies with heavy margin-call activity diverge a little more, since their intra-month equity path is where PineTS and TV differ most even when final net profit matches). They are intended as a faithful summary metric, **not** a cent-exact reproduction like `netprofit`.
+
+---
+
+## Capital Efficiency - Compound annual growth rate (CAGR)
+
+PineTS also reports the **annualized return (%)** of strategy equity over the whole backtest window:
+
+```javascript
+const ctx = await pine.run(/* ... */);
+const s = ctx.strategy;
+
+console.log('Strategy CAGR:', s.cagr, '%');
+```
+
+Like Sharpe / Sortino, `strategy.cagr` is a **report-only field, not a Pine built-in** — it lives on `context.strategy` after the run, computed once in `finalizeStrategyRun`.
+
+### How it's calculated
+
+Mirrors TradingView calculations:
+
+```
+daysBetween = (lastBarTime − firstBarTime) / 86_400_000   // ms per day
+years       = daysBetween / 365
+CAGR%       = 100 × ( (initial_capital + netprofit) / initial_capital ) ^ ((1 / years) − 1 )
+```
+
+`firstBarTime` / `lastBarTime` are the open times of the first and last loaded bars (matching Pine's `var int firstTime = time` and `last_bar_time`).
+
+Edge cases: the result is `NaN` when the window is shorter than one day, when there is no loaded data, or when the capital figures are non-finite.
+
+---
+
+## Benchmark - Buy-and-hold return
+
+PineTS reports how the strategy fared against simply **buying and holding** the instrument over the same window:
+
+```javascript
+const ctx = await pine.run(/* ... */);
+const s = ctx.strategy;
+
+console.log('Buy & hold P&L:',     s.buy_and_hold_pnl);        // currency
+console.log('Buy & hold % gain:',  s.buy_and_hold_per_gain);   // percent
+console.log('Outperformance:',     s.strategy_outperformance); // netprofit − buy&hold
+```
+
+Like CAGR / Sharpe / Sortino these are **report-only fields, not Pine built-ins** — computed once in `finalizeStrategyRun` and read off `context.strategy` after the run.
+
+### How it's calculated
+
+The benchmark models a single **long** position bought with the **entire initial capital** at the **first trade's entry price** and held open through the last bar — it is never sold:
+
+```
+price_start   = first trade's entry price   // slippage already applied at fill
+price_end     = last bar's close
+qty           = initial_capital / price_start
+buy_and_hold_pnl        = qty × (price_end − price_start)
+                        = initial_capital × (price_end − price_start) / price_start
+buy_and_hold_per_gain   = (price_end − price_start) / price_start × 100
+strategy_outperformance = netprofit − buy_and_hold_pnl
+```
+
+Because the anchor is the first trade's actual fill price, the benchmark **is affected by the `slippage` property** (slippage shifts that fill). Since the position is never closed, there is **no exit leg**: commissions never apply and `price_end` carries no slippage. The figures are `NaN` until the first trade opens.
+
+---
+
 ## Constants
 
 PineTS exposes Pine's three sets of `strategy` constants. Inside the run callback they appear as bare strings; from plain JS you call them as factories.
@@ -512,5 +641,6 @@ The strategy namespace's surface is implemented 1:1 with TV. A subset of strateg
 - **OCA enforcement** — order objects carry `oca_name` / `oca_type` fields, but the engine doesn't yet auto-cancel or reduce siblings on fill. Deferred Phase 7.
 - **Commission rounding** — per-leg charges may differ from TV by sub-cent rounding in edge cases.
 - **Per-trade `max_drawdown` / `max_runup`** — PineTS tracks intra-bar high/low excursions, but TV's accounting differs for trades that open and close in adjacent bars.
+- **`strategy.sharpe_ratio` / `strategy.sortino_ratio`** — the formula matches TV exactly, but the ratios are computed off the monthly equity curve and therefore inherit any bar-by-bar mark-to-market path difference. They match TV to ~2 decimals (most datasets within ~0.01), not to the cent. See [Risk-adjusted performance](#risk-adjusted-performance-sharpe--sortino).
 
 For the complete checklist (every entry mapped to its implementation status) and the list of TV oracle scripts in use, see the **[Strategy API coverage page](api-coverage/strategy.md)**.

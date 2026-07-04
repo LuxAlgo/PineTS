@@ -28,6 +28,10 @@ Learn the basics of converting Pine Script to PineTS and understand key differen
 
 Complete guide on how to initialize PineTS and run indicators with detailed API documentation, including all constructor parameters, run method options, and return value formats.
 
+### [Indicator](indicator.md)
+
+The `Indicator` class — wrapping a script for cached transpile, schema introspection (`getInputsMeta()` / `getPropsMeta()`), and runtime overrides via `.input["Title"] = value` and `.prop["name"] = value`.
+
 ### [Syntax Guide](syntax-guide.md)
 
 Detailed guide on PineTS syntax and how to write code equivalent to Pine Script, including variable declarations (`var` vs `let`), series access, and control structures.

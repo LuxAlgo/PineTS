@@ -241,13 +241,17 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     title: 'Fast Length',
     defval: 12
   }, undefined, 'p0');
-  const temp_1 = input.int(p0);
+  const temp_1 = input.int(p0, {
+    __varId: "_int"
+  });
   $.let.glb1__int = $.init($.let.glb1__int, temp_1);
   const p1 = input.param({
     title: 'String Input',
     defval: "Hello"
   }, undefined, 'p1');
-  const temp_2 = input.string(p1);
+  const temp_2 = input.string(p1, {
+    __varId: "_string"
+  });
   $.let.glb1__string = $.init($.let.glb1__string, temp_2);
   const p2 = input.param(10.0, undefined, 'p2');
   const p3 = input.param("float input", undefined, 'p3');
@@ -256,19 +260,25 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     maxval: 100.0,
     step: 0.1
   }, undefined, 'p4');
-  const temp_3 = input.float(p2, p3, p4);
+  const temp_3 = input.float(p2, p3, p4, {
+    __varId: "_float"
+  });
   $.let.glb1__float = $.init($.let.glb1__float, temp_3);
   const p5 = input.param({
     title: 'Close Source',
     defval: close
   }, undefined, 'p5');
-  const temp_4 = input.any(p5);
+  const temp_4 = input.any(p5, {
+    __varId: "src_close"
+  });
   $.let.glb1_src_close = $.init($.let.glb1_src_close, temp_4);
   const p6 = input.param({
     title: 'Open Source',
     defval: open
   }, undefined, 'p6');
-  const temp_5 = input.any(p6);
+  const temp_5 = input.any(p6, {
+    __varId: "src_open"
+  });
   $.let.glb1_src_open = $.init($.let.glb1_src_open, temp_5);
 }`;
 
@@ -570,8 +580,8 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const ta = $.ta;
-  $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.get(close, 0) > $.get(open, 0));
-  $.const.glb1_red_candle = $.init($.const.glb1_red_candle, $.get(close, 0) < $.get(open, 0));
+  $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.pine.math.__gt($.get(close, 0), $.get(open, 0)));
+  $.const.glb1_red_candle = $.init($.const.glb1_red_candle, $.pine.math.__lt($.get(close, 0), $.get(open, 0)));
   $.const.glb1_previous_green_candle = $.init($.const.glb1_previous_green_candle, $.get($.const.glb1_green_candle, 1));
   const p0 = ta.param(close, 1, 'p0');
   const p1 = ta.param(9, undefined, 'p1');
@@ -581,8 +591,8 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const p3 = ta.param(18, undefined, 'p3');
   const temp_2 = ta.ema(p2, p3, "_ta1");
   $.const.glb1_ema18 = $.init($.const.glb1_ema18, temp_2);
-  $.const.glb1_bull_bias = $.init($.const.glb1_bull_bias, $.get($.const.glb1_ema9, 0) > $.get($.const.glb1_ema18, 0));
-  $.const.glb1_bear_bias = $.init($.const.glb1_bear_bias, $.get($.const.glb1_ema9, 0) < $.get($.const.glb1_ema18, 0));
+  $.const.glb1_bull_bias = $.init($.const.glb1_bull_bias, $.pine.math.__gt($.get($.const.glb1_ema9, 0), $.get($.const.glb1_ema18, 0)));
+  $.const.glb1_bear_bias = $.init($.const.glb1_bear_bias, $.pine.math.__lt($.get($.const.glb1_ema9, 0), $.get($.const.glb1_ema18, 0)));
 }`;
 
         expect(result).toBe(expected_code);
@@ -610,14 +620,14 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const __maxLoops = $.__maxLoops || 500000;
   const {close, open} = $.data;
   const ta = $.ta;
-  $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.get(close, 0) > $.get(open, 0) ? 1 : 0);
+  $.const.glb1_green_candle = $.init($.const.glb1_green_candle, $.pine.math.__gt($.get(close, 0), $.get(open, 0)) ? 1 : 0);
   const p0 = ta.param(close, undefined, 'p0');
   const p1 = ta.param(9, undefined, 'p1');
   const temp_1 = ta.ema(p0, p1, "_ta0");
   const p2 = ta.param(close, undefined, 'p2');
   const p3 = ta.param(18, undefined, 'p3');
   const temp_2 = ta.ema(p2, p3, "_ta1");
-  $.const.glb1_bull_bias = $.init($.const.glb1_bull_bias, temp_1 > temp_2 ? 1 : 0);
+  $.const.glb1_bull_bias = $.init($.const.glb1_bull_bias, $.pine.math.__gt(temp_1, temp_2) ? 1 : 0);
 }`;
 
         expect(result).toBe(expected_code);
@@ -689,7 +699,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
             let aa = 0;
 
-            if (_cc > 1) {
+            if ($.pine.math.__gt(_cc, 1)) {
                 let bb = 1;
                 let cc = close;
                 let dd = close[1];
@@ -703,34 +713,34 @@ let src_open = input.any({ title: 'Open Source', defval: open });
 
                 aa = 1;
             }
-            if (_cc[0] > 1) {
+            if ($.pine.math.__gt(_cc[0], 1)) {
                 aa = 2;
             }
-            if (_cc[1] > 1) {
+            if ($.pine.math.__gt(_cc[1], 1)) {
                 aa = 3;
             }
-            if (_cc[aa] > 1) {
+            if ($.pine.math.__gt(_cc[aa], 1)) {
                 aa = 3;
             }
-            if (_cc[aa[0]] > 1) {
+            if ($.pine.math.__gt(_cc[aa[0]], 1)) {
                 aa = 3;
             }
-            if (_cc[aa[1]] > 1) {
+            if ($.pine.math.__gt(_cc[aa[1]], 1)) {
                 aa = 3;
             }
-            if (close > 1) {
+            if ($.pine.math.__gt(close, 1)) {
                 aa = 4;
             }
-            if (close[0] > 1) {
+            if ($.pine.math.__gt(close[0], 1)) {
                 aa = 5;
             }
-            if (close[1] > 1) {
+            if ($.pine.math.__gt(close[1], 1)) {
                 aa = 6;
             }
-            if (close[aa] > 1) {
+            if ($.pine.math.__gt(close[aa], 1)) {
                 aa = 6;
             }
-            if (close[aa[1]] > 1) {
+            if ($.pine.math.__gt(close[aa[1]], 1)) {
                 aa = 6;
             }
         };
@@ -745,7 +755,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const {close} = $.data;
   $.const.glb1__cc = $.init($.const.glb1__cc, close);
   $.let.glb1_aa = $.init($.let.glb1_aa, 0);
-  if ($.get($.const.glb1__cc, 0) > 1) {
+  if ($.pine.math.__gt($.get($.const.glb1__cc, 0), 1)) {
     $.let.if2_bb = $.init($.let.if2_bb, 1);
     $.let.if2_cc = $.init($.let.if2_cc, close);
     $.let.if2_dd = $.init($.let.if2_dd, $.get(close, 1));
@@ -758,43 +768,43 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $.set($.let.glb1_aa, 1);
   }
   ;
-  if ($.get($.const.glb1__cc, 0) > 1) {
+  if ($.pine.math.__gt($.get($.const.glb1__cc, 0), 1)) {
     $.set($.let.glb1_aa, 2);
   }
   ;
-  if ($.get($.const.glb1__cc, 1) > 1) {
+  if ($.pine.math.__gt($.get($.const.glb1__cc, 1), 1)) {
     $.set($.let.glb1_aa, 3);
   }
   ;
-  if ($.get($.const.glb1__cc, $.get($.let.glb1_aa, 0)) > 1) {
+  if ($.pine.math.__gt($.get($.const.glb1__cc, $.get($.let.glb1_aa, 0)), 1)) {
     $.set($.let.glb1_aa, 3);
   }
   ;
-  if ($.get($.const.glb1__cc, $.let.glb1_aa[0]) > 1) {
+  if ($.pine.math.__gt($.get($.const.glb1__cc, $.let.glb1_aa[0]), 1)) {
     $.set($.let.glb1_aa, 3);
   }
   ;
-  if ($.get($.const.glb1__cc, $.let.glb1_aa[1]) > 1) {
+  if ($.pine.math.__gt($.get($.const.glb1__cc, $.let.glb1_aa[1]), 1)) {
     $.set($.let.glb1_aa, 3);
   }
   ;
-  if ($.get(close, 0) > 1) {
+  if ($.pine.math.__gt($.get(close, 0), 1)) {
     $.set($.let.glb1_aa, 4);
   }
   ;
-  if ($.get(close, 0) > 1) {
+  if ($.pine.math.__gt($.get(close, 0), 1)) {
     $.set($.let.glb1_aa, 5);
   }
   ;
-  if ($.get(close, 1) > 1) {
+  if ($.pine.math.__gt($.get(close, 1), 1)) {
     $.set($.let.glb1_aa, 6);
   }
   ;
-  if ($.get(close, $.get($.let.glb1_aa, 0)) > 1) {
+  if ($.pine.math.__gt($.get(close, $.get($.let.glb1_aa, 0)), 1)) {
     $.set($.let.glb1_aa, 6);
   }
   ;
-  if ($.get(close, $.let.glb1_aa[1]) > 1) {
+  if ($.pine.math.__gt($.get(close, $.let.glb1_aa[1]), 1)) {
     $.set($.let.glb1_aa, 6);
   }
 }`;
@@ -1317,7 +1327,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     active: "bool"
   }, undefined, 'p0');
   $.const.glb1_Trade = $.init($.const.glb1_Trade, Type(p0));
-  $.let.glb1_trade = $.init($.let.glb1_trade, $.get($.const.glb1_Trade, 0)?.new?.($.get(close, 0), $.get(open, 0), $.get(high, 0), $.get(close, 0) > $.get(open, 0)));
+  $.let.glb1_trade = $.init($.let.glb1_trade, $.get($.const.glb1_Trade, 0)?.new?.($.get(close, 0), $.get(open, 0), $.get(high, 0), $.pine.math.__gt($.get(close, 0), $.get(open, 0))));
   $.let.glb1_trade2 = $.init($.let.glb1_trade2, $.get($.let.glb1_trade, 0)?.copy?.());
   $.get($.let.glb1_trade2, 0).active = false;
   const p1 = ta.param($.get($.let.glb1_trade, 0).entry, undefined, 'p1');
@@ -1408,10 +1418,10 @@ let src_open = input.any({ title: 'Open Source', defval: open });
         let transpiled = transformer(source);
         const result = transpiled.toString().trim();
 
-        // All three usages should transform variables consistently
-        // != is now transpiled to $.pine.math.__neq() for na-aware inequality
+        // All three usages should transform variables consistently.
+        // != and < are transpiled to na-aware helpers $.pine.math.__neq() / __lt().
         const expectedPattern =
-            /\$\.get\(\$\.let\.glb1_buy, 0\) && \$\.pine\.math\.__neq\(\$\.get\(\$\.let\.glb1_xs, 0\), \$\.get\(\$\.let\.glb1_xs, 1\)\) && \$\.get\(\$\.let\.glb1_direction, 0\) < 0/g;
+            /\$\.get\(\$\.let\.glb1_buy, 0\) && \$\.pine\.math\.__neq\(\$\.get\(\$\.let\.glb1_xs, 0\), \$\.get\(\$\.let\.glb1_xs, 1\)\) && \$\.pine\.math\.__lt\(\$\.get\(\$\.let\.glb1_direction, 0\), 0\)/g;
         const matches = result.match(expectedPattern);
 
         // Should appear 3 times: in plotshape arg, foo arg, and buyCond assignment

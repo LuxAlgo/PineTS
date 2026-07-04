@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2025 Alaa-eddine KADDOURI
-import { transpile } from '@pinets/transpiler/index';
-import { VIEWPORT_DEPENDENT_BUILTINS } from '@pinets/transpiler/settings';
 import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { Context } from './Context.class';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
-import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar } from './namespaces/strategy/utils';
+import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, isAdverseFirstBar, applyPendingCloseMarginCall } from './namespaces/strategy/utils';
 
 // ── Timeframe duration utility ──────────────────────────────────────
 //prettier-ignore
@@ -65,6 +63,11 @@ export class PineTS {
         return this._transpiledCode;
     }
 
+    // Tracks the most recently prepared Indicator. Used by the back-compat
+    // forwarding paths (e.g. `usesVisibleRange()`) and by the internal
+    // _initializeContext to surface the original pineTSCode on the Context.
+    private _currentIndicator: Indicator | null = null;
+
     private _isSecondaryContext: boolean = false;
     public markAsSecondary() {
         this._isSecondaryContext = true;
@@ -116,7 +119,9 @@ export class PineTS {
     private _viewportLeft: number | undefined = undefined;
     private _viewportRight: number | undefined = undefined;
 
-    // Set by _transpileCode() via static analysis of the transpiled output.
+    // Set by `run()` from the prepared Indicator. Mirrors the Indicator's own
+    // `usesVisibleRange` flag on the PineTS instance so legacy callers of
+    // `pine.usesVisibleRange()` keep working.
     // True iff the script references any built-in in VIEWPORT_DEPENDENT_BUILTINS.
     // Consumers should check this before re-running on viewport changes — non-
     // viewport-dependent scripts produce identical output regardless of viewport.
@@ -313,22 +318,18 @@ export class PineTS {
      * @returns Context if pageSize is 0 or undefined, or AsyncGenerator<Context> if pageSize > 0
      */
     public run(pineTSCode: Indicator | Function | String, periods?: number, pageSize?: number): Promise<Context> | AsyncGenerator<Context> {
-        let code: Function | String;
-        let inputs: Record<string, any> = {};
-
-        if (pineTSCode instanceof Indicator) {
-            code = pineTSCode.source;
-            inputs = pineTSCode.inputs || {};
-        } else {
-            code = pineTSCode;
-        }
+        const ind = Indicator.from(pineTSCode as any);
+        this._currentIndicator = ind;
+        // NB: `ind.prepare()` may throw synchronously for malformed Pine /
+        // unparseable JS. We push it inside the async path so the throw
+        // surfaces as a Promise rejection (matches the pre-refactor contract:
+        // `await pine.run(badCode)` rejects, never throws synchronously).
 
         if (pageSize && pageSize > 0) {
-            // livemode is enabled if eDate is undefined and we're using a provider as a source
             const enableLiveStream = typeof this.eDate === 'undefined' && !Array.isArray(this.source);
-            return this._runPaginated(code, inputs, periods, pageSize, enableLiveStream);
+            return this._runPaginated(ind, periods, pageSize, enableLiveStream);
         } else {
-            return this._runComplete(code, inputs, periods);
+            return this._runComplete(ind, periods);
         }
     }
 
@@ -346,15 +347,10 @@ export class PineTS {
         const { live = true, interval = 1000 } = options;
         const pageSize = options.pageSize || this.data.length; // Default pageSize to full data if not provided
 
-        let code: Function | String;
-        let inputs: Record<string, any> = {};
-
-        if (pineTSCode instanceof Indicator) {
-            code = pineTSCode.source;
-            inputs = pineTSCode.inputs || {};
-        } else {
-            code = pineTSCode;
-        }
+        const ind = Indicator.from(pineTSCode as any);
+        this._currentIndicator = ind;
+        // prepare() is deferred to inside _runPaginated so transpile errors
+        // surface as Promise rejections on the stream's `error` event.
 
         const listeners: { [key: string]: Function[] } = { data: [], error: [], warning: [], alert: [] };
         let stopped = false;
@@ -389,7 +385,7 @@ export class PineTS {
 
                 // Pass undefined for periods to include all data
                 // We use the generator version directly to control enableLiveStream
-                const iterator = this._runPaginated(code, inputs, undefined, pageSize, enableLiveStream);
+                const iterator = this._runPaginated(ind, undefined, pageSize, enableLiveStream);
 
                 for await (const ctx of iterator) {
                     if (stopped) break;
@@ -465,7 +461,7 @@ export class PineTS {
         const slices = (transpiledFn as any)._ltfSlices;
         if (slices) (context as any)._ltfTruncatedBodies = slices;
 
-        await this._executeIterations(context, this._transpiledCode, this.data.length - periods, this.data.length);
+        await this._executeIterations(context, transpiledFn, this.data.length - periods, this.data.length);
 
         return context;
     }
@@ -480,18 +476,20 @@ export class PineTS {
      * occurred when var variables were modified in-place during re-execution.
      * @private
      */
-    private async _runComplete(pineTSCode: Function | String, inputs: Record<string, any>, periods?: number): Promise<Context> {
+    private async _runComplete(ind: Indicator, periods?: number): Promise<Context> {
         await this.ready();
         if (!periods) periods = this.data.length;
 
-        const context = this._initializeContext(pineTSCode, inputs, this._isSecondaryContext);
-        this._transpiledCode = this._transpileCode(pineTSCode);
+        const prepared = ind.prepare(this._debugSettings);
+        this._usesVisibleRange = prepared.usesVisibleRange;
+
+        const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
+        this._transpiledCode = prepared.fn;
         // Propagate transpile-time slices (one per request.security_lower_tf
         // call site) onto the Context so the slow path of the LTF runtime
         // can pick the right truncated body to run in the secondary
         // instead of the FULL user script.
-        const slices = (this._transpiledCode as any)._ltfSlices;
-        if (slices) (context as any)._ltfTruncatedBodies = slices;
+        if (prepared.ltfSlices) (context as any)._ltfTruncatedBodies = prepared.ltfSlices;
 
         // Split execution: process all bars except the last, snapshot, then
         // process the last bar. This gives updateTail() a reliable restore
@@ -500,13 +498,13 @@ export class PineTS {
         const endIdx = this.data.length;
 
         if (endIdx - startIdx > 1) {
-            await this._executeIterations(context, this._transpiledCode, startIdx, endIdx - 1);
+            await this._executeIterations(context, prepared.fn, startIdx, endIdx - 1);
             (context as any)._varSnapshot = this._snapshotVarState(context);
-            await this._executeIterations(context, this._transpiledCode, endIdx - 1, endIdx);
+            await this._executeIterations(context, prepared.fn, endIdx - 1, endIdx);
         } else {
             // Single bar: no meaningful pre-last range to snapshot; execute directly.
             // updateTail() will fall back to _removeLastResult on this context.
-            await this._executeIterations(context, this._transpiledCode, startIdx, endIdx);
+            await this._executeIterations(context, prepared.fn, startIdx, endIdx);
         }
 
         return context;
@@ -519,8 +517,7 @@ export class PineTS {
      * @private
      */
     private async *_runPaginated(
-        pineTSCode: Function | String,
-        inputs: Record<string, any>,
+        ind: Indicator,
         periods: number | undefined,
         pageSize: number,
         enableLiveStream: boolean = false,
@@ -528,10 +525,12 @@ export class PineTS {
         await this.ready();
         if (!periods) periods = this.data.length;
 
-        const context = this._initializeContext(pineTSCode, inputs, this._isSecondaryContext);
-        this._transpiledCode = this._transpileCode(pineTSCode);
-        const slices = (this._transpiledCode as any)._ltfSlices;
-        if (slices) (context as any)._ltfTruncatedBodies = slices;
+        const prepared = ind.prepare(this._debugSettings);
+        this._usesVisibleRange = prepared.usesVisibleRange;
+
+        const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
+        this._transpiledCode = prepared.fn;
+        if (prepared.ltfSlices) (context as any)._ltfTruncatedBodies = prepared.ltfSlices;
 
         const startIdx = this.data.length - periods;
         let processedUpToIdx = startIdx; // Track what we've fully processed
@@ -1081,6 +1080,11 @@ export class PineTS {
         context.__maxLoops = this._maxLoops;
         context._alertMode = this._alertMode;
 
+        // User-explicit prop overrides flow from the Indicator to the runtime.
+        // Read by Core.indicator() and initializeStrategy/strategy.any() to
+        // merge on top of source-code declaration args.
+        context._propOverrides = this._currentIndicator?.getRuntimePropOverrides() ?? {};
+
         context.pineTSCode = pineTSCode;
         context.isSecondaryContext = isSecondary; // Set secondary context flag
         context.data.close = new Series([]);
@@ -1098,39 +1102,6 @@ export class PineTS {
         context.length = this.data.length;
 
         return context;
-    }
-
-    /**
-     * Transpile the Pine Script code
-     * @private
-     */
-    private _transpileCode(pineTSCode: Function | String): Function {
-        const transformer = transpile.bind(this);
-        const fn = transformer(pineTSCode, this._debugSettings);
-        this._usesVisibleRange = this._detectViewportUsage(fn);
-        return fn;
-    }
-
-    /**
-     * Static analysis on the transpiled function body to detect references to
-     * host-bound built-ins (currently visible-range; extensible via
-     * VIEWPORT_DEPENDENT_BUILTINS). Comments are stripped during pine2js, so
-     * scanning the post-transpile output is comment-safe.
-     *
-     * Why post-transpile (not regex on Pine source): a `chart.left_visible_bar_time`
-     * literal inside a // comment would be a false positive at the source level.
-     * After pine2js, only live code remains.
-     *
-     * Why regex (not AST visitor): `chart` is a reserved namespace in
-     * KNOWN_NAMESPACES — Pine scripts cannot shadow it with a local identifier,
-     * so a whole-word match on `chart.<prop>` is unambiguous.
-     */
-    private _detectViewportUsage(fn: Function): boolean {
-        const body = fn.toString();
-        return VIEWPORT_DEPENDENT_BUILTINS.some((name) => {
-            const escaped = name.replace(/\./g, '\\.');
-            return new RegExp(`\\b${escaped}\\b`).test(body);
-        });
     }
 
     /**
@@ -1158,18 +1129,38 @@ export class PineTS {
             context.data.bar_index.data.push(i);
 
             // Process strategy orders at the START of the bar (filling at Open).
-            // Entry-category orders fill first (market/limit/stop pending orders),
-            // then exit-category orders evaluate against the bar's open/high/low
-            // (conditional TP/SL/trailing exits + close()/close_all() markets).
+            // Entry-category orders fill first (market/limit/stop pending
+            // orders), then exit-category orders evaluate against the bar's
+            // open/high/low — so an exit gap-firing at the open covers trades
+            // that filled at that same open (entry-first precedence). TV
+            // evidence is majority-but-not-unanimous here: 3 of 4 gap events
+            // in the QA pyramiding xlsx (2021-02-24, 2021-09-08, 2024-02-29)
+            // catch the same-open entry; one (2024-03-21) spares it. The
+            // 'open' phase of processExitOrders implements the minority
+            // (exit-first) semantics and is currently not wired in.
             if (context.strategy) {
+                // Book a second margin call scheduled on the PREVIOUS bar
+                // by the phantom re-check (it fills at that bar's close,
+                // after its script evaluation — see processMarginCall and
+                // applyPendingCloseMarginCall). Must run before entries so
+                // a reversal queued at that close (qty frozen at queue
+                // time) overshoots by exactly the deferred quantity, as TV
+                // does.
+                applyPendingCloseMarginCall(context);
                 processStrategyOrders(context);
-                processExitOrders(context);
-                // Margin-call check (TV broker emulator): after user-defined
-                // exits, if intra-bar adverse movement would have pushed
-                // equity below required margin, FORCE LIQUIDATE all open
-                // positions at the bar's adverse extreme. Skipped when no
-                // leverage (margin_long / margin_short >= 100).
-                processMarginCall(context);
+                // Margin checkpoints along the intra-bar path (TV broker
+                // emulator): first at the OPEN right after entries fill;
+                // then at the adverse extreme — BEFORE exit fills when the
+                // bar's first move is adverse for the position (the
+                // extreme precedes the favorable exits on the path), AFTER
+                // them otherwise (favorable exits free margin first). The
+                // 'extreme' checkpoint may schedule a deferred second
+                // margin call at this bar's close (phantom re-check).
+                processMarginCall(context, 'open');
+                const adverseFirst = isAdverseFirstBar(context);
+                if (adverseFirst) processMarginCall(context, 'extreme');
+                processExitOrders(context, 'intrabar');
+                if (!adverseFirst) processMarginCall(context, 'extreme');
                 // Latch max_drawdown / max_runup ONCE at the end of the bar so
                 // trades closed mid-bar by TP / SL contribute their realized
                 // P&L (not phantom intra-bar excursions against the raw H/L).
@@ -1237,6 +1228,13 @@ export class PineTS {
             if (context.lctx) {
                 context.lctx.forEach((lctx: any) => shiftVariables(lctx));
             }
+        }
+
+        // End-of-run: compute the risk-adjusted performance ratios
+        // (Sharpe / Sortino) from the monthly equity curve accumulated
+        // across the bar loop. Runs once, after the last bar.
+        if (context.strategy) {
+            finalizeStrategyRun(context);
         }
     }
 }

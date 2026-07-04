@@ -179,8 +179,11 @@ export class LabelHelper {
             }
             y = pt.price;
         } else {
-            x = parsed.x;
-            y = parsed.y;
+            // Resolve Series/function coordinate args to scalars at creation —
+            // mirrors box.new()/line.new(). A bare-series arg (label.new(x = bar_index,
+            // y = high, …)) otherwise stores the live series and loses the bar value.
+            x = this._resolve(parsed.x);
+            y = this._resolve(parsed.y);
         }
 
         return this._createLabel(

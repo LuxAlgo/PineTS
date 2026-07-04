@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (C) 2025 Alaa-eddine KADDOURI
+// Copyright (C) 2026 LuxAlgo
 
 /**
  * Strategy configuration options.
@@ -55,23 +55,31 @@ export interface StrategyConfig {
  * field, matching what `strategy.closedtrades.size(idx)` returns.
  */
 export interface Trade {
-    id: string;                  // unique trade id (internal)
-    entry_id: string;            // id passed to strategy.entry()
+    id: string; // unique trade id (internal)
+    entry_id: string; // id passed to strategy.entry()
     entry_price: number;
     entry_bar_index: number;
     entry_time: number;
     entry_comment?: string;
-    exit_id?: string;            // id passed to strategy.exit/close — set on close
+    exit_id?: string; // id passed to strategy.exit/close — set on close
     exit_price?: number;
     exit_bar_index?: number;
     exit_time?: number;
     exit_comment?: string;
-    size: number;                // SIGNED — positive long, negative short
-    profit?: number;             // realized P&L on close; undefined while open
-    commission?: number;         // commission charged on this trade
-    max_drawdown?: number;       // per-trade peak drawdown from entry
-    max_runup?: number;          // per-trade peak runup from entry
+    size: number; // SIGNED — positive long, negative short
+    profit?: number; // realized P&L on close; undefined while open
+    commission?: number; // commission charged on this trade
+    max_drawdown?: number; // per-trade peak drawdown from entry
+    max_runup?: number; // per-trade peak runup from entry
     status: 'open' | 'closed';
+    /**
+     * PHYSICAL entry price of this lot, immutable — used to compute
+     * per-lot exit-bracket levels (strategy.exit profit/loss ticks).
+     * Distinct from `entry_price`, which is the LEDGER value and can be
+     * swapped by FIFO entry/exit pairing when a newer lot's bracket fills
+     * before an older lot's (TV ledger convention).
+     */
+    _bracket_entry?: number;
 }
 
 /**
@@ -83,11 +91,11 @@ export interface Trade {
  */
 export interface Order {
     id: string;
-    direction: number;           // +1 long, -1 short
-    qty: number;                 // unsigned
+    direction: number; // +1 long, -1 short
+    qty: number; // unsigned
     type: 'market' | 'limit' | 'stop' | 'stop-limit';
-    limit?: number;              // matches strategy.entry(limit=...)
-    stop?: number;               // matches strategy.entry(stop=...)
+    limit?: number; // matches strategy.entry(limit=...)
+    stop?: number; // matches strategy.entry(stop=...)
     bar: number;
     time: number;
     oca_name?: string;
@@ -108,13 +116,13 @@ export interface Order {
     // limit/stop (price-based TP/SL), trail_price/trail_offset/trail_points
     // (trailing-stop trio), from_entry (which entries to attach to;
     // empty/"" or undefined means "all"), qty / qty_percent (partial close).
-    profit?: number;             // TP in ticks
-    loss?: number;               // SL in ticks
-    trail_price?: number;        // price level at which trailing arms
-    trail_offset?: number;       // offset in ticks the trail rides at
-    trail_points?: number;       // alternative trail-arm: entry_price + N ticks
-    from_entry?: string;         // entry id this exit attaches to ('' = all)
-    qty_percent?: number;        // percent of matching position to close
+    profit?: number; // TP in ticks
+    loss?: number; // SL in ticks
+    trail_price?: number; // price level at which trailing arms
+    trail_offset?: number; // offset in ticks the trail rides at
+    trail_points?: number; // alternative trail-arm: entry_price + N ticks
+    from_entry?: string; // entry id this exit attaches to ('' = all)
+    qty_percent?: number; // percent of matching position to close
     comment_profit?: string;
     comment_loss?: string;
     comment_trailing?: string;
@@ -123,7 +131,7 @@ export interface Order {
     alert_loss?: string;
     alert_trailing?: string;
     disable_alert?: boolean;
-    immediately?: boolean;       // strategy.close/close_all: fill at current bar's close
+    immediately?: boolean; // strategy.close/close_all: fill at current bar's close
     // Internal: tracks the running peak used by trailing-stop logic.
     // For a long: highest high seen since the trail armed; for a short: lowest low.
     trail_peak?: number;
@@ -156,6 +164,16 @@ export interface Order {
     // persistent-pattern exits.
     _isPersistent?: boolean;
     _callsiteId?: string;
+
+    // Internal: snapshot of open trade IDs at the moment strategy.close_all()
+    // or strategy.close(id) was called. TV binds `close_all` / `close(id)` to
+    // the position state at CALL time; if those trades are closed by another
+    // mechanism (e.g. a reversal entry filling on the next bar) before the
+    // close order fires, TV silently drops the close. PineTS achieves the
+    // same by filtering matching open trades against this snapshot at fill
+    // time — if none of the originally-intended trades are still open, the
+    // close order is cancelled.
+    _intended_trade_ids?: string[];
 }
 
 /**
@@ -180,18 +198,25 @@ export interface StrategyState {
     pending_orders: Order[];
 
     // Position info — flattened to match Pine's separate-scalars data model
-    position_size: number;            // SIGNED (matches strategy.position_size)
-    position_avg_price: number;       // NaN when flat (matches Pine semantics)
-    position_entry_name: string;      // entry_id that opened current position
+    position_size: number; // SIGNED (matches strategy.position_size)
+    position_avg_price: number; // NaN when flat (matches Pine semantics)
+    position_entry_name: string; // entry_id that opened current position
 
     // Account info — matches Pine names exactly
     initial_capital: number;
     account_currency: string;
     equity: number;
-    netprofit: number;                // realized only
+    netprofit: number; // realized only
     grossprofit: number;
     grossloss: number;
-    openprofit: number;               // unrealized P&L of open positions
+    openprofit: number; // unrealized P&L of open positions
+    // Compound Annual Growth Rate (%) of strategy equity over the backtest
+    // window. Computed ONCE at end-of-run by finalizeStrategyRun from
+    // initial_capital, netprofit, and the first/last bar open times. Like
+    // Sharpe / Sortino this is a report-only field (NOT a Pine built-in),
+    // read via ctx.strategy.cagr after the run. NaN when the window is
+    // shorter than one day or the figures are non-finite.
+    cagr: number;
 
     // Peaks — used by strategy.max_drawdown / strategy.max_runup
     max_drawdown: number;
@@ -227,16 +252,54 @@ export interface StrategyState {
     max_drawdown_percent_value: number;
     max_runup_percent_value: number;
 
+    // Risk-adjusted performance ratios (TV's "Risk-adjusted performance"
+    // panel). Computed ONCE at end-of-run by finalizeStrategyRun from the
+    // monthly equity curve — NOT Pine built-in variables (TV exposes them
+    // only in the Strategy Tester report / xlsx, not to scripts), so they
+    // live on the state object and are read via ctx.strategy.*.
+    sharpe_ratio: number;
+    sortino_ratio: number;
+
+    // Buy-and-hold benchmark (TV's "Buy & Hold Return" report figures).
+    // Computed ONCE at end-of-run by finalizeStrategyRun. Not Pine built-in
+    // variables (TV exposes them only in the Strategy Tester report), so they
+    // live on the state object and are read via ctx.strategy.* after the run.
+    //
+    // Model: a single long position bought with the ENTIRE initial capital at
+    // the FIRST trade's entry price (slippage already baked into that fill
+    // price) and held open through the last bar — never sold, so commissions
+    // never apply and the exit leg carries no slippage.
+    //   qty                  = initial_capital / first_entry_price
+    //   buy_and_hold_pnl      = qty × (last_close − first_entry_price)
+    //                         = initial_capital × per_gain / 100
+    //   buy_and_hold_per_gain = (last_close − first_entry_price)
+    //                            / first_entry_price × 100
+    //   strategy_outperformance = netprofit − buy_and_hold_pnl
+    // All NaN until the first trade opens (no entry price to anchor on).
+    buy_and_hold_pnl: number;
+    buy_and_hold_per_gain: number;
+    strategy_outperformance: number;
+    // Internal: entry price (slippage-adjusted) of the FIRST trade ever
+    // opened in the run — the anchor for the buy-and-hold benchmark. Latched
+    // once in openTrade and never overwritten.
+    _first_entry_price?: number;
+
+    // Internal: mark-to-market equity at each calendar month's last bar,
+    // and the month key of the most recent bar (rollover detector). Feed
+    // the Sharpe / Sortino computation.
+    _monthly_equity?: number[];
+    _last_month_key?: number;
+
     // Trade-stat counters — updated each time a trade closes
-    wintrades: number;                // count of closed trades with profit > 0
-    losstrades: number;               // count of closed trades with profit < 0
-    eventrades: number;               // count of closed trades with profit === 0
-    wintrades_total_profit: number;   // sum of profits across winning closed trades (for avg)
-    losstrades_total_loss: number;    // sum of |loss| across losing closed trades (for avg)
+    wintrades: number; // count of closed trades with profit > 0
+    losstrades: number; // count of closed trades with profit < 0
+    eventrades: number; // count of closed trades with profit === 0
+    wintrades_total_profit: number; // sum of profits across winning closed trades (for avg)
+    losstrades_total_loss: number; // sum of |loss| across losing closed trades (for avg)
 
     // Position-size peaks (in contracts/units)
-    max_contracts_held_all: number;   // max(|position_size|) seen
-    max_contracts_held_long: number;  // max(position_size) where > 0
+    max_contracts_held_all: number; // max(|position_size|) seen
+    max_contracts_held_long: number; // max(position_size) where > 0
     max_contracts_held_short: number; // max(|position_size|) where < 0
 
     // Pre-trade risk-management filters (configured via strategy.risk.*).

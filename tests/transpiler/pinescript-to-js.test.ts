@@ -83,7 +83,8 @@ plot(result)
 
         expect(jsCode).toContain('?');
         expect(jsCode).toContain(':');
-        expect(jsCode).toContain('$.get(close, 0) > $.get(open, 0)');
+        // `close > open` routes through the na-aware relational helper.
+        expect(jsCode).toContain('$.pine.math.__gt($.get(close, 0), $.get(open, 0))');
     });
 
     it('should transpile scientific notation literals', () => {
@@ -377,11 +378,14 @@ plot(gt ? 1 : 0)
         const result = transpile(code);
         const jsCode = result.toString();
 
+        // Relational operators route through na-aware helpers (na propagation
+        // + 1e-10 tolerance), same as == / != .
         expect(jsCode).toContain('$.pine.math.__eq(');
-        expect(jsCode).toContain('>');
-        expect(jsCode).toContain('<');
-        expect(jsCode).toContain('>=');
-        expect(jsCode).toContain('<=');
+        expect(jsCode).toContain('$.pine.math.__neq(');
+        expect(jsCode).toContain('$.pine.math.__gt(');
+        expect(jsCode).toContain('$.pine.math.__lt(');
+        expect(jsCode).toContain('$.pine.math.__ge(');
+        expect(jsCode).toContain('$.pine.math.__le(');
     });
 
     it('should transpile arithmetic operators', () => {
@@ -1550,8 +1554,8 @@ plot(result1 + result2)
 
         expect(jsCode).toContain('$.let.glb1_result1');
         expect(jsCode).toContain('$.let.glb1_result2');
-        // The transpiler transforms close > open to $.get(close, 0) > $.get(open, 0)
-        expect(jsCode).toMatch(/\$\.get\(close, 0\)\s*>\s*\$\.get\(open, 0\)/);
+        // `close > open` routes through the na-aware relational helper.
+        expect(jsCode).toMatch(/\$\.pine\.math\.__gt\(\$\.get\(close, 0\), \$\.get\(open, 0\)\)/);
     });
 
     it('should not confuse commas in function arguments with statement separators', () => {

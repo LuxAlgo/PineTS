@@ -1,11 +1,138 @@
 # Change Log
 
+## [0.9.27] - 2026-06-29 - Strategy update : buy_and_hold_pnl buy_and_hold_per_gain strategy_outperformance
+
+### Added
+
+- **`context.strategy.buy_and_hold_pnl` / `buy_and_hold_per_gain` / `strategy_outperformance`**: Report-only buy-and-hold benchmark (TV's "Buy & Hold Return"), computed once at end-of-run in `finalizeStrategyRun`. Models a single long position bought with the entire `initial_capital` at the first trade's (slippage-adjusted) entry price and held open through the last bar — affected by `initial_capital` and `slippage`, never by commissions (no exit leg). `strategy_outperformance = netprofit − buy_and_hold_pnl`. `NaN` until the first trade opens. Not Pine built-ins — available on `context.strategy` after the run only.
+- **Docs**: `docs/strategy.md` Buy-and-hold return sections.
+
+---
+
+## [0.9.26] - 2026-06-24 - Strategy update, add context.strategy.cagr
+
+### Added
+
+- **`context.strategy.cagr`**: Report-only Compound Annual Growth Rate (%) of strategy equity over the backtest window, computed once at end-of-run in `finalizeStrategyRun`. Not a Pine built-in — available on `context.strategy` after the run only.
+- **Tests**: `tests/namespaces/strategy/cagr.test.ts` — unit coverage of the CAGR formula and `NaN` edge cases, plus an integration run of the MACD strategy on BINANCE:BTCUSDT 1D (3235 bars) asserting a strategy CAGR of ≈ 2.12%.
+- **Docs**: `docs/strategy.md` gains Compound Annual Growth Rate (CAGR).
+
+---
+
+## [0.9.25] - 2026-06-24 - Hotfix for strategy.entry reversal
+
+### Fixed
+
+- **Pyramiding reversal over-sizing (simultaneous opposite entries)**: Multiple opposite-direction **`strategy.entry`** calls queued on the **same bar** while a pyramided position is open each read the stale pre-fill **`strategy.position_size`** and were each classified as a reversal — so each added the full close-qty (**`|position| + baseQty`**) and bypassed the pyramiding cap. A short **-3** reversed by three long entries reached **+9** in PineTS vs **+3** in TradingView (only the first entry reverses — close 3 + open 1 — and the rest are plain pyramiding adds of qty 1). **`methods/entry.ts`** now **projects the position forward** over same-bar already-queued **market** entry orders (**`Δpos = direction × qty`**, exact even for reversal orders since their qty bakes in the close-qty) before classifying reversal/qty, so only the first opposite entry reverses. The queue-time qty freeze that the **`_base_qty`** margin-call overshoot-split depends on is preserved (a single reversal order is unchanged). (QA "Sim Pyramiding" xlsx, BTCUSDT 1D — **`strategy.position_size`** matches TV across full history; the bug only surfaces when an opposite signal fires while a pyramided position is still open.)
+
+### Added
+
+- **Tests**: **`tests/namespaces/strategy/pyramiding-reversal.test.ts`** — queue-level order sizing (first opposite entry reverses with qty **`|pos|+base`**, subsequent entries are adds of **`base`**), a full fill cycle to position **+3**, and regression guards for three-entries-from-flat and single-reversal (margin-call overshoot intact).
+
+---
+
+## [0.9.24] - 2026-06-22 - `na` Comparison Parity, History on Call Results & Drawing Coordinate Scalars
+
+### Added
+
+- **`math.__lt` / `__le` / `__gt` / `__ge`**: New na-aware relational helpers with TradingView's **1e-10** absolute tie tolerance. Transpiler rewrites `<`, `<=`, `>`, `>=` to these helpers (alongside existing **`__eq` / `__neq`** rewrites).
+- **Tests**: **`tests/namespaces/math/na-comparison.test.ts`** — full Pine-source path for `na` propagation through `==`, `!=`, and relational ops plus float-equality tolerance probes; **`tests/transpiler/history-on-call.test.ts`** — characterization tests for **`EXPR[N]`** on call results (`ta.sma(close, 3)[1]`, reassignment, function return, lookback depth) with regression guards for identifier/var history and tuple destructure.
+
+### Fixed
+
+- **`na` propagation through comparisons**: Any comparison with an **`na`** operand now evaluates to **`na`** ( **`NaN`** ), not boolean **`false`** — matching TradingView (`na(x==x)`, `na(x<1)`, etc.). Observable via **`na()`** / **`nz()`** / arithmetic; branch/ternary outcomes unchanged because **`na`** is falsy. Lockstep with pine-vm-opti fix (commit dcf0531).
+- **Float equality tolerance**: **`__eq` / `__neq`** epsilon tightened **1e-9 → 1e-10** absolute (TV: `1.0+5e-11 == 1.0` → true, `1.0+5e-10 == 1.0` → false).
+- **History operator on call results (`func(...)[N]`)**: Pine **`[]`** on a function-call result is always the history reference, never a tuple index. Transpiler now lowers **`ta.sma(close, 3)[1]`** (and any **`CallExpression[N]`**) to **`$.get($.param(call, …), N)`** — accumulates the per-bar scalar into a series and reads N bars back. Previously the subscript was dropped or left as raw JS indexing on a scalar → **`NaN`**. Return-statement path in **`StatementTransformer`** routes call-result history refs through the same transform.
+- **`chart.point.*` coordinate resolution**: **`ChartHelper`** resolves Series/function args to creation-bar scalars in **`new`**, **`from_index`**, **`from_time`**, and **`now`** — e.g. **`chart.point.from_index(bar_index, close)`** captures the bar's value instead of storing a live series handle.
+- **`line.new()` / `label.new()` coordinate resolution**: **`x1`/`y1`/`x2`/`y2`** and **`x`/`y`** now pass through **`_resolve()`** at creation time, matching **`box.new()`** — bare-series args like **`line.new(x1 = bar_index, …)`** no longer read offset 0 on every bar.
+
+---
+
+## [0.9.23] - 2026-06-16 - Strategy Pyramiding Parity, Indicator Input varId & Sharpe/Sortino
+
+### Added
+
+- **`context.strategy.sharpe_ratio` / `sortino_ratio`**: Report-only risk-adjusted performance ratios computed once at end-of-run in `finalizeStrategyRun`, from the monthly equity curve accumulated across the bar loop. Matching TradingView's documented formula — simple monthly returns anchored at `initial_capital`, population SD / downside deviation, no annualization. Not Pine built-ins — available on `context.strategy` after the run only, not inside the run callback.
+- **`risk_free_rate` strategy declaration option** (default `2`, annual %): Converted to a monthly figure (`rate / 100 / 12`) as the denominator input for Sharpe / Sortino.
+- **`.input` keyed by `varId`**: The primary override key is now the variable each input is assigned to (`length = input.int(…)` → `"length"`). The input's **`title`** still resolves as a secondary alias. Recommended for scripts with empty or duplicated titles — `ind.input['slow']` targets the second `"Length"` input precisely while `ind.input['Length']` aliases the first.
+- **`varId` in `getInputsMeta()` / `IPineInput`**: Every scanned input carries its assigned variable name; `Object.keys(ind.input)` enumerates varIds.
+- **Transpiler `{ __varId }` injection**: `input.*(...)` calls in Pine source get a trailing varId sentinel so the runtime resolves overrides by varId before title.
+- **Color default normalization in input scanner**: `color`-typed inputs report `defval` as a canonical **8-digit RGBA hex `#RRGGBBAA`** (uppercase) regardless of source form — hex literals, named constants (`color.red` → `#F23645FF`), or statically evaluable `color.new()` / `color.rgb()` calls. Gives UI color pickers a single parseable format.
+- **Constant resolution in `scanInputs`**: When an input argument references a top-level constant or simple variable (`const DEF = 14; len = input.int(DEF, …)`), the scanner resolves `defval`, `group`, `inline`, `tooltip`, `options`, etc. to the declared value rather than the bare identifier.
+- **Tests**: `indicator_inputs.test.ts` (varId keying, color normalization, constant resolution), `close-snapshot.test.ts`, `equity-peak-basis.test.ts`, `margin-call.test.ts`, `risk-adjusted.test.ts`, `trailing-parity.test.ts`.
+- **Docs**: `docs/indicator.md` rewritten for varId-first `.input` API; `docs/strategy.md` gains Sharpe / Sortino section and `risk_free_rate` in the options table.
+
+### Fixed
+
+- **`strategy.close_all()` snapshot binding**: TV binds `close_all` / `close(id)` to the position at **call time**. When a reversal entry queued the same bar fills first on the next bar's open — implicitly closing the snapshotted trades — the pending `close_all` is now **cancelled** instead of catching the freshly-opened reversal trade at its entry price for **$0 PnL**. Implemented via `_intended_trade_ids` captured at queue time and re-checked in `processExitOrders`. (QA close_all xlsx, BTCUSDT 1D — trade #13's $5,512.65 divergence.)
+- **`strategy.position_avg_price` ghost position after partial liquidation**: Fractional qty residuals from margin-call partial liquidations left `position_avg_price` alive on a near-zero position. Epsilon-snap to flat (`|newSize| < 1e-9 → 0`) now sets `position_avg_price = NaN` and clears `position_entry_name`, preventing phantom TP/SL exits at the next entry's own price. (QA pyramiding xlsx, 2021-11-09 BTCUSDC.)
+- **Pyramiding tick-based exit brackets per trade**: When `strategy.exit()` matches multiple open trades, TP/SL levels in ticks are now computed from **each trade's own entry price**, not `strategy.position_avg_price`. Verified against QA pyramiding xlsx (BTCUSDC 1D).
+- **Equity peak basis for `max_drawdown`**: Peak latch now uses realized equity **plus open entry commissions** (excludes the commission deduction from the peak side). Trough basis keeps commission deducted. Fixes a degeneracy that hid the bug on constant-commission QA data but diverged on reversal bars with different entry commissions. (QA margin_calls xlsx — matches TV to the cent.)
+- **Margin-call partial liquidation (TV 4× rule)**: Intra-bar adverse movement now liquidates **4× the contracts needed to cover the deficit** (floored), not the entire position — remainder stays open.
+- **Reversal close-leg margin semantics**: When a reversal entry's **open** leg fails the pre-trade margin check, the **close** leg of the reversal still executes.
+- **Deferred close margin call (`applyPendingCloseMarginCall`)**: Phantom re-check scheduled on the previous bar fills at that bar's close, before entries — so a reversal queued at that close overshoots by exactly the deferred quantity, as TV does.
+- **Intra-bar margin checkpoint ordering**: Margin checks now run at the bar **open** (after entries fill) and at the **adverse extreme** — before exit fills on adverse-first bars, after them on favorable-first bars (`isAdverseFirstBar`). Exit processing moved to an explicit `'intrabar'` phase in `processExitOrders`.
+- **Trailing stop adverse-first segment model** (PR #213): On bars where the adverse extreme precedes the favorable move, an already-armed trail now checks segment 1 against the **old** peak's trigger, updates the peak, then checks segment 3 against the **new** trigger — keeping the order pending when both segments miss. Fill price remains the literal trigger level.
+
+### Changed
+
+- **`.input` override precedence**: Runtime resolves **varId before title**. A varId-keyed `.input['len'] = 3` write wins over a constructor-map `{ Length: 21 }` title override. Both keys coexist in `ctx.inputs`; the script picks up the varId one.
+- **Bar-loop strategy processing order**: Entries → deferred close margin call → open checkpoint → (adverse-first extreme checkpoint) → intrabar exits → (favorable-first extreme checkpoint) → `finalizeStrategyBar` peak latch → end-of-run `finalizeStrategyRun` for Sharpe / Sortino.
+
+---
+
+## [0.9.22] - 2026-06-11 - Strategy Hotfix for Close-on-Flat and Margin calls
+
+This is a hotfix release for v0.9.21 which did not include the right fixes
+
+## [0.9.21] - 2026-06-10 - Strategy Broker Emulator — Close-on-Flat, 100% Margin, Trailing Stop & v6 Declaration Parsing
+
+### Fixed
+
+- **`strategy.close_all()` and `strategy.close(id)` no-op when nothing to close at queue time**: Both methods previously queued an exit order unconditionally. On the next bar the queued order survived (via `from_entry = ''` for `close_all` or matching `from_entry = id` for `close`) and caught a fresh entry at its entry price, closing it for **$0 PnL**. Hits common patterns like `if exit_signal: strategy.close_all("close")` — the exit signal can become true on a bar where the book is already flat (after a prior `close_all` fired), queuing a stale order that catches the next reversal entry. Both methods now early-return when `opentrades.length === 0` (close_all) or no matching `entry_id` exists (close).
+- **Pre-trade margin rejection and `processMarginCall` now run for ALL `margin_long` / `margin_short` percentages, not only `< 100`**: Both were previously gated on `marginPct < 100` with the comment "No leverage → no margin call" — incorrect, since the broker still requires the trader to post full notional as collateral at 100% margin. Pre-trade check in `processStrategyOrders` and intra-bar adverse-extreme liquidation in `processMarginCall` now apply unconditionally. The underlying math (`requiredMargin = qty × price × pointvalue × marginPct/100`) was already correct — only the guards needed removal.
+- **`strategy.exit(trail_points=N, trail_offset=M)` accumulates state across bars and fires per the intra-bar segment model**: Two coordinated fixes. (1) In `exit.ts`, `trail_armed` and `trail_peak` now carry over across same-id-replace — they're engine-accumulated state (running high for a long / running low for a short), not user-supplied parameters, and were previously reset to `false` / `NaN` every bar so the trail never accumulated past a single bar's range. (2) In `processExitOrders`, `checkTrail` replaces eager peak update + gap-fill at open with an intra-bar segment model. Four cases handled: favorable-first already-armed (update peak → check trigger), adverse-first already-armed (segment 1 with OLD peak's trigger → update → segment 3 close-vs-NEW-trigger), favorable-first arm-this-bar (peak set at arming → check phase-2 descent), adverse-first arm-this-bar (peak set after the adverse extreme → only phase-3 close-vs-trigger). Fill is the **literal trigger price** in all cases — gap-fill at bar open removed for trail because the open precedes any peak update relevant to this trade.
+- **`parseStrategyOptions` handles Pine v6 `(title, shorttitle, opts)` signature**: Previously only recognized `strategy("title")` and `strategy("title", { opts })`. When the script used `strategy("title", "shorttitle", overlay=true, commission_type=..., commission_value=...)` — a common v6 pattern — the second arg was a string (shorttitle), so the parser returned just `{ title }` and silently dropped the trailing named-args object. Result: `commission_type` / `commission_value` / `overlay` and every other named arg were ignored. New implementation walks all positional string args (capturing `title` then `shorttitle`) and merges any trailing object as named args.
+
+### Notes for users
+
+- **`strategy.netprofit` during open trades**: Entry commission is deducted from `netprofit` at fill time (matching real-broker cash flow). Final aggregate values are unaffected; intermediate per-bar values during an open trade will differ from references that defer commission to close time by the open trade's entry commission. `strategy.opentrades.commission(i)` exposes the open trade's entry commission for inspection.
+- **`strategy.max_drawdown` is the intrabar variant**: Uses bar H/L excursions of surviving positions in addition to realized equity peaks. Reference platforms may expose two drawdown fields (intrabar and close-to-close); only the intrabar is computed here, and it's the conservative number.
+
+---
+
+## [0.9.20] - 2026-06-08 - Indicator Class as SSOT — `.input` / `.prop` Runtime Overrides
+
+### Added
+
+- **`Indicator` becomes the single source of truth for every per-script artifact**: refactored from a 12-line tuple `{source, inputs}` into the owner of the transpiled function, AST, parsed input schema, parsed declaration-prop schema, viewport-detection flag, and LTF slices. All PineTS entry points (**`run`**, **`stream`**, **`update`**) now route through **`Indicator.from(arg).prepare()`** so raw strings and raw functions get auto-wrapped in a throwaway Indicator. **`prepare()`** is lazy and cached — re-using the same Indicator across multiple **`pine.run()`** calls compiles the script **once**.
+- **`Indicator.input` — title-keyed Proxy for input overrides**: read or mutate `input.*` values per key (**`ind.input["Length"] = 50`**). The container itself is frozen (**`ind.input = {...}`** throws); per-key writes validate against the input's schema (type / options / minval / maxval) and throw tailored messages on violations or unknown titles. Constructor **`inputs`** map kept for back-compat; **`.input`** writes layer on top.
+- **`Indicator.getInputsMeta(): IPineInput[]`**: parsed input schema for UI builders. Captures **`type`**, **`defval`**, **`title`**, **`tooltip`**, **`group`**, **`inline`**, **`display`**, **`active`**, **`confirm`**, **`options`**, **`minval`**, **`maxval`**, **`step`** for every **`input.*(...)`** declaration in the source.
+- **`Indicator.prop` — name-keyed Proxy for `indicator()` / `strategy()` declaration overrides**: read or mutate declaration arguments (**`ind.prop["initial_capital"] = 75000`**, **`ind.prop["pyramiding"] = 5`**) before **`pine.run()`**. Same frozen-container + per-key validation semantics as **`.input`**. Excludes **`title`** / **`shorttitle`** from writes (still present in the meta with **`mutable: false`** so UIs can render them).
+- **Source-code defaults seeded into `.prop`**: when reading **`ind.prop["X"]`**, the value is layered as **spec default ← source code value ← user override**. Pine source like **`strategy("X", initial_capital=50000, currency=currency.EUR)`** seeds **`ind.prop["initial_capital"]` → 50000** and **`ind.prop["currency"] → "EUR"`** before any user write. Enum constants (**`currency.EUR`**, **`strategy.percent_of_equity`**, **`strategy.commission.cash_per_order`**) resolve via the rightmost-identifier rule to match what TradingView's runtime sees.
+- **`Indicator.getPropsMeta(): IPineProp[]`** & **`Indicator.getDeclarationType()`**: schema introspection filtered to props applicable to the detected script type (**`'indicator'`** vs **`'strategy'`**). Type detection falls back to **`'indicator'`** if no declaration call is found.
+- **Top-level exports `INDICATOR_PROPS` / `STRATEGY_PROPS` / `propsForDeclaration(type)`**: complete prop schemas (17 / 33 entries respectively) for UI code that needs the full list independent of any Indicator instance. Each enum-typed entry has a one-line comment in [**`src/Indicator/propsSchema.ts`**](src/Indicator/propsSchema.ts) enumerating accepted values and pointing to the corresponding exported Pine enum in **`src/namespaces/Types.ts`**.
+- **`scanDeclaration.ts`**: detects **`indicator()`** / **`strategy()`** in both Pine source (via existing **`pineToJS`** AST) and JS-function source (via **`acorn.parse`**). Decodes positional + named arguments and resolves namespace constants.
+- **`keyedProxy.ts`**: shared backend for **`.input`** and **`.prop`** Proxies — single source of validation + custom error messages. Replaces the previous duplicate Proxy code in **`inputProxy.ts`**.
+- **`Context._propOverrides`**: name-keyed map of user prop overrides populated in **`_initializeContext`** from **`ind.getRuntimePropOverrides()`**. Read by **`Core.indicator()`** and **`initializeStrategy()`** to merge on top of source-code declaration args (**`{ ...defaults, ...sourceArgs, ...userOverrides }`**).
+- **`docs/indicator.md`** (new): dedicated page covering Quickstart, Constructor, **`Indicator.from()`**, visible-range detection, the full **`.input`** / **`getInputsMeta()`** surface, the full **`.prop`** / **`getPropsMeta()`** surface (incl. source-default seeding, enum resolution, validation), reuse across runs, JS-function source caveats, and backward compatibility with the constructor **`inputs`** map. Every code example verified end-to-end against the live bundle before inclusion.
+- **Tests**: **`tests/Indicator/Indicator.test.ts`** (21 cases — input surface) and **`tests/Indicator/Indicator.props.test.ts`** (37 cases — prop surface including declaration detection, source-default seeding, indicator-vs-strategy cross-validation, enum/numeric bounds, end-to-end runtime override propagation).
+
+### Changed
+
+- **PineTS internals simplified**: **`_transpileCode`** and **`_detectViewportUsage`** moved off the **`PineTS`** class onto **`Indicator`** (where they conceptually belong — they're properties of the script, not the engine). **`_runComplete`** / **`_runPaginated`** now take an **`Indicator`** instance and call **`prepare()`** from inside their async bodies so transpile errors surface as Promise rejections (preserving the **`tests/transpiler/error-handling.test.ts`** contract).
+- **`docs/initialization-and-usage.md` — "Running with Runtime Inputs"**: rewritten to show both the new per-key **`ind.input["Length"] = 50`** form (preferred) and the legacy constructor map (still supported). Cross-links to the new [**Indicator**](docs/indicator.md) page for the full surface.
+- **`docs/strategy.md`**: Indicator-wrapper example now links to the dedicated [**Indicator**](docs/indicator.md) page in addition to **`initialization-and-usage.md`**.
+- **`docs/index.md`** + nav: added an Indicator entry at slot 4; bumped Alerts / Pagination / Data Providers / Syntax Guide / Strategy / Language Coverage / API Coverage down one slot each. Resolves two prior nav_order collisions (Alerts and Pagination were both at 4).
+
+---
+
 ## [0.9.19] - 2026-06-05 - Strategy Broker Emulator — Margin Calls, Drawdown/Runup & Exit Cadence
 
 ### Added
 
 - **Margin-call liquidation (`processMarginCall`)**: After entries and user-defined exits each bar, the engine checks whether intra-bar adverse movement (low for longs, high for shorts) would push equity below required maintenance margin when **`margin_long` / `margin_short` < 100**. If so, all open positions are force-liquidated at the bar's adverse extreme with **`exit_id` / `exit_comment` = `"Margin call"`**. Skipped when no leverage is configured. Helpers **`computeRequiredMargin`**, **`computeEquityAtPrice`**, **`computeHeldMargin`** model collateral in account currency via **`syminfo.pointvalue`**.
-- **Pre-trade margin rejection**: Entry orders that would require more margin than available equity at fill time are silently dropped (TV broker emulator — verified against margin QA oracles).
+- **Pre-trade margin rejection**: Entry orders that would require more margin than available equity at fill time are silently dropped
 - **`finalizeStrategyBar()`**: End-of-bar hook latches **`strategy.max_drawdown`** / **`strategy.max_runup`** once, after all fills settle, so TP/SL closes contribute realized P&L instead of phantom intra-bar excursions against raw H/L.
 - **`roundToMintick()`**: Stop/limit/trail prices on **`strategy.entry`** and **`strategy.exit`** snap to **`syminfo.mintick`** away from the reference close (broker placement convention).
 - **`CALLSITE_ID_NAMESPACES`**: Centralized transpiler list for trailing **`{ __callsiteId }`** injection; **`strategy.exit`** added for per-call-site cadence detection (persistent vs ephemeral exit-parameter capture). Documented known unification gaps with **`plot`**, **`ta.*`**, and **`alert`** patterns in **`settings.ts`**.

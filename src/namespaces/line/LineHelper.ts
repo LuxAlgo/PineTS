@@ -193,10 +193,14 @@ export class LineHelper {
                 y2 = NaN;
             }
         } else {
-            x1 = parsed.x1;
-            y1 = parsed.y1;
-            x2 = parsed.x2;
-            y2 = parsed.y2;
+            // Resolve Series/function coordinate args to scalars at creation —
+            // mirrors box.new() (BoxHelper). Without this a bare-series arg like
+            // `line.new(x1 = bar_index, …)` stores the live series object, losing
+            // the creation-bar value (offset is always 0 → reads the last bar).
+            x1 = this._resolve(parsed.x1);
+            y1 = this._resolve(parsed.y1);
+            x2 = this._resolve(parsed.x2);
+            y2 = this._resolve(parsed.y2);
         }
 
         return this._createLine(
