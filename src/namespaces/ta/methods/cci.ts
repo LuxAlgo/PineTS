@@ -5,6 +5,7 @@ import { Series } from '../../../Series';
 /**
  * Commodity Channel Index (CCI)
  *
+ * CCI measures the deviation of the price from its average price.
  * It's used to identify cyclical trends and overbought/oversold conditions.
  *
  * Formula:
