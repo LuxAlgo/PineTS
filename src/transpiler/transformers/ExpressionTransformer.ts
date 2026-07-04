@@ -387,6 +387,44 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
         return;
     }
 
+    // Pine history-reference operator `[]` on a CALL result, e.g.
+    // `ta.sma(close, 3)[1]` (any function call, not only ta.*). A call returns
+    // a scalar each bar, so `[N]` here is never a tuple/array index — in Pine
+    // `[]` is always the history operator. Accumulate the per-bar result into a
+    // `$.param` series and read N bars back with `$.get`, which yields a SCALAR
+    // so it composes everywhere (arithmetic, $.init, return, argument). Without
+    // this the subscript was either dropped (folded into $.init's ignored
+    // lookbehind) or left as a raw JS index on a scalar (→ NaN).
+    if (
+        memberNode.computed &&
+        memberNode.object &&
+        memberNode.object.type === 'CallExpression' &&
+        !memberNode._historyTransformed
+    ) {
+        if (!memberNode.object._transformed) {
+            transformCallExpression(memberNode.object, scopeManager);
+        }
+        const paramId = scopeManager.generateParamId();
+        const paramCall = {
+            type: 'CallExpression',
+            callee: ASTFactory.createMemberExpression(
+                ASTFactory.createContextIdentifier(),
+                ASTFactory.createIdentifier('param'),
+            ),
+            arguments: [memberNode.object, UNDEFINED_ARG, makeParamNameArg(scopeManager, paramId)],
+            _transformed: true,
+            _isParamCall: true,
+        };
+        const getCall: any = ASTFactory.createGetCall(paramCall, memberNode.property);
+        getCall._transformed = true;
+        getCall._historyTransformed = true;
+        Object.assign(memberNode, getCall);
+        delete memberNode.object;
+        delete memberNode.property;
+        delete memberNode.computed;
+        return;
+    }
+
     // Check if this is a direct namespace method access without parentheses (e.g., ta.tr, math.pi)
     // Only apply to known Pine Script namespaces: ta, math, request, array, input
     // If so, convert it to a call expression (e.g., ta.tr(), math.pi())
@@ -1445,6 +1483,25 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
                     type: 'Property',
                     key: { type: 'Identifier', name: '__callsiteId' },
                     value: callsiteId,
+                    kind: 'init',
+                    computed: false,
+                    shorthand: false,
+                }],
+            });
+        }
+
+        // Inject a trailing `{ __varId }` sentinel on input.* calls that
+        // initialize a variable (tagged by transformVariableDeclaration). The
+        // runtime (parseInputOptions) pops it so `.input[varId]` overrides can
+        // target this exact input — the primary override key, robust to empty
+        // or duplicated titles. Added AFTER arg-wrapping so it stays a literal.
+        if (namespace === 'input' && node._varId !== undefined) {
+            node.arguments.push({
+                type: 'ObjectExpression',
+                properties: [{
+                    type: 'Property',
+                    key: { type: 'Identifier', name: '__varId' },
+                    value: { type: 'Literal', value: node._varId },
                     kind: 'init',
                     computed: false,
                     shorthand: false,

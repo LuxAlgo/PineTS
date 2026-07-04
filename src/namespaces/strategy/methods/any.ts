@@ -15,8 +15,9 @@ export function any(context: any) {
         if (!context.strategy) {
             initializeStrategy(context, options);
         } else {
-            // Update config if called again (though this shouldn't happen normally)
-            context.strategy.config = { ...context.strategy.config, ...options };
+            // Update config if called again (though this shouldn't happen normally).
+            // User .prop overrides re-apply on top so the same layer order holds across calls.
+            context.strategy.config = { ...context.strategy.config, ...options, ...(context._propOverrides ?? {}) };
         }
 
         return context.strategy.config;

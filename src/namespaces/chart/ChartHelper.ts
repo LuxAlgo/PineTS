@@ -14,15 +14,24 @@ export class ChartHelper {
 
     constructor(private context: any) {
         const ctx = this.context;
+        // Resolve Series/function args to their current scalar value, so a point
+        // built from a bare series (e.g. chart.point.from_index(bar_index, close))
+        // captures the creation-bar value instead of storing the live series.
+        const res = (v: any): any => {
+            if (v === null || v === undefined) return v;
+            if (typeof v === 'object' && Array.isArray(v.data) && typeof v.get === 'function') return v.get(0);
+            if (typeof v === 'function') return v();
+            return v;
+        };
         this.point = {
             new(time?: number, index?: number, price?: number): ChartPointObject {
-                return new ChartPointObject(time, index, price ?? NaN);
+                return new ChartPointObject(res(time), res(index), res(price) ?? NaN);
             },
             from_index(index: number, price: number): ChartPointObject {
-                return new ChartPointObject(undefined, index, price);
+                return new ChartPointObject(undefined, res(index), res(price));
             },
             from_time(time: number, price: number): ChartPointObject {
-                return new ChartPointObject(time, undefined, price);
+                return new ChartPointObject(res(time), undefined, res(price));
             },
             copy(point: ChartPointObject): ChartPointObject {
                 return point.copy();
@@ -30,7 +39,7 @@ export class ChartHelper {
             now(price: number): ChartPointObject {
                 const idx = ctx.idx;
                 const time = ctx.marketData[idx]?.openTime;
-                return new ChartPointObject(time, idx, price);
+                return new ChartPointObject(time, idx, res(price));
             },
         };
     }

@@ -39,6 +39,9 @@ export function createLoopGuardNodes(guardName: string): { counterDecl: any; gua
         test: {
             type: 'BinaryExpression',
             operator: '>',
+            // Generated loop-counter guard: operands are never `na`, so keep it
+            // a native `>` (transformEqualityChecks skips `_skipCompare` nodes).
+            _skipCompare: true,
             left: {
                 type: 'UpdateExpression',
                 operator: '++',
@@ -250,6 +253,19 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
     if (varNode._skipTransformation) return;
 
     varNode.declarations.forEach((decl: any) => {
+        // Tag `name = input.*(…)` / `name = input(…)` with the assigned
+        // variable name, BEFORE any rename, so transformCallExpression can
+        // inject it as a `{ __varId }` sentinel on the input call. This is the
+        // runtime handle that lets `.input[varId]` overrides target a specific
+        // input even when titles are empty or duplicated.
+        if (decl.init?.type === 'CallExpression' && decl.id?.type === 'Identifier') {
+            const c = decl.init.callee;
+            const isInputCall =
+                (c?.type === 'MemberExpression' && c.object?.type === 'Identifier' && c.object.name === 'input') ||
+                (c?.type === 'Identifier' && c.name === 'input');
+            if (isInputCall) decl.init._varId = decl.id.name;
+        }
+
         // Rewrite NAMESPACES_LIKE entries (na, time, etc.) to .__value in variable initializers
         if (decl.init && decl.init.type === 'Identifier' && NAMESPACES_LIKE.includes(decl.init.name) && scopeManager.isContextBound(decl.init.name)) {
             const originalName = decl.init.name;
@@ -1277,8 +1293,15 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                 // For context-bound identifiers, add [0] array access if not already an array access
                 node.argument = ASTFactory.createArrayAccess(node.argument, 0);
             } else if (node.argument.type === 'MemberExpression') {
+                // `func(...)[N]` as a direct return value: route through
+                // transformMemberExpression so the call-result history ref is
+                // lowered to `$.get($.param(...), N)` (a scalar). Otherwise the
+                // return path leaves a raw subscript on a scalar (→ NaN).
+                if (node.argument.computed && node.argument.object.type === 'CallExpression') {
+                    transformMemberExpression(node.argument, '', scopeManager);
+                }
                 // For member expressions, check if the object is context-bound
-                if (
+                else if (
                     node.argument.object.type === 'Identifier' &&
                     scopeManager.isContextBound(node.argument.object.name) &&
                     !scopeManager.isRootParam(node.argument.object.name)
