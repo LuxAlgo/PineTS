@@ -504,4 +504,31 @@ plot(res, "plot")
         console.log('STDEV plotdata_str\n', plotdata_str);
         expect(plotdata_str.trim()).toEqual(expected_plot.trim());
     });
+
+    it('RSI - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const rsiMethod = (await import('../../../src/namespaces/ta/methods/rsi')).rsi(context);
+        
+        context.idx = 3;
+        context.data.close = new SeriesClass([10, 12, 11, 14]);
+        
+        let res1 = rsiMethod(context.data.close, 3, 'rsi_rollback_test');
+        expect(context.precision(res1)).toBe(context.precision(83.33333333333333));
+        
+        context.data.close.set(0, 8);
+        let res2 = rsiMethod(context.data.close, 3, 'rsi_rollback_test');
+        expect(context.precision(res2)).toBe(context.precision(33.33333333333333));
+        
+        context.idx = 5;
+        // set back close[3] = 14, close[4] = 15, close[5] = 17
+        context.data.close = new SeriesClass([10, 12, 11, 14, 15, 17]);
+        let res3 = rsiMethod(context.data.close, 3, 'rsi_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(91.66666666666667));
+    });
 });
