@@ -2,6 +2,16 @@
 
 import { Series } from '../../../Series';
 
+/**
+ * Weighted Moving Average (WMA)
+ *
+ * Formula:
+ * - WMA = Sum(source * weight, length) / Sum(weights, length)
+ *
+ * @param source - Source series
+ * @param period - Period of WMA
+ * @returns WMA value
+ */
 export function wma(context: any) {
     return (source: any, _period: any, _callId?: string) => {
         const period = Series.from(_period).get(0);
