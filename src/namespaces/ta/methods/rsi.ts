@@ -2,6 +2,17 @@
 
 import { Series } from '../../../Series';
 
+/**
+ * Relative Strength Index (RSI)
+ *
+ * Formula:
+ * - RSI = 100 - 100 / (1 + RS)
+ * - RS = Average Gain / Average Loss
+ *
+ * @param source - Source series
+ * @param period - Period of RSI
+ * @returns RSI value
+ */
 export function rsi(context: any) {
     return (source: any, _period: any, _callId?: string) => {
         const period = Series.from(_period).get(0);
