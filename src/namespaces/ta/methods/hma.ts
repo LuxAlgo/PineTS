@@ -2,6 +2,16 @@
 
 import { Series } from '../../../Series';
 
+/**
+ * Hull Moving Average (HMA)
+ *
+ * Formula:
+ * - HMA = WMA(2*WMA(n/2) - WMA(n), sqrt(n))
+ *
+ * @param source - Source series
+ * @param period - Period of HMA
+ * @returns HMA value
+ */
 export function hma(context: any) {
     return (source: any, _period: any, _callId?: string) => {
         const period = Series.from(_period).get(0);

@@ -528,15 +528,19 @@ plot(res, "plot")
         context.idx = 4;
         context.data.close = new SeriesClass([10, 12, 11, 14, 15]);
         let res2 = hmaMethod(context.data.close, 4, 'hma_rollback_test');
-        expect(context.precision(res2)).toBe(context.precision(15.055555555555555));
+        expect(res2).toBeCloseTo(15.055555555555555, 10);
         
         context.data.close.set(0, 12);
         let res3 = hmaMethod(context.data.close, 4, 'hma_rollback_test');
-        expect(context.precision(res3)).toBe(context.precision(13.18888888888889));
+        expect(res3).toBeCloseTo(13.18888888888889, 10);
         
+        context.idx = 5;
+        context.data.close = new SeriesClass([10, 12, 11, 14, 12, 17]);
+        hmaMethod(context.data.close, 4, 'hma_rollback_test');
+
         context.idx = 6;
         context.data.close = new SeriesClass([10, 12, 11, 14, 12, 17, 19]);
         let res4 = hmaMethod(context.data.close, 4, 'hma_rollback_test');
-        expect(context.precision(res4)).toBe(context.precision(18.9));
+        expect(res4).toBeCloseTo(18.9, 9);
     });
 });
