@@ -2,6 +2,17 @@
 
 import { Series } from '../../../Series';
 
+/**
+ * Exponential Moving Average (EMA)
+ *
+ * Formula:
+ * - EMA = source * alpha + prevEMA * (1 - alpha)
+ * - alpha = 2 / (period + 1)
+ *
+ * @param source - Source series
+ * @param period - Period of EMA
+ * @returns EMA value
+ */
 export function ema(context: any) {
     return (source: any, _period: any, _callId?: string) => {
         const period = Series.from(_period).get(0);
