@@ -2,6 +2,16 @@
 
 import { Series } from '../../../Series';
 
+/**
+ * Average True Range (ATR)
+ *
+ * Formula:
+ * - ATR = (prevATR * (period - 1) + TR) / period
+ * - TR = max(high - low, |high - prevClose|, |low - prevClose|)
+ *
+ * @param length - Lookback period for ATR
+ * @returns ATR value series
+ */
 export function atr(context: any): //
 //PineScript signature
 (length: number) => Series {
