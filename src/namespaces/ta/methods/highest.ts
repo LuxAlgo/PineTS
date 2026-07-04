@@ -4,6 +4,8 @@ import { Series } from '../../../Series';
 
 export function highest(context: any) {
     return (source: any, _length: any, _callId?: string) => {
+        // if the _length is of type string, this is probably the _callId
+        // ==> this is a weak approach to determine syntaxes : ta.highest(length) vs ta.highest(source, length)
         if (typeof _length === 'string' && _callId === undefined) {
             _callId = _length;
             _length = source;
