@@ -504,4 +504,35 @@ plot(res, "plot")
         console.log('STDEV plotdata_str\n', plotdata_str);
         expect(plotdata_str.trim()).toEqual(expected_plot.trim());
     });
+
+    it('ATR - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const atrMethod = (await import('../../../src/namespaces/ta/methods/atr')).atr(context) as any;
+        
+        context.idx = 2;
+        context.data.high = new SeriesClass([10, 15, 12]);
+        context.data.low = new SeriesClass([8, 11, 9]);
+        context.data.close = new SeriesClass([9, 12, 10]);
+        
+        let res1 = atrMethod(2, 'atr_rollback_test');
+        expect(context.precision(res1)).toBe(context.precision(3.5));
+        
+        context.data.high.set(0, 16);
+        let res2 = atrMethod(2, 'atr_rollback_test');
+        expect(context.precision(res2)).toBe(context.precision(5.5));
+        
+        context.idx = 4;
+        context.data.high = new SeriesClass([10, 15, 12, 14, 18]);
+        context.data.low = new SeriesClass([8, 11, 9, 10, 13]);
+        context.data.close = new SeriesClass([9, 12, 11, 12, 15]);
+        
+        let res3 = atrMethod(2, 'atr_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(4.875));
+    });
 });
