@@ -504,4 +504,36 @@ plot(res, "plot")
         console.log('STDEV plotdata_str\n', plotdata_str);
         expect(plotdata_str.trim()).toEqual(expected_plot.trim());
     });
+
+    it('STDEV - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const stdevMethod = (await import('../../../src/namespaces/ta/methods/stdev')).stdev(context);
+        
+        context.idx = 3;
+        context.data.close = new SeriesClass([4, 12, 6, 7]);
+        
+        // (12 - 8.333)^2 + (6 - 8.333)^2 + (7 - 8.333)^2 = 20.66666667
+        // Math.sqrt(20.66666667 / 3) = 2.6246692913042456
+        let res1 = stdevMethod(context.data.close, 3, true, 'stdev_rollback_test');
+        expect(context.precision(res1)).toBe(context.precision(2.6246692913042456));
+        
+        context.data.close.set(0, 2);
+        // (12 - 6.6667)^2 + (6 - 6.6667)^2 + (2 - 6.6667)^2 = 50.66666667
+        // Math.sqrt(50.66666667 / 3) = 4.1096093353042
+        let res2 = stdevMethod(context.data.close, 3, true, 'stdev_rollback_test');
+        expect(context.precision(res2)).toBe(context.precision(4.1096093353042));
+        
+        context.idx = 4;
+        context.data.close = new SeriesClass([4, 12, 6, 2, 15]);
+        // (6 - 7.6667)^2 + (2 - 7.6667)^2 + (15 - 7.6667)^2 = 88.66666667
+        // Math.sqrt(88.66666667 / 3) = 5.4365021434042
+        let res3 = stdevMethod(context.data.close, 3, true, 'stdev_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(5.4365021434042));
+    });
 });
