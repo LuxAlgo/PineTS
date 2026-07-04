@@ -56,18 +56,39 @@ export function sma(context: any) {
         const currentValue = Series.from(source).get(0);
         const value = currentValue === undefined || currentValue === null ? NaN : Number(currentValue);
 
-        if (Number.isFinite(value)) {
-            if (state.count < period) {
-                state.values[state.count] = value;
-                state.count += 1;
-            } else {
-                state.sum -= state.values[state.head];
-                state.values[state.head] = value;
-                state.head += 1;
-                if (state.head === period) state.head = 0;
-            }
-            state.sum += value;
+        if (state.count < period) {
+            state.values[state.count] = value;
+            state.count += 1;
+        } else {
+            state.values[state.head] = value;
+            state.head += 1;
+            if (state.head === period) state.head = 0;
         }
+
+        let sum = 0;
+        let hasNaN = false;
+        if (state.count < period) {
+            for (let i = state.count - 1; i >= 0; i--) {
+                const v = state.values[i];
+                if (v === undefined || v === null || Number.isNaN(v)) {
+                    hasNaN = true;
+                    break;
+                }
+                sum += v;
+            }
+        } else {
+            const lastInserted = (state.head - 1 + period) % period;
+            for (let j = 0; j < period; j++) {
+                const idx = (lastInserted - j + period) % period;
+                const v = state.values[idx];
+                if (v === undefined || v === null || Number.isNaN(v)) {
+                    hasNaN = true;
+                    break;
+                }
+                sum += v;
+            }
+        }
+        state.sum = hasNaN ? NaN : sum;
 
         state.currentResult = state.count < period
             ? NaN
