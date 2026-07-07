@@ -608,8 +608,11 @@ plot(x)
         const pine2js = pineToJS(code);
         expect(pine2js.success).toBe(true);
         expect(pine2js.code).toBeDefined();
-        // Should have nested negation (parser normalizes 5.0 → 5)
-        expect(pine2js.code).toContain('-(-5)');
+        // Should have nested negation. The float literal `5.0` is now preserved
+        // (RC2b: float-ness must survive codegen so int/float division is
+        // distinguishable), so the output is `-(-5.0)` — previously the parser
+        // normalized it to `-(-5)`, losing the float type.
+        expect(pine2js.code).toContain('-(-5.0)');
     });
 
     it('should parse unary negation on variable', () => {

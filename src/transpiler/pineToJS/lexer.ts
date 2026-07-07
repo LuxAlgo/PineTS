@@ -370,7 +370,9 @@ export class Lexer {
             }
         }
 
-        this.addToken(TokenType.NUMBER, parseFloat(value));
+        // Preserve the raw literal text so float literals keep their decimal
+        // (`2.0` vs `2`, `.5`) through codegen — required for int/float inference.
+        this.addToken(TokenType.NUMBER, parseFloat(value), null, value);
     }
 
     // Read identifier or keyword
@@ -508,8 +510,8 @@ export class Lexer {
         return this.indentStack[this.indentStack.length - 1];
     }
 
-    addToken(type, value, indent = null) {
-        const token = new Token(type, value, this.line, this.column, indent !== null ? indent : this.getCurrentIndent());
+    addToken(type, value, indent = null, raw = null) {
+        const token = new Token(type, value, this.line, this.column, indent !== null ? indent : this.getCurrentIndent(), raw);
         this.tokens.push(token);
     }
 }

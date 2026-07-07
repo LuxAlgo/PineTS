@@ -45,7 +45,11 @@ export class LabelHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
-        const allPlotData = this._labels.filter(lbl => !lbl._deleted).map(lbl => lbl.toPlotData());
+        // Compact out deleted labels — keeps the backing array bounded to the
+        // active set (RC3). Transparent to output; rollbackFromBar filters by
+        // _createdAtBar, orthogonal to _deleted.
+        this._labels = this._labels.filter(lbl => !lbl._deleted);
+        const allPlotData = this._labels.map(lbl => lbl.toPlotData());
 
         // Split force_overlay objects into a separate overlay plot (renders on main chart pane)
         const regular = allPlotData.filter((l: any) => !l.force_overlay);
@@ -128,7 +132,6 @@ export class LabelHelper {
         lbl._createdAtBar = this.context.idx;
         this._labels.push(lbl);
         this._enforceMaxCount();
-        this.syncToPlot();
         return lbl;
     }
 
@@ -325,7 +328,6 @@ export class LabelHelper {
         lbl._createdAtBar = this.context.idx;
         this._labels.push(lbl);
         this._enforceMaxCount();
-        this.syncToPlot();
         return lbl;
     }
 
