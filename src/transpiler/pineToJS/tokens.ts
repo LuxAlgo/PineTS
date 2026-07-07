@@ -73,7 +73,7 @@ export const Keywords = new Set([
 export const MultiCharOperators = ['==', '!=', '<=', '>=', ':=', '+=', '-=', '*=', '/=', '%=', '=>', '//', 'and', 'or', 'not'];
 
 export class Token {
-    constructor(public type: string, public value: any, public line: number, public column: number, public indent = 0) {}
+    constructor(public type: string, public value: any, public line: number, public column: number, public indent = 0, public raw: string = null) {}
 
     // toString() {
     //     return `Token(${this.type}, ${JSON.stringify(this.value)}, ${this.line}:${this.column}, indent=${this.indent})`;

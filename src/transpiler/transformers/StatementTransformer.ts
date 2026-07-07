@@ -1154,16 +1154,13 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                         return ASTFactory.createGetCall(element, 0);
                     }
 
-                    // If it's already a member expression (array access), leave it as is
-                    if (
-                        element.computed &&
-                        element.object.type === 'Identifier' &&
-                        scopeManager.isContextBound(element.object.name) &&
-                        !scopeManager.isRootParam(element.object.name)
-                    ) {
-                        return element;
-                    }
-                    // Otherwise, transform it normally
+                    // Context-bound computed subscripts (`bar_index[len]`,
+                    // `close[n]`, ...) in a return tuple must be lowered to
+                    // `$.get(series, idx)` like everywhere else. This block used
+                    // to early-return them verbatim, leaving a raw JS subscript on
+                    // a Series → undefined at runtime (RC1). Routing through
+                    // transformMemberExpression also gives NAMESPACES_LIKE members
+                    // (`time[1]`, `na[0]`) their `.__value` unwrap.
                     transformMemberExpression(element, '', scopeManager);
                     return element;
                 } else if (
@@ -1256,10 +1253,21 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
         } else if (node.argument.type === 'MemberExpression') {
             // Handle non-context-bound member expressions (e.g. return Signal.Buy)
             // where the object is a user-defined variable (enum, struct, etc.)
+            //
+            // EXCEPTION: a computed subscript on a function-parameter series
+            // (`return src[len]`, RC1 Site 3) must NOT be pre-processed here.
+            // transformIdentifier would wrap `src` into `$.param(...)`, turning the
+            // object into a CallExpression, which then routes to the `func()[N]`
+            // fn-branch that leaves the variable offset raw → NaN. Leaving it as a
+            // bare `src[len]` lets the fn-branch below route it through
+            // transformMemberExpression (same path as `close[n]`), which lowers
+            // both the object AND the offset. Enum returns (`Signal.Buy`) are
+            // non-computed and still fall through to transformIdentifier.
             if (
                 node.argument.object.type === 'Identifier' &&
                 !scopeManager.isContextBound(node.argument.object.name) &&
-                !scopeManager.isLoopVariable(node.argument.object.name)
+                !scopeManager.isLoopVariable(node.argument.object.name) &&
+                !(node.argument.computed && scopeManager.isLocalSeriesVar(node.argument.object.name))
             ) {
                 transformIdentifier(node.argument.object, scopeManager);
             }
@@ -1306,11 +1314,32 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                     scopeManager.isContextBound(node.argument.object.name) &&
                     !scopeManager.isRootParam(node.argument.object.name)
                 ) {
-                    // Transform array indices first if not already transformed
-                    if (!node.argument._indexTransformed) {
+                    // A COMPUTED subscript (`return close[n]`, `return bar_index[len]`)
+                    // must route through the main member handler so the OBJECT is
+                    // wrapped as `$.get(series, idx)`. transformArrayIndex only
+                    // rewrites the index and leaves a context-bound object raw →
+                    // undefined at runtime (RC1). Non-computed members
+                    // (`syminfo.ticker`) keep the index-only path (a no-op here).
+                    if (node.argument.computed) {
+                        transformMemberExpression(node.argument, '', scopeManager);
+                    } else if (!node.argument._indexTransformed) {
                         transformArrayIndex(node.argument, scopeManager);
                         node.argument._indexTransformed = true;
                     }
+                }
+                // Site 3: computed subscript on a function-parameter series
+                // (`return src[len]`). Phase-1 left this as a bare `src[len]`;
+                // route it through the main member handler so BOTH the series
+                // object and the offset are lowered to `$.get(src, $.get(len, 0))`
+                // — mirrors the context-bound `close[n]` path above. Staying inside
+                // this `MemberExpression` else-if means the chain is already
+                // matched, so the CallExpression it becomes is not re-walked.
+                else if (
+                    node.argument.computed &&
+                    node.argument.object.type === 'Identifier' &&
+                    scopeManager.isLocalSeriesVar(node.argument.object.name)
+                ) {
+                    transformMemberExpression(node.argument, '', scopeManager);
                 }
             } else if (
                 node.argument.type === 'BinaryExpression' ||

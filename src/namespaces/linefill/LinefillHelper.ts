@@ -28,7 +28,10 @@ export class LinefillHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
-        const allPlotData = this._linefills.filter(lf => !lf._deleted).map(lf => lf.toPlotData());
+        // Compact out deleted linefills — bounded array (RC3), transparent output;
+        // rollbackFromBar filters by _createdAtBar, orthogonal to _deleted.
+        this._linefills = this._linefills.filter(lf => !lf._deleted);
+        const allPlotData = this._linefills.map(lf => lf.toPlotData());
 
         // Split force_overlay linefills into a separate overlay plot
         const regular = allPlotData.filter((lf: any) => !lf.force_overlay);
@@ -116,7 +119,6 @@ export class LinefillHelper {
                     // Update existing linefill in-place
                     existing.color = resolvedColor;
                     existing._createdAtBar = this.context.idx;
-                    this.syncToPlot();
                     return existing;
                 }
             }
@@ -125,7 +127,6 @@ export class LinefillHelper {
         const lf = new LinefillObject(resolvedLine1, resolvedLine2, resolvedColor);
         lf._createdAtBar = this.context.idx;
         this._linefills.push(lf);
-        this.syncToPlot();
         return lf;
     }
 

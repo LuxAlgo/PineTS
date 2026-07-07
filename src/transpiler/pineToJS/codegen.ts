@@ -1230,7 +1230,18 @@ export class CodeGenerator {
         } else if (node.value === null) {
             this.write('null');
         } else {
-            this.write(String(node.value));
+            // Numeric literal. Emit the NORMALIZED value (`.5` → `0.5`, `1e5` →
+            // `100000`), but preserve float-ness for integer-valued float literals
+            // (`2.0` → value 2 → "2" would read as an int). pine2js stores the raw
+            // source text in node.raw; a `.` in it marks a float literal. This is
+            // required so the int/float type inference can distinguish `2` from
+            // `2.0` (`int / int` truncates in Pine, `int / float` does not).
+            const s = String(node.value);
+            if (typeof node.raw === 'string' && node.raw.includes('.') && !/[.eE]/.test(s)) {
+                this.write(s + '.0');
+            } else {
+                this.write(s);
+            }
         }
     }
 

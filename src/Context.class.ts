@@ -735,6 +735,12 @@ export class Context {
      * @param index - The lookback index (0 = current value)
      */
     get(source: any, index: number) {
+        // Truncate fractional history offsets toward zero (RC2 boundary safety
+        // net — Pine offsets are integers; a fractional value indicates
+        // int-division divergence). The Series path re-guards offset+index inside
+        // Series.get; this covers the array/scalar paths below.
+        if (typeof index === 'number' && !Number.isInteger(index)) index = Math.trunc(index);
+
         if (source instanceof Series) {
             return source.get(index);
         }

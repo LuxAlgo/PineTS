@@ -408,7 +408,9 @@ plot(sum)
         expect(jsCode).toContain('+');
         expect(jsCode).toContain('-');
         expect(jsCode).toContain('*');
-        expect(jsCode).toContain('/');
+        // `10 / 2` is int/int division, which lowers to the Pine integer-division
+        // helper (RC2b: `__idiv`) rather than a raw `/`. `%` still transpiles native.
+        expect(jsCode).toContain('__idiv');
         expect(jsCode).toContain('%');
     });
 
@@ -432,8 +434,11 @@ plot(res)
         // (x + y) * z -> should have parens around addition
         expect(jsCode).toMatch(/(\(.*\+.*\))\s*\*/);
 
-        // 100 * (x - y) / z -> should have parens around subtraction
-        expect(jsCode).toMatch(/100\s*\*\s*\(.*-.*\)\s*\//);
+        // 100 * (x - y) / z -> should have parens around subtraction. This is
+        // int/int division (RC2b), so the trailing `/ z` lowers into the
+        // `__idiv(100 * (x - y), z)` helper — the parenthesized subtraction is
+        // still preserved inside the first argument.
+        expect(jsCode).toMatch(/100\s*\*\s*\(.*-.*\)/);
     });
 });
 

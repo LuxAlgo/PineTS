@@ -43,7 +43,14 @@ export class LineHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
-        const allPlotData = this._lines.filter(ln => !ln._deleted).map(ln => ln.toPlotData());
+        // Compact out deleted objects so the backing array stays bounded to the
+        // active set. Without this it grows O(bars·objects), and every syncToPlot
+        // / _enforceMaxCount scan over it becomes O(that) → quadratic overall
+        // (RC3). Transparent: the emitted set is unchanged (deleted objects were
+        // already filtered out). rollbackFromBar filters by _createdAtBar, which
+        // is orthogonal to _deleted, so streaming rollback is unaffected.
+        this._lines = this._lines.filter(ln => !ln._deleted);
+        const allPlotData = this._lines.map(ln => ln.toPlotData());
 
         // Split force_overlay objects into a separate overlay plot (renders on main chart pane)
         const regular = allPlotData.filter((l: any) => !l.force_overlay);
@@ -142,7 +149,6 @@ export class LineHelper {
         ln._createdAtBar = this.context.idx;
         this._lines.push(ln);
         this._enforceMaxCount();
-        this.syncToPlot();
         return ln;
     }
 
@@ -353,7 +359,6 @@ export class LineHelper {
         ln._createdAtBar = this.context.idx;
         this._lines.push(ln);
         this._enforceMaxCount();
-        this.syncToPlot();
         return ln;
     }
 

@@ -26,9 +26,12 @@ export class TableHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
+        // Compact out deleted tables — bounded array (RC3), transparent output;
+        // rollbackFromBar filters by _createdAtBar, orthogonal to _deleted.
+        this._tables = this._tables.filter(tbl => !tbl._deleted);
         this.context.plots['__tables__'].data = [{
             time,
-            value: this._tables.filter(tbl => !tbl._deleted).map(tbl => tbl.toPlotData()),
+            value: this._tables.map(tbl => tbl.toPlotData()),
             options: { style: 'table' },
         }];
     }
@@ -108,7 +111,6 @@ export class TableHelper {
         );
         tbl._setHelper(this);
         this._tables.push(tbl);
-        this.syncToPlot();
         return tbl;
     }
 
@@ -205,7 +207,6 @@ export class TableHelper {
             tooltip: this._resolveText(this._resolve(tooltip)),
             text_font_family: this._resolve(text_font_family) || 'default',
         });
-        this.syncToPlot();
     }
 
     // ── table.delete ───────────────────────────────────────────
@@ -257,7 +258,6 @@ export class TableHelper {
                 tbl.clearCell(c, r);
             }
         }
-        this.syncToPlot();
     }
 
     // ── table.merge_cells ──────────────────────────────────────
@@ -309,7 +309,6 @@ export class TableHelper {
         }
 
         tbl.merges.push({ startCol: sc, startRow: sr, endCol: ec, endRow: er });
-        this.syncToPlot();
     }
 
     // ── Cell setter methods ────────────────────────────────────
@@ -371,7 +370,6 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.position = this._resolve(position) || tbl.position;
-        this.syncToPlot();
     }
 
     @silentInSecondary
@@ -379,7 +377,6 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.bgcolor = this._resolve(bgcolor) || '';
-        this.syncToPlot();
     }
 
     @silentInSecondary
@@ -387,7 +384,6 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.border_color = this._resolve(border_color) || '';
-        this.syncToPlot();
     }
 
     @silentInSecondary
@@ -395,7 +391,6 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.border_width = this._resolve(border_width) || 0;
-        this.syncToPlot();
     }
 
     @silentInSecondary
@@ -403,7 +398,6 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.frame_color = this._resolve(frame_color) || '';
-        this.syncToPlot();
     }
 
     @silentInSecondary
@@ -411,7 +405,6 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.frame_width = this._resolve(frame_width) || 0;
-        this.syncToPlot();
     }
 
     // ── Property getter ────────────────────────────────────────
@@ -443,7 +436,6 @@ export class TableHelper {
         tbl.setCell(col, r, {
             [prop]: isText ? this._resolveText(resolved) : resolved,
         } as any);
-        this.syncToPlot();
     }
 
     private _resolveText(val: any): string {

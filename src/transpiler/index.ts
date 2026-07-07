@@ -53,6 +53,7 @@ import { injectImplicitImports } from './transformers/InjectionTransformer';
 import { normalizeNativeImports } from './transformers/NormalizationTransformer';
 import { wrapInContextFunction } from './transformers/WrapperTransformer';
 import { transformNestedArrowFunctions, preProcessContextBoundVars, preProcessUdtRegistry, runAnalysisPass } from './analysis/AnalysisPass';
+import { runTypeInferencePass } from './analysis/TypeInferencePass';
 import { runTransformationPass, transformEqualityChecks, propagateAsyncAwait } from './transformers/MainTransformer';
 import { extractPineScriptVersion, pineToJS } from './pineToJS/pineToJS.index';
 import { buildLtfSlices } from './slicing/buildLtfSlices';
@@ -125,6 +126,12 @@ export function transpile(source: string | Function, options: { debug: boolean; 
     // First pass: register all function declarations and their parameters
     // Returns the original parameter name of the root function if any
     const originalParamName = runAnalysisPass(ast, scopeManager) || '';
+
+    // Type inference (RC2b): replicate Pine `int / int → int`. Runs on the clean
+    // pre-lowering AST (operands still bare identifiers / `input.int(...)` /
+    // literals) and rewrites provably-int `/` to `$.pine.math.__idiv(...)`. The
+    // main pass below then lowers the operand subtrees inside the call args.
+    runTypeInferencePass(ast, scopeManager);
 
     // Second pass: transform the code
     runTransformationPass(ast, scopeManager, originalParamName, options, sourceLines);
