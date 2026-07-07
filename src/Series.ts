@@ -2,7 +2,15 @@ export class Series {
     constructor(public data: any[], public offset: number = 0) { }
 
     public get(index: number): any {
-        const realIndex = this.data.length - 1 - (this.offset + index);
+        // Pine history offsets are integers by definition; a fractional lookback
+        // only arises from int-division divergence (e.g. `src[depth/2]`: Pine
+        // computes int 5, JS `/` yields 5.5 — see RC2). Truncate the combined
+        // lookback toward zero so the access resolves to a real bar instead of a
+        // fractional array key (→ undefined). The general int/int→int fix belongs
+        // in the transpiler; this is the boundary safety net.
+        let lookback = this.offset + index;
+        if (!Number.isInteger(lookback)) lookback = Math.trunc(lookback);
+        const realIndex = this.data.length - 1 - lookback;
         if (realIndex < 0 || realIndex >= this.data.length) {
             return NaN;
         }

@@ -31,9 +31,12 @@ export class PolylineHelper {
         // Same aggregation pattern as lines and linefills — prevents sparse array
         // collisions when multiple objects share the same timestamp.
         const time = this.context.marketData[0]?.openTime || 0;
+        // Compact out deleted polylines — bounded array (RC3), transparent output;
+        // rollbackFromBar filters by _createdAtBar, orthogonal to _deleted.
+        this._polylines = this._polylines.filter(pl => !pl._deleted);
         this.context.plots['__polylines__'].data = [{
             time,
-            value: this._polylines.filter(pl => !pl._deleted).map(pl => pl.toPlotData()),
+            value: this._polylines.map(pl => pl.toPlotData()),
             options: { style: 'drawing_polyline' },
         }];
     }
@@ -160,7 +163,6 @@ export class PolylineHelper {
         pl._createdAtBar = this.context.idx;
         this._polylines.push(pl);
         this._enforceMaxCount();
-        this.syncToPlot();
         return pl;
     }
 
