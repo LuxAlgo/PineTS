@@ -1722,7 +1722,7 @@ export class Parser {
         // Literals
         if (this.match(TokenType.NUMBER)) {
             const num = this.advance();
-            return new Literal(num.value);
+            return new Literal(num.value, num.raw);
         }
 
         if (this.match(TokenType.STRING)) {
