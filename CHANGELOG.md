@@ -1,6 +1,22 @@
 # Change Log
 
-## [0.9.27] - 2026-06-29 - Strategy update : buy_and_hold_pnl buy_and_hold_per_gain strategy_outperformance
+## [0.9.28] - 2026-07-07 - Integer Division & User-Function History Access
+
+### Added
+
+- **Pine integer division (`int / int → int`)**: New compile-time **`TypeInferencePass`** (pre-lowering) synthesizes a minimal `int` vs `notint` type for each expression. When **both** operands of `/` are provably int, the transpiler rewrites to **`$.pine.math.__idiv(l, r)`** — truncates toward zero (`11 / 2 === 5`, `-11 / 2 === -5`) instead of JS float division. Unknown / unresolved types default to `notint` (fail-safe: missed truncation acceptable, wrong truncation of a float is not). JOIN-on-reassignment: a variable stays `int` only if every value it holds is int. Float literals preserve raw text through lexer/codegen so `2.0` stays distinguishable from `2`.
+- **`math.__idiv`**: Runtime helper for integer division — truncates toward zero, propagates `na`, preserves native div-by-zero semantics (`1/0 → Infinity`, `0/0 → NaN`).
+- **Tests**: `tests/transpiler/int-division.test.ts` (19 cases — int-division applied vs float never truncated, pivot-price / na-initialized-float regressions, float-literal preservation, runtime truncation / div-by-zero).
+
+### Fixed
+
+- **Series history access inside user-defined functions**: `x[i]` on a built-in/captured series or function parameter, used in **return position**, was emitted as raw JS indexing (e.g. `bar_index[len]`) → `undefined` at runtime. Pivot/Fibonacci-style indicators that draw from a UDF rendered nothing (lines/labels at `(0,0)→(NaN,NaN)`). All return-position subscripts now route through the member-lowering path → **`$.get(series, idx)`** — tuple returns (`return [bar_index[len], c]`), builtin returns (`return close[n]`), and param returns (`return src[len]`). Enum and UDT-field returns unchanged.
+- **Fractional history offsets**: History offsets must resolve to integer bars. **`Series.get`** / **`Context.get`** now truncate the combined lookback toward zero when non-integer (e.g. `src[depth/2]` before int-division rewrite yields `5.5` in JS) — boundary safety net alongside the transpiler fix.
+- **Drawing plot serialization O(n²)**: Every create/mutate re-serialized the entire backing array; deleted objects were only flagged, never removed, so scans grew **O(bars × objects)** → quadratic overall. Removed redundant per-object **`syncToPlot()`** calls on create/mutate (per-bar sync already captures final state; rollback sync kept). **`syncToPlot()`** now compacts deleted objects out of the array in all drawing helpers (`line`, `label`, `box`, `polyline`, `linefill`, `table`) → linear scans. Emitted plot output unchanged; ~12–16× faster on drawing-heavy scripts at 800–1600 bars.
+
+---
+
+## [0.9.27] - 2026-06-29 - Buy-and-Hold Benchmark
 
 ### Added
 
