@@ -611,4 +611,37 @@ plot(res, "plot")
         expect(context.precision(res3)).toBe(context.precision(11.833333333333334));
     });
 
+    it('Highest/Lowest - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const highestMethod = (await import('../../../src/namespaces/ta/methods/highest')).highest(context);
+        const lowestMethod = (await import('../../../src/namespaces/ta/methods/lowest')).lowest(context);
+        
+        context.idx = 3;
+        context.data.close = new SeriesClass([4, 12, 6, 7]);
+        
+        let resMax1 = highestMethod(context.data.close, 3, 'highest_rollback_test');
+        let resMin1 = lowestMethod(context.data.close, 3, 'lowest_rollback_test');
+        expect(resMax1).toBe(12);
+        expect(resMin1).toBe(6);
+        
+        context.data.close.set(0, 2);
+        let resMax2 = highestMethod(context.data.close, 3, 'highest_rollback_test');
+        let resMin2 = lowestMethod(context.data.close, 3, 'lowest_rollback_test');
+        expect(resMax2).toBe(12);
+        expect(resMin2).toBe(2);
+        
+        context.idx = 4;
+        context.data.close = new SeriesClass([4, 12, 6, 2, 15]);
+        let resMax3 = highestMethod(context.data.close, 3, 'highest_rollback_test');
+        let resMin3 = lowestMethod(context.data.close, 3, 'lowest_rollback_test');
+        expect(resMax3).toBe(15);
+        expect(resMin3).toBe(2);
+    });
+
 });
