@@ -3,6 +3,8 @@ import { arrayPrecision, getKlines, runNSFunctionWithArgs } from '../../utils';
 
 import { Context, PineTS, Provider } from 'index';
 import { deepEqual } from '../../compatibility/lib/serializer';
+import { Series } from '../../../src/Series';
+import { ema } from '../../../src/namespaces/ta/methods/ema';
 
 async function runTAFunctionWithArgs(taFunction: string, ...args) {
     // Use the same dataset as the original tests for consistency
@@ -505,6 +507,110 @@ plot(res, "plot")
         expect(plotdata_str.trim()).toEqual(expected_plot.trim());
     });
 
+    it('EMA - Rollback and Gap Rebuild', () => {
+        const context = {
+            idx: 0,
+            precision: (val: number) => val,
+            taState: {},
+        };
+
+        const emaFn = ema(context);
+        const data = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+        const period = 3;
+
+        // idx = 0
+        context.idx = 0;
+        let s = new Series(data.slice(0, 1));
+        let res = emaFn(s, period);
+        expect(res).toBeNaN();
+
+        // idx = 1
+        context.idx = 1;
+        s = new Series(data.slice(0, 2));
+        res = emaFn(s, period);
+        expect(res).toBeNaN();
+
+        // idx = 2
+        context.idx = 2;
+        s = new Series(data.slice(0, 3));
+        res = emaFn(s, period);
+        expect(res).toBe(11);
+
+        // Rollback test: idx = 2 with different data
+        const dataModified = [10, 11, 15, 13, 14, 15, 16, 17, 18, 19, 20];
+        s = new Series(dataModified.slice(0, 3));
+        res = emaFn(s, period);
+        expect(res).toBe(12);
+
+        // idx = 3 (commit idx=2 state, calculate idx=3)
+        context.idx = 3;
+        s = new Series(dataModified.slice(0, 4));
+        res = emaFn(s, period);
+        expect(res).toBe(12.5);
+
+        // Gap Rebuild test: idx = 5 (skip idx=4)
+        context.idx = 5;
+        s = new Series(dataModified.slice(0, 6));
+        res = emaFn(s, period);
+        expect(res).toBe(14.125);
+    });      
+  
+    it('SMA - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const smaMethod = (await import('../../../src/namespaces/ta/methods/sma')).sma(context);
+        
+        context.idx = 3;
+        context.data.close = new SeriesClass([4, 5, 6, 7]);
+        
+        let res1 = smaMethod(context.data.close, 3, 'sma_rollback_test');
+        expect(res1).toBe(6);
+        
+        context.data.close.set(0, 10);
+        let res2 = smaMethod(context.data.close, 3, 'sma_rollback_test');
+        expect(res2).toBe(7);
+        
+        context.idx = 4;
+        context.data.close = new SeriesClass([4, 5, 6, 10, 15]);
+        
+        let res3 = smaMethod(context.data.close, 3, 'sma_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(10.333333333333334));
+    });
+
+    it('WMA - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const wmaMethod = (await import('../../../src/namespaces/ta/methods/wma')).wma(context);
+        
+        context.idx = 3;
+        context.data.close = new SeriesClass([4, 5, 6, 7]);
+        
+        // (7*3 + 6*2 + 5*1) / 6 = (21 + 12 + 5) / 6 = 38 / 6 = 6.333333333333333
+        let res1 = wmaMethod(context.data.close, 3, 'wma_rollback_test');
+        expect(context.precision(res1)).toBe(context.precision(6.333333333333333));
+        
+        context.data.close.set(0, 10);
+        // (10*3 + 6*2 + 5*1) / 6 = (30 + 12 + 5) / 6 = 47 / 6 = 7.833333333333333
+        let res2 = wmaMethod(context.data.close, 3, 'wma_rollback_test');
+        expect(context.precision(res2)).toBe(context.precision(7.833333333333333));
+        
+        context.idx = 4;
+        context.data.close = new SeriesClass([4, 5, 6, 10, 15]);
+        // (15*3 + 10*2 + 6*1) / 6 = (45 + 20 + 6) / 6 = 71 / 6 = 11.833333333333334
+        let res3 = wmaMethod(context.data.close, 3, 'wma_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(11.833333333333334));
+    });
+
     it('Highest/Lowest - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
         const context = new Context({
             marketData: [],
@@ -537,4 +643,5 @@ plot(res, "plot")
         expect(resMax3).toBe(15);
         expect(resMin3).toBe(2);
     });
+
 });
