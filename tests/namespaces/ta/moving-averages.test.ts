@@ -811,4 +811,30 @@ plot(res, "plot")
         expect(res4).toBeCloseTo(18.9, 9);
     });
 
+    it('CCI - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const cciMethod = (await import('../../../src/namespaces/ta/methods/cci')).cci(context) as any;
+        
+        context.idx = 2;
+        context.data.close = new SeriesClass([10, 12, 11]);
+        
+        let res1 = cciMethod(context.data.close, 3, 'cci_rollback_test');
+        expect(res1).toBe(0);
+        
+        context.data.close.set(0, 14);
+        let res2 = cciMethod(context.data.close, 3, 'cci_rollback_test');
+        expect(context.precision(res2)).toBe(context.precision(100));
+        
+        context.idx = 4;
+        context.data.close = new SeriesClass([10, 12, 14, 15, 17]);
+        let res3 = cciMethod(context.data.close, 3, 'cci_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(100));
+    });
+
 });
