@@ -119,11 +119,11 @@ describe('CHART Namespace', () => {
             expect(result.fgColor[0].length).toBeGreaterThan(0);
         });
 
-        it('chart.is_standard() returns true', async () => {
+        it('chart.is_standard returns true (Pine variable — bare member access)', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-11-20').getTime());
 
             const { result } = await pineTS.run((context) => {
-                var isStandard = chart.is_standard();
+                var isStandard = chart.is_standard;
                 return { isStandard };
             });
 

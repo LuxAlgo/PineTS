@@ -19,7 +19,7 @@ Symbol information namespace providing metadata about the current trading symbol
 | `syminfo.prefix`           | ✅     | Exchange identifier (e.g., "BINANCE")                     |
 | `syminfo.root`             | ✅     | Base asset/root symbol (e.g., "BTC")                      |
 | `syminfo.ticker`           | ✅     | Symbol name (e.g., "BTCUSDT", "BTCUSDT.P")                |
-| `syminfo.tickerid`         | ✅     | Exchange:Symbol format (e.g., "BINANCE:BTCUSDT")          |
+| `syminfo.tickerid`         | ✅     | Exchange:Symbol format (e.g., "BINANCE:BTCUSDT"); carries the chart-type modifier on a non-standard chart (e.g., "BINANCE:BTCUSDT;heikinashi" — see note) |
 | `syminfo.type`             | ✅     | Instrument type ("crypto" or "futures")                   |
 | `syminfo.prefix()`         |        | Prefix function                                           |
 | `syminfo.ticker()`         |        | Ticker function                                           |
@@ -86,6 +86,10 @@ Symbol information namespace providing metadata about the current trading symbol
 | `syminfo.target_price_median`    | ✅     | Median price target (N/A for crypto, returns 0)  |
 
 ## Implementation Notes
+
+### Chart-Type Modifier in `tickerid`
+
+On a non-standard chart — declared by constructing PineTS with an extended ticker, e.g. `new PineTS(source, 'BTCUSDT;heikinashi', 'D', …)` — `syminfo.tickerid` carries the chart-type suffix (`"BINANCE:BTCUSDT;heikinashi"`), matching TradingView's behavior of encoding the chart type into the ticker id. `syminfo.ticker` stays clean. `ticker.standard(syminfo.tickerid)` strips the modifier; passing the modified `tickerid` to `request.security` routes a chart-typed data request to the data source (see [Ticker](ticker.html) and [Chart](chart.html)).
 
 ### Binance Provider
 

@@ -3,6 +3,7 @@
 import { IProvider, ISymbolInfo, BaseProviderConfig } from './IProvider';
 import { Kline, normalizeCloseTime } from './types';
 import { selectSubTimeframe, aggregateCandles, getAggregationRatio } from './aggregation';
+import { stripTickerModifier } from '../tickerModifier';
 
 /**
  * Normalize a user-supplied timeframe key to the canonical form used
@@ -153,6 +154,10 @@ export abstract class BaseProvider<TConfig extends BaseProviderConfig = BaseProv
         sDate?: number,
         eDate?: number,
     ): Promise<Kline[]> {
+        // Extended-ticker chart-type modifiers (";heikinashi") are honored only by data
+        // sources that own the transform; bundled providers serve STANDARD candles, so the
+        // modifier is stripped here — the venue APIs must never see it.
+        tickerId = stripTickerModifier(tickerId);
         const normalizedTf = normalizeTimeframeKey(timeframe);
         const supported = this.getSupportedTimeframes();
 

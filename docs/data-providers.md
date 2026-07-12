@@ -418,6 +418,14 @@ Provider['MyProvider'] = new MyProvider();
 // Now available as Provider.MyProvider
 ```
 
+### Chart-Type Modifiers (Extended Tickers)
+
+A ticker may carry a chart-type modifier suffix — `"BTCUSDT;heikinashi"` (see [Non-Standard Chart Types](initialization-and-usage.html#non-standard-chart-types-heikin-ashi)). The contract at the provider boundary:
+
+-   **Providers extending `BaseProvider`** never see the modifier in `getMarketData()` — the base class strips it, because a venue API serves standard candles only. Strip it likewise at the top of your `getSymbolInfo()` (all bundled providers do): `tickerId = stripTickerModifier(tickerId)` (exported from `pinets`).
+-   **A source that OWNS a chart-type transform** (typically an embedding host implementing `IProvider` directly, not via `BaseProvider`) receives the extended ticker verbatim and must serve the derived bars for `"SYM;heikinashi"` and raw bars for `"SYM"` — the modifier is the only thing distinguishing the two requests.
+-   **PineTS itself never transforms bars** — the modifier is routing metadata, end to end.
+
 ---
 
 ## Timeframe Reference
