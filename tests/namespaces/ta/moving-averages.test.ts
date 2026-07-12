@@ -676,4 +676,42 @@ plot(res, "plot")
         expect(context.precision(res3)).toBe(context.precision(5.4365021434042));
     });
 
+    it('BB - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const bbMethod = (await import('../../../src/namespaces/ta/methods/bb')).bb(context);
+        
+        context.idx = 3;
+        context.data.close = new SeriesClass([4, 12, 6, 7]);
+        
+        // (7+6+12)/3 = 8.3333333333
+        // stdev = 2.6246692913042456
+        let res1 = bbMethod(context.data.close, 3, 2, 'bb_rollback_test');
+        expect(res1[0][0]).toBeCloseTo(8.3333333333, 8);
+        expect(res1[0][1]).toBeCloseTo(13.582671916, 8);
+        expect(res1[0][2]).toBeCloseTo(3.0839947507, 8);
+        
+        context.data.close.set(0, 2);
+        // middle: 6.66666667
+        // stdev: 4.109609335154181
+        let res2 = bbMethod(context.data.close, 3, 2, 'bb_rollback_test');
+        expect(res2[0][0]).toBeCloseTo(6.6666666667, 8);
+        expect(res2[0][1]).toBeCloseTo(14.885885337, 8);
+        expect(res2[0][2]).toBeCloseTo(-1.5525520036, 8);
+        
+        context.idx = 4;
+        context.data.close = new SeriesClass([4, 12, 6, 2, 15]);
+        // middle: 7.66666667
+        // stdev: 5.436502144211119
+        let res3 = bbMethod(context.data.close, 3, 2, 'bb_rollback_test');
+        expect(res3[0][0]).toBeCloseTo(7.6666666667, 8);
+        expect(res3[0][1]).toBeCloseTo(18.5396709551, 8);
+        expect(res3[0][2]).toBeCloseTo(-3.2063376218, 8);
+    });
+
 });
