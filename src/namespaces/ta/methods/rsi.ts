@@ -2,9 +2,21 @@
 
 import { Series } from '../../../Series';
 
+/**
+ * Relative Strength Index (RSI)
+ *
+ * Formula:
+ * - RSI = 100 - 100 / (1 + RS)
+ * - RS = Average Gain / Average Loss
+ *
+ * @param source - Source series
+ * @param period - Period of RSI
+ * @returns RSI value
+ */
 export function rsi(context: any) {
     return (source: any, _period: any, _callId?: string) => {
         const period = Series.from(_period).get(0);
+        if (period <= 0) return NaN;
 
         // Incremental RSI calculation
         if (!context.taState) context.taState = {};
@@ -12,79 +24,126 @@ export function rsi(context: any) {
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
-                lastIdx: -1,
+                lastIdx: context.idx - 1,
                 // Committed state
-                prevPrevValue: null,
-                prevAvgGain: 0,
-                prevAvgLoss: 0,
-                prevInitGains: [],
-                prevInitLosses: [],
+                committedPrevValue: null,
+                committedAvgGain: 0,
+                committedAvgLoss: 0,
+                committedInitGains: [],
+                committedInitLosses: [],
                 // Tentative state
                 currentPrevValue: null,
                 currentAvgGain: 0,
                 currentAvgLoss: 0,
                 currentInitGains: [],
                 currentInitLosses: [],
+                currentResult: NaN,
             };
+            if (context.idx > 0) {
+                rebuildRsi(context.taState[stateKey], source, period, context.idx);
+                context.taState[stateKey].lastIdx = context.idx;
+            }
         }
 
         const state = context.taState[stateKey];
 
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevPrevValue = state.currentPrevValue;
-                state.prevAvgGain = state.currentAvgGain;
-                state.prevAvgLoss = state.currentAvgLoss;
-                state.prevInitGains = [...state.currentInitGains]; // Deep copy array
-                state.prevInitLosses = [...state.currentInitLosses]; // Deep copy array
+        // Handle gap/conditional execution: catch up skipped bars from series
+        if (context.idx > state.lastIdx + 1) {
+            const series = Series.from(source);
+            // Catch up starting from state.lastIdx (re-evaluating it with the closed series value)
+            // up to context.idx - 1.
+            for (let i = state.lastIdx; i < context.idx; i++) {
+                const dist = context.idx - i;
+                const val = series.get(dist);
+                if (val === null || val === undefined || Number.isNaN(val)) {
+                    continue;
+                }
+                const prevVal = state.committedPrevValue;
+                if (prevVal === null || Number.isNaN(prevVal)) {
+                    state.committedPrevValue = val;
+                    continue;
+                }
+                const diff = val - prevVal;
+                const gain = diff > 0 ? diff : 0;
+                const loss = diff < 0 ? -diff : 0;
+
+                if (state.committedInitGains.length < period) {
+                    state.committedInitGains.push(gain);
+                    state.committedInitLosses.push(loss);
+                    state.committedPrevValue = val;
+
+                    if (state.committedInitGains.length === period) {
+                        state.committedAvgGain = state.committedInitGains.reduce((a: number, b: number) => a + b, 0) / period;
+                        state.committedAvgLoss = state.committedInitLosses.reduce((a: number, b: number) => a + b, 0) / period;
+                    }
+                } else {
+                    state.committedAvgGain = (state.committedAvgGain * (period - 1) + gain) / period;
+                    state.committedAvgLoss = (state.committedAvgLoss * (period - 1) + loss) / period;
+                    state.committedPrevValue = val;
+                }
             }
+            state.lastIdx = context.idx - 1;
+
+            // Sync tentative state with newly caught-up committed state
+            state.currentPrevValue = state.committedPrevValue;
+            state.currentAvgGain = state.committedAvgGain;
+            state.currentAvgLoss = state.committedAvgLoss;
+            state.currentInitGains = [...state.committedInitGains];
+            state.currentInitLosses = [...state.committedInitLosses];
+        }
+
+        // Commit logic: lock previous tentative state
+        if (context.idx > state.lastIdx) {
+            state.committedPrevValue = state.currentPrevValue;
+            state.committedAvgGain = state.currentAvgGain;
+            state.committedAvgLoss = state.currentAvgLoss;
+            state.committedInitGains = [...state.currentInitGains];
+            state.committedInitLosses = [...state.currentInitLosses];
             state.lastIdx = context.idx;
         }
+
+        // Rollback logic: always initialize current bar's tentative state from committed state
+        state.currentPrevValue = state.committedPrevValue;
+        state.currentAvgGain = state.committedAvgGain;
+        state.currentAvgLoss = state.committedAvgLoss;
+        state.currentInitGains = [...state.committedInitGains];
+        state.currentInitLosses = [...state.committedInitLosses];
 
         const currentValue = Series.from(source).get(0);
 
         // Skip NaN/null/undefined values — don't advance RSI state
-        if (currentValue === null || currentValue === undefined || isNaN(currentValue)) {
+        if (currentValue === null || currentValue === undefined || Number.isNaN(currentValue)) {
+            state.currentResult = NaN;
             return NaN;
         }
 
-        // Use committed state
-        const prevValue = state.prevPrevValue;
+        const prevValue = state.currentPrevValue;
 
         // First valid bar or previous was NaN/null — store value, don't compute diff
-        if (prevValue === null || isNaN(prevValue)) {
+        if (prevValue === null || Number.isNaN(prevValue)) {
             state.currentPrevValue = currentValue;
-            state.currentInitGains = [...state.prevInitGains];
-            state.currentInitLosses = [...state.prevInitLosses];
-            state.currentAvgGain = state.prevAvgGain;
-            state.currentAvgLoss = state.prevAvgLoss;
+            state.currentResult = NaN;
             return NaN;
         }
 
-        let avgGain = state.prevAvgGain;
-        let avgLoss = state.prevAvgLoss;
-        const initGains = [...state.prevInitGains]; // Copy for tentative usage
-        const initLosses = [...state.prevInitLosses]; // Copy for tentative usage
+        let avgGain = state.currentAvgGain;
+        let avgLoss = state.currentAvgLoss;
+        const initGains = [...state.currentInitGains];
+        const initLosses = [...state.currentInitLosses];
 
-        // Calculate gain/loss from previous value
         const diff = currentValue - prevValue;
         const gain = diff > 0 ? diff : 0;
         const loss = diff < 0 ? -diff : 0;
 
-        // Accumulate gains/losses until we have 'period' values
         if (initGains.length < period) {
             initGains.push(gain);
             initLosses.push(loss);
 
-            // Update tentative state arrays
             state.currentInitGains = initGains;
             state.currentInitLosses = initLosses;
             state.currentPrevValue = currentValue;
 
-            // Once we have 'period' gain/loss pairs, calculate first RSI
             if (initGains.length === period) {
-                // Calculate first RSI using simple averages
                 avgGain = initGains.reduce((a, b) => a + b, 0) / period;
                 avgLoss = initLosses.reduce((a, b) => a + b, 0) / period;
 
@@ -92,21 +151,69 @@ export function rsi(context: any) {
                 state.currentAvgLoss = avgLoss;
 
                 const rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-                return context.precision(rsi);
+                state.currentResult = context.precision(rsi);
+                return state.currentResult;
             }
+            state.currentResult = NaN;
             return NaN;
         }
 
-        // Calculate RSI using smoothed averages (Wilder's smoothing)
         avgGain = (avgGain * (period - 1) + gain) / period;
         avgLoss = (avgLoss * (period - 1) + loss) / period;
 
-        // Store tentative state
         state.currentAvgGain = avgGain;
         state.currentAvgLoss = avgLoss;
         state.currentPrevValue = currentValue;
 
         const rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-        return context.precision(rsi);
+        state.currentResult = context.precision(rsi);
+        return state.currentResult;
     };
+}
+
+function rebuildRsi(state: any, source: any, period: number, currentIdx: number) {
+    const series = Series.from(source);
+    const lookback = Math.min(currentIdx, 250);
+    const startIdx = currentIdx - lookback;
+
+    let prevVal: number | null = null;
+    const initGains: number[] = [];
+    const initLosses: number[] = [];
+    let avgGain = 0;
+    let avgLoss = 0;
+
+    for (let i = startIdx; i < currentIdx; i++) {
+        const val = series.get(currentIdx - i);
+        if (val === null || val === undefined || Number.isNaN(val)) {
+            continue;
+        }
+        if (prevVal === null || Number.isNaN(prevVal)) {
+            prevVal = val;
+            continue;
+        }
+        const diff = val - prevVal;
+        const gain = diff > 0 ? diff : 0;
+        const loss = diff < 0 ? -diff : 0;
+
+        if (initGains.length < period) {
+            initGains.push(gain);
+            initLosses.push(loss);
+            prevVal = val;
+
+            if (initGains.length === period) {
+                avgGain = initGains.reduce((a, b) => a + b, 0) / period;
+                avgLoss = initLosses.reduce((a, b) => a + b, 0) / period;
+            }
+        } else {
+            avgGain = (avgGain * (period - 1) + gain) / period;
+            avgLoss = (avgLoss * (period - 1) + loss) / period;
+            prevVal = val;
+        }
+    }
+
+    state.committedPrevValue = prevVal;
+    state.committedAvgGain = avgGain;
+    state.committedAvgLoss = avgLoss;
+    state.committedInitGains = initGains;
+    state.committedInitLosses = initLosses;
 }
