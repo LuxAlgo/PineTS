@@ -22,93 +22,123 @@ export function bb(context: any) {
     return (source: any, _length: any, _mult: any, _callId?: string) => {
         const length = Series.from(_length).get(0);
         const mult = Series.from(_mult).get(0);
+        if (length <= 0) {
+            return [[NaN, NaN, NaN]];
+        }
 
-        // Use incremental calculation with rolling window
+        // Incremental Bollinger Bands calculation using circular buffer
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `bb_${length}_${mult}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevSum: 0,
-                // Tentative state
-                currentWindow: [],
-                currentSum: 0,
+                lastIdx: context.idx - 1,
+                committedValues: new Array(length),
+                committedHead: 0,
+                committedCount: 0,
+                values: new Array(length),
+                head: 0,
+                count: 0,
+                currentResult: [[NaN, NaN, NaN]],
             };
+            if (context.idx > 0) {
+                rebuildRollingBb(context.taState[stateKey], source, length);
+                context.taState[stateKey].lastIdx = context.idx;
+            }
         }
 
         const state = context.taState[stateKey];
 
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-                state.prevSum = state.currentSum;
-            }
+        // Handle gap/conditional execution: rebuild from series if we skipped bars
+        if (context.idx > state.lastIdx + 1) {
+            rebuildRollingBb(state, source, length);
             state.lastIdx = context.idx;
         }
 
+        // Commit logic: lock previous tentative state
+        if (context.idx > state.lastIdx) {
+            state.committedValues = [...state.values];
+            state.committedHead = state.head;
+            state.committedCount = state.count;
+            state.lastIdx = context.idx;
+        }
+
+        // Rollback logic: always initialize current bar's tentative state from committed state
+        state.values = [...state.committedValues];
+        state.head = state.committedHead;
+        state.count = state.committedCount;
+
         const currentValue = Series.from(source).get(0);
+        const value = currentValue === undefined || currentValue === null ? NaN : Number(currentValue);
 
-        // Handle NaN input
-        if (isNaN(currentValue)) {
-            state.currentWindow = [...state.prevWindow];
-            state.currentSum = state.prevSum;
+        if (state.count < length) {
+            state.values[state.count] = value;
+            state.count += 1;
+        } else {
+            state.values[state.head] = value;
+            state.head += 1;
+            if (state.head === length) state.head = 0;
+        }
+
+        if (state.count < length) {
+            state.currentResult = [[NaN, NaN, NaN]];
             return [[NaN, NaN, NaN]];
         }
 
-        // Use committed state to calculate current state
-        const window = [...state.prevWindow];
-        let sum = state.prevSum;
+        let sum = 0;
+        let hasNaN = false;
 
-        // Add current value to window
-        window.unshift(currentValue);
-        sum += currentValue;
-
-        // Remove oldest value if window exceeds length
-        while (window.length > length) {
-            const oldValue = window.pop();
-            sum -= oldValue;
-        }
-
-        // Backfill from source if window is undersized (dynamic length recovery)
-        // Break on NaN since this function intentionally excludes NaN from the window
-        if (window.length < length && context.idx >= length - 1) {
-            const series = Series.from(source);
-            while (window.length < length) {
-                const val = series.get(window.length);
-                if (isNaN(val)) break;
-                window.push(val);
-                sum += val;
+        const lastInserted = (state.head - 1 + length) % length;
+        for (let j = 0; j < length; j++) {
+            const idx = (lastInserted - j + length) % length;
+            const v = state.values[idx];
+            if (v === undefined || v === null || Number.isNaN(v)) {
+                hasNaN = true;
+                break;
             }
+            sum += v;
         }
 
-        // Update tentative state
-        state.currentWindow = window;
-        state.currentSum = sum;
-
-        // Not enough data yet
-        if (window.length < length) {
+        if (hasNaN) {
+            state.currentResult = [[NaN, NaN, NaN]];
             return [[NaN, NaN, NaN]];
         }
 
-        // Calculate middle band (SMA)
         const middle = sum / length;
-
-        // Calculate standard deviation
         let sumSquaredDiff = 0;
-        for (let i = 0; i < length; i++) {
-            sumSquaredDiff += Math.pow(window[i] - middle, 2);
-        }
-        const stdev = Math.sqrt(sumSquaredDiff / length);
 
-        // Calculate upper and lower bands
+        for (let j = 0; j < length; j++) {
+            const idx = (lastInserted - j + length) % length;
+            sumSquaredDiff += Math.pow(state.values[idx] - middle, 2);
+        }
+
+        const stdev = Math.sqrt(sumSquaredDiff / length);
         const upper = middle + mult * stdev;
         const lower = middle - mult * stdev;
 
-        // Return as tuple with double brackets
-        return [[context.precision(middle), context.precision(upper), context.precision(lower)]];
+        state.currentResult = [[context.precision(middle), context.precision(upper), context.precision(lower)]];
+        return state.currentResult;
     };
+}
+
+function rebuildRollingBb(state: any, source: any, length: number) {
+    const tempValues = [];
+    let tempCount = 0;
+    const series = Series.from(source);
+    for (let i = 1; i <= length; i++) {
+        const rawV = series.get(i);
+        const v = rawV === undefined || rawV === null ? NaN : Number(rawV);
+        if (Number.isFinite(v)) {
+            tempValues.unshift(v); // oldest to newest
+            tempCount++;
+        } else {
+            break;
+        }
+    }
+    state.committedValues = new Array(length);
+    for (let i = 0; i < tempCount; i++) {
+        state.committedValues[i] = tempValues[i];
+    }
+    state.committedHead = 0;
+    state.committedCount = tempCount;
 }
