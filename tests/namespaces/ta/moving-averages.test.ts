@@ -581,4 +581,34 @@ plot(res, "plot")
         let res3 = smaMethod(context.data.close, 3, 'sma_rollback_test');
         expect(context.precision(res3)).toBe(context.precision(10.333333333333334));
     });
+
+    it('WMA - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+        const context = new Context({
+            marketData: [],
+            source: [],
+            tickerId: 'BTCUSDC',
+            timeframe: 'D',
+        });
+        const SeriesClass = (await import('../../../src/Series')).Series;
+        const wmaMethod = (await import('../../../src/namespaces/ta/methods/wma')).wma(context);
+        
+        context.idx = 3;
+        context.data.close = new SeriesClass([4, 5, 6, 7]);
+        
+        // (7*3 + 6*2 + 5*1) / 6 = (21 + 12 + 5) / 6 = 38 / 6 = 6.333333333333333
+        let res1 = wmaMethod(context.data.close, 3, 'wma_rollback_test');
+        expect(context.precision(res1)).toBe(context.precision(6.333333333333333));
+        
+        context.data.close.set(0, 10);
+        // (10*3 + 6*2 + 5*1) / 6 = (30 + 12 + 5) / 6 = 47 / 6 = 7.833333333333333
+        let res2 = wmaMethod(context.data.close, 3, 'wma_rollback_test');
+        expect(context.precision(res2)).toBe(context.precision(7.833333333333333));
+        
+        context.idx = 4;
+        context.data.close = new SeriesClass([4, 5, 6, 10, 15]);
+        // (15*3 + 10*2 + 6*1) / 6 = (45 + 20 + 6) / 6 = 71 / 6 = 11.833333333333334
+        let res3 = wmaMethod(context.data.close, 3, 'wma_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(11.833333333333334));
+    });
+
 });
