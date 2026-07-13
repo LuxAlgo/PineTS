@@ -2,6 +2,7 @@
 
 import { ISymbolInfo, ApiKeyProviderConfig } from '@pinets/marketData/IProvider';
 import { BaseProvider } from '@pinets/marketData/BaseProvider';
+import { stripTickerModifier } from '../../tickerModifier';
 import { Kline, PeriodType, computeNextPeriodStart, computeSessionClose } from '@pinets/marketData/types';
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -402,6 +403,7 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
 
     async getSymbolInfo(tickerId: string): Promise<ISymbolInfo> {
         this.ensureConfigured();
+        tickerId = stripTickerModifier(tickerId); // chart-type modifiers never reach the venue API
 
         // Return cached symbolInfo if available
         if (this._symbolInfoCache.has(tickerId)) {

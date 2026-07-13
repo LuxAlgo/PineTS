@@ -287,7 +287,10 @@ export function security_lower_tf(context: any) {
         const expressionSlot = resolveSlotValue(parsed.expression);
 
         const rawSymbol = symbolSlot instanceof Series ? symbolSlot.get(0) : symbolSlot;
-        // Empty string "" means "use chart's symbol" (Pine Script spec)
+        // Empty string "" means "use chart's symbol" (Pine Script spec) — i.e. the chart's own
+        // ticker. THE CHART TYPE IS THE TICKER: on a non-standard chart it already carries the
+        // ";heikinashi" modifier, which rides through to the data source (PineTS' own providers
+        // strip it at their boundary).
         const resolvedSymbol = rawSymbol === '' ? context.tickerId : rawSymbol;
         const _symbol = typeof resolvedSymbol === 'string' && resolvedSymbol.includes(':') ? resolvedSymbol.split(':')[1] : resolvedSymbol;
         const rawTimeframe = timeframeSlot instanceof Series ? timeframeSlot.get(0) : timeframeSlot;

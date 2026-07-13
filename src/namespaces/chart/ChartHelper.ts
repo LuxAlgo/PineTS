@@ -58,11 +58,12 @@ export class ChartHelper {
     }
 
     is_standard(): boolean {
-        return true;
+        const style = this.context?.chartStyle;
+        return style == null || style === 'standard';
     }
 
     is_heikinashi(): boolean {
-        return false;
+        return this.context?.chartStyle === 'heikinashi';
     }
 
     is_kagi(): boolean {

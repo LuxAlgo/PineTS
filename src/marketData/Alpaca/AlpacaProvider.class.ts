@@ -2,6 +2,7 @@
 
 import { ISymbolInfo, ApiKeyProviderConfig } from '@pinets/marketData/IProvider';
 import { BaseProvider } from '@pinets/marketData/BaseProvider';
+import { stripTickerModifier } from '../../tickerModifier';
 import { Kline, PeriodType, computeNextPeriodStart, localTimeToUTC } from '@pinets/marketData/types';
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -341,6 +342,7 @@ export class AlpacaProvider extends BaseProvider<AlpacaProviderConfig> {
 
     async getSymbolInfo(tickerId: string): Promise<ISymbolInfo> {
         this.ensureConfigured();
+        tickerId = stripTickerModifier(tickerId); // chart-type modifiers never reach the venue API
 
         try {
             const asset = await this._fetchAsset(tickerId);

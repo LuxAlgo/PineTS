@@ -18,6 +18,7 @@ This guide explains how to initialize PineTS and run indicators or strategies wi
 -   [The stream() Method](#the-stream-method)
 -   [The update() Method](#the-update-method)
 -   [Host Environment (Visible Range)](#host-environment-visible-range)
+-   [Non-Standard Chart Types (Heikin Ashi)](#non-standard-chart-types-heikin-ashi)
 -   [Context Object](#context-object)
 -   [Return Values](#return-values)
 -   [Alerts](#alerts)
@@ -487,6 +488,29 @@ case).
 `stream()` already handles continuous data input. Combining `stream()`
 with `setVisibleRange()` is a planned follow-up — for the batch path,
 use `run()` / `update()`.
+
+---
+
+## Non-Standard Chart Types (Heikin Ashi)
+
+**The chart type is the ticker.** To run a script "on a Heikin Ashi chart", construct PineTS with an **extended ticker** — the plain symbol plus a chart-type modifier suffix:
+
+```javascript
+const pineTS = new PineTS(myHaAwareSource, 'BTCUSDT;heikinashi', 'D', 500);
+```
+
+Everything derives from that one setting:
+
+-   `chart.is_heikinashi` is `true` (and `chart.is_standard` is `false`);
+-   `syminfo.tickerid` carries the modifier (`"BINANCE:BTCUSDT;heikinashi"`), while `syminfo.ticker` stays clean;
+-   `request.security(syminfo.tickerid, tf, expr)` requests **chart-typed** data from the data source, and `request.security(ticker.standard(syminfo.tickerid), tf, expr)` explicitly requests **standard** data — including at the chart's own timeframe.
+
+**PineTS never transforms bars.** The extended ticker is a *routing marker*, not a conversion request:
+
+-   A **host data source that owns the transform** (e.g. a charting library embedding PineTS and serving Heikin Ashi views) receives the extended ticker verbatim from `getMarketData()` / `getSymbolInfo()` and must serve the derived bars for it — and raw bars for the plain symbol.
+-   PineTS' **bundled providers** (Binance, Alpaca, FMP, Mock) strip the modifier at their boundary and always serve standard candles — so on a bundled provider the extended ticker is a documented no-op (the chart *reports* Heikin Ashi but runs on standard data).
+
+Consequently, a consistent standalone Heikin Ashi run requires a data source that distinguishes `"SYM;heikinashi"` from `"SYM"`. Renko / Kagi / Line Break / Point & Figure have no such source and remain unsupported (`chart.is_renko` etc. are always `false`; `ticker.renko()` etc. return the plain symbol).
 
 ---
 

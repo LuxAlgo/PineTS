@@ -50,6 +50,7 @@ export class Context {
     public strategy?: StrategyState; // State for strategy calculations
     public isSecondaryContext: boolean = false; // Flag to prevent infinite recursion in request.security
     public chartTimezone: string | null = null; // Chart display timezone (affects log timestamps only, not computation)
+    public chartStyle: string = 'standard'; // Chart type DERIVED from the ticker's chart-type modifier ("SYM;heikinashi") at context init; read by chart.is_*
     public dataVersion: number = 0; // Incremented when market data changes (streaming mode)
 
     public __maxLoops: number = 500000;
@@ -307,13 +308,16 @@ export class Context {
             param: chartHelper.param.bind(chartHelper),
             bg_color: chartHelper.bg_color.bind(chartHelper),
             fg_color: chartHelper.fg_color.bind(chartHelper),
-            is_standard: chartHelper.is_standard.bind(chartHelper),
-            is_heikinashi: chartHelper.is_heikinashi.bind(chartHelper),
-            is_kagi: chartHelper.is_kagi.bind(chartHelper),
-            is_linebreak: chartHelper.is_linebreak.bind(chartHelper),
-            is_pnf: chartHelper.is_pnf.bind(chartHelper),
-            is_range: chartHelper.is_range.bind(chartHelper),
-            is_renko: chartHelper.is_renko.bind(chartHelper),
+            // Chart-type predicates are Pine VARIABLES (`chart.is_heikinashi`, no call) —
+            // exposed as getters so bare member access yields the boolean, like the
+            // visible-range built-ins below.
+            get is_standard() { return chartHelper.is_standard(); },
+            get is_heikinashi() { return chartHelper.is_heikinashi(); },
+            get is_kagi() { return chartHelper.is_kagi(); },
+            get is_linebreak() { return chartHelper.is_linebreak(); },
+            get is_pnf() { return chartHelper.is_pnf(); },
+            get is_range() { return chartHelper.is_range(); },
+            get is_renko() { return chartHelper.is_renko(); },
             point: chartHelper.point,
             // Visible-range built-ins. Host (e.g. chart UI) overrides via
             // PineTS.setVisibleRange(); fallback is the loaded data range.
