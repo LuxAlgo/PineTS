@@ -19,7 +19,7 @@ export function wma(context: any) {
 
         // Incremental WMA calculation using circular buffer
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `wma_${period}`;
+        const stateKey = _callId ? `${_callId}_${period}` : `wma_${period}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {

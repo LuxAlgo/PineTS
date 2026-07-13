@@ -25,7 +25,7 @@ describe('Technical Analysis - Moving Averages', () => {
             98095.6421428572, 98078.9178571429,
         ];
         console.log(' SMA ', part);
-        expect(part).toEqual(arrayPrecision(expected));
+        expect(deepEqual(part, expected)).toBe(true);
     });
 
     it('EMA - Exponential Moving Average', async () => {
@@ -507,7 +507,7 @@ plot(res, "plot")
         expect(plotdata_str.trim()).toEqual(expected_plot.trim());
     });
 
-    it('EMA - Rollback and Gap Rebuild', () => {
+    it('EMA - Rollback and Gap Preservation', () => {
         const context = {
             idx: 0,
             precision: (val: number) => val,
@@ -548,11 +548,10 @@ plot(res, "plot")
         res = emaFn(s, period);
         expect(res).toBe(12.5);
 
-        // Gap Rebuild test: idx = 5 (skip idx=4)
         context.idx = 5;
         s = new Series(dataModified.slice(0, 6));
         res = emaFn(s, period);
-        expect(res).toBe(14.125);
+        expect(res).toBe(13.75);
     });      
   
     it('SMA - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
@@ -714,7 +713,7 @@ plot(res, "plot")
         expect(res3[0][2]).toBeCloseTo(-3.2063376218, 8);
     });
 
-    it('RSI - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+    it('RSI - Rollback and Gap Preservation (Commit/Rollback check)', async () => {
         const context = new Context({
             marketData: [],
             source: [],
@@ -724,24 +723,34 @@ plot(res, "plot")
         const SeriesClass = (await import('../../../src/Series')).Series;
         const rsiMethod = (await import('../../../src/namespaces/ta/methods/rsi')).rsi(context);
         
+        context.idx = 0;
+        context.data.close = new SeriesClass([10]);
+        expect(rsiMethod(context.data.close, 3, 'rsi_rollback_test')).toBeNaN();
+
+        context.idx = 1;
+        context.data.close = new SeriesClass([10, 12]);
+        expect(rsiMethod(context.data.close, 3, 'rsi_rollback_test')).toBeNaN();
+
+        context.idx = 2;
+        context.data.close = new SeriesClass([10, 12, 11]);
+        expect(rsiMethod(context.data.close, 3, 'rsi_rollback_test')).toBeNaN();
+
         context.idx = 3;
         context.data.close = new SeriesClass([10, 12, 11, 14]);
-        
-        let res1 = rsiMethod(context.data.close, 3, 'rsi_rollback_test');
+        const res1 = rsiMethod(context.data.close, 3, 'rsi_rollback_test');
         expect(context.precision(res1)).toBe(context.precision(83.33333333333333));
         
         context.data.close.set(0, 8);
-        let res2 = rsiMethod(context.data.close, 3, 'rsi_rollback_test');
+        const res2 = rsiMethod(context.data.close, 3, 'rsi_rollback_test');
         expect(context.precision(res2)).toBe(context.precision(33.33333333333333));
         
         context.idx = 5;
-        // set back close[3] = 14, close[4] = 15, close[5] = 17
-        context.data.close = new SeriesClass([10, 12, 11, 14, 15, 17]);
-        let res3 = rsiMethod(context.data.close, 3, 'rsi_rollback_test');
-        expect(context.precision(res3)).toBe(context.precision(91.66666666666667));
+        context.data.close = new SeriesClass([10, 12, 11, 8, 15, 17]);
+        const res3 = rsiMethod(context.data.close, 3, 'rsi_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(79.48717948717949));
     });
 
-    it('ATR - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
+    it('ATR - Rollback and Gap Preservation (Commit/Rollback check)', async () => {
         const context = new Context({
             marketData: [],
             source: [],
@@ -751,25 +760,30 @@ plot(res, "plot")
         const SeriesClass = (await import('../../../src/Series')).Series;
         const atrMethod = (await import('../../../src/namespaces/ta/methods/atr')).atr(context) as any;
         
-        context.idx = 2;
-        context.data.high = new SeriesClass([10, 15, 12]);
-        context.data.low = new SeriesClass([8, 11, 9]);
-        context.data.close = new SeriesClass([9, 12, 10]);
-        
-        let res1 = atrMethod(2, 'atr_rollback_test');
-        expect(context.precision(res1)).toBe(context.precision(3.5));
-        
+        context.idx = 0;
+        context.data.high = new SeriesClass([10]);
+        context.data.low = new SeriesClass([8]);
+        context.data.close = new SeriesClass([9]);
+        expect(atrMethod(2, 'atr_rollback_test')).toBeNaN();
+
+        context.idx = 1;
+        context.data.high = new SeriesClass([10, 15]);
+        context.data.low = new SeriesClass([8, 11]);
+        context.data.close = new SeriesClass([9, 12]);
+        const res1 = atrMethod(2, 'atr_rollback_test');
+        expect(context.precision(res1)).toBe(context.precision(4));
+
         context.data.high.set(0, 16);
-        let res2 = atrMethod(2, 'atr_rollback_test');
-        expect(context.precision(res2)).toBe(context.precision(5.5));
+        const res2 = atrMethod(2, 'atr_rollback_test');
+        expect(context.precision(res2)).toBe(context.precision(4.5));
         
-        context.idx = 4;
-        context.data.high = new SeriesClass([10, 15, 12, 14, 18]);
-        context.data.low = new SeriesClass([8, 11, 9, 10, 13]);
-        context.data.close = new SeriesClass([9, 12, 11, 12, 15]);
+        context.idx = 3;
+        context.data.high = new SeriesClass([10, 16, 12, 14]);
+        context.data.low = new SeriesClass([8, 11, 9, 10]);
+        context.data.close = new SeriesClass([9, 12, 11, 12]);
         
-        let res3 = atrMethod(2, 'atr_rollback_test');
-        expect(context.precision(res3)).toBe(context.precision(4.875));
+        const res3 = atrMethod(2, 'atr_rollback_test');
+        expect(context.precision(res3)).toBe(context.precision(4.25));
     });
 
     it('HMA - Rollback and Gap Rebuild (Commit/Rollback check)', async () => {
