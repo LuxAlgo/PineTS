@@ -297,7 +297,11 @@ This follows the same pattern as Case #2, ensuring consistent behavior across bo
 
 **Problem:** Some namespaces expose both methods and constants. For example, `math` exposes both functions and constants like `math.pi`.
 
-**Solution:** In this case we implement the constants as methods without params, because the transpiler converts namespace constants to function calls internally.
+There are **two implementations of this case**, depending on how the transpiler treats the namespace's member access:
+
+#### Case #4a — Auto-called namespaces (ta, math): constants as no-arg METHODS
+
+For namespaces whose property accesses the transpiler converts into function calls (see Case #1), constants are implemented as methods without params.
 
 For example:
 in order to handle the pine script `math.pi` we implement a method in the math namespace methods folder called pi
@@ -310,6 +314,23 @@ export function pi(context: any) {
     };
 }
 ```
+
+#### Case #4b — Member-access namespaces (chart, barstate, syminfo, timeframe): variables as GETTERS
+
+For the member-access family (the namespaces listed in `settings.ts` whose **non-computed member reads the transpiler leaves as plain property access** — see the note in Case #6), a Pine *variable* must be a **getter** on the wired namespace object, so bare access yields the value:
+
+```typescript
+// Context.class.ts — pine.chart wiring
+this.pine['chart'] = {
+    // Pine VARIABLES (`chart.is_heikinashi`, no call) → getters
+    get is_standard() { return chartHelper.is_standard(); },
+    get is_heikinashi() { return chartHelper.is_heikinashi(); },
+    get left_visible_bar_time() { /* ... */ },
+    // functions stay methods: chart.point.new(...), param(...)
+};
+```
+
+Implementing these as bound functions instead would make bare Pine access (`chart.is_heikinashi ? 1 : 0`) evaluate the function *object* — always truthy. Locked by a real-Pine-source test in `tests/namespaces/heikinashi-chart-style.test.ts`.
 
 ---
 

@@ -2,6 +2,7 @@
 
 import { ISymbolInfo } from '@pinets/marketData/IProvider';
 import { BaseProvider } from '@pinets/marketData/BaseProvider';
+import { stripTickerModifier } from '../../tickerModifier';
 import { Kline } from '@pinets/marketData/types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -280,6 +281,7 @@ export class MockProvider extends BaseProvider<MockProviderConfig> {
      * @returns Promise<ISymbolInfo> - Symbol information
      */
     async getSymbolInfo(tickerId: string): Promise<ISymbolInfo> {
+        tickerId = stripTickerModifier(tickerId); // chart-type modifiers never reach a provider
         try {
             // tickerId comes in as "BTCUSDT" or "BTCUSDT.P"
             // We keep it EXACTLY as is for ticker field (Pine Script includes .P)

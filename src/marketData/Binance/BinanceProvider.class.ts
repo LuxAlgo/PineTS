@@ -25,6 +25,7 @@ const timeframe_to_binance = {
 
 import { ISymbolInfo } from '@pinets/marketData/IProvider';
 import { BaseProvider } from '@pinets/marketData/BaseProvider';
+import { stripTickerModifier } from '../../tickerModifier';
 import { Kline, INTERVAL_DURATION_MS } from '@pinets/marketData/types';
 
 interface CacheEntry<T> {
@@ -346,6 +347,7 @@ export class BinanceProvider extends BaseProvider<BinanceProviderConfig> {
     }
 
     async getSymbolInfo(tickerId: string): Promise<ISymbolInfo> {
+        tickerId = stripTickerModifier(tickerId); // chart-type modifiers never reach the venue API
         try {
             // tickerId comes in as "BTCUSDT" or "BTCUSDT.P"
             // We keep it EXACTLY as is for ticker field (Pine Script includes .P)

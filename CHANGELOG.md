@@ -1,5 +1,21 @@
 # Change Log
 
+## [0.9.29] - 2026-07-11 - Heikin Ashi Chart Type & Extended Tickers
+
+### Added
+
+- **Extended tickers — THE CHART TYPE IS THE TICKER**: a host runs a Heikin Ashi chart by constructing PineTS with an extended ticker — `new PineTS(source, 'BTCUSDT;heikinashi', 'D', …)`. The chart type is a `";modifier"` suffix on the ticker id (the single source of truth; there is no separate setting), from which everything derives: `chart.is_heikinashi` / `chart.is_standard`, the `syminfo.tickerid` suffix (`"BINANCE:BTCUSDT;heikinashi"`; `syminfo.ticker` stays clean), and `request.security` routing. **PineTS never transforms bars** — the modifier is a routing marker: a data source that owns the transform (an embedding host) serves derived bars for the extended ticker and raw bars for the plain one; bundled providers (Binance/Alpaca/FMP/Mock) strip the modifier at their boundary (`BaseProvider.getMarketData` + each `getSymbolInfo`) and always serve standard candles.
+- **`src/tickerModifier.ts`** (exported): `splitTickerModifier` / `stripTickerModifier` / `withTickerModifier` — the extended-ticker parser (recognized modifiers: `heikinashi`, `standard`; unknown suffixes stay part of the symbol).
+- **`ticker.heikinashi()`** now returns the extended ticker (`"sym;heikinashi"`, idempotent) instead of the plain symbol; **`ticker.standard()`** strips the chart-type modifier (the standard-data opt-out); **`ticker.inherit()`** propagates the chart-type modifier from `from_tickerid` onto the new symbol.
+- **`request.security` / `request.security_lower_tf` chart-type routing**: extended tickers pass through to the data source untouched; the empty-string symbol resolves to the chart's own ticker *modifier included*; the same-timeframe shortcut is chart-type aware — on a Heikin Ashi chart `security(syminfo.tickerid, <chart tf>, …)` shortcuts to the chart's series while `security(ticker.standard(…), <chart tf>, …)` builds a secondary that fetches standard data (previously indistinguishable).
+- **Tests**: `tests/namespaces/heikinashi-chart-style.test.ts` — ticker-modifier helpers, `ticker.*` behavior, predicate derivation from the constructor ticker, provider-boundary stripping, chart-type-aware same-TF shortcut, and a real-Pine-source run locking the transpiler contract for bare `chart.is_*` access.
+
+### Changed
+
+- **`chart.is_standard` / `is_heikinashi` / `is_kagi` / `is_linebreak` / `is_pnf` / `is_range` / `is_renko` are now getters** on `pine.chart` (they are Pine *variables* — bare member access), matching the `left/right_visible_bar_time` pattern; `is_standard`/`is_heikinashi` now answer truthfully from the chart ticker (the rest remain always-`false` stubs). ⚠️ Breaking only for JS-style consumers that called them as functions (`chart.is_standard()`); transpiled Pine source is unaffected. Documented as Case #4b in `src/namespaces/README.md`.
+
+---
+
 ## [0.9.28] - 2026-07-07 - Integer Division & User-Function History Access
 
 ### Added

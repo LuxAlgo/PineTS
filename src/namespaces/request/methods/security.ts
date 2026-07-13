@@ -2,6 +2,7 @@
 
 import { PineTS } from '../../../PineTS.class';
 import { Series } from '../../../Series';
+import { splitTickerModifier, withTickerModifier } from '../../../tickerModifier';
 import { TIMEFRAMES, normalizeTimeframe } from '../utils/TIMEFRAMES';
 import { findSecContextIdx } from '../utils/findSecContextIdx';
 import { findLTFContextIdx } from '../utils/findLTFContextIdx';
@@ -126,9 +127,18 @@ export function security(context: any) {
         const lookaheadSlot = resolveSlotValue(parsed.lookahead);
 
         // Strip exchange prefix (e.g. "BINANCE:BTCUSDC" → "BTCUSDC") so the
-        // provider receives a clean ticker when creating a secondary context.
+        // provider receives a clean ticker when creating a secondary context. A
+        // chart-type modifier suffix (";heikinashi") is NOT stripped here — it rides
+        // through to the data source (an embedding host honors it; PineTS' own
+        // providers strip it at their boundary).
         const rawSymbol = symbolSlot instanceof Series ? symbolSlot.get(0) : symbolSlot;
-        // Empty string "" means "use chart's symbol" (Pine Script spec)
+        // THE CHART TYPE IS THE TICKER: on a non-standard chart the context's own ticker is
+        // extended ("SYM;heikinashi"), so the chart's modifier is parsed straight off it.
+        const ctxNoPrefix = typeof context.tickerId === 'string' && context.tickerId.includes(':') ? context.tickerId.split(':')[1] : context.tickerId;
+        const ctxParts = typeof ctxNoPrefix === 'string' ? splitTickerModifier(ctxNoPrefix) : { symbol: ctxNoPrefix, modifier: null };
+        const chartModifier = ctxParts.modifier === 'standard' ? null : ctxParts.modifier;
+        // Empty string "" means "use chart's symbol" (Pine Script spec) — i.e. the chart's own
+        // ticker, modifier included.
         const resolvedSymbol = rawSymbol === '' ? context.tickerId : rawSymbol;
         const _symbol = typeof resolvedSymbol === 'string' && resolvedSymbol.includes(':') ? resolvedSymbol.split(':')[1] : resolvedSymbol;
         const rawTimeframe = timeframeSlot instanceof Series ? timeframeSlot.get(0) : timeframeSlot;
@@ -174,10 +184,13 @@ export function security(context: any) {
         // expression verbatim (e.g. BTC close) for a request meant to fetch a
         // different ticker (e.g. ETH close). Fall through to the secondary-context
         // path (line ~280+) which builds a fresh PineTS instance for `_symbol`.
-        const ctxRawSymbol = typeof context.tickerId === 'string' && context.tickerId.includes(':')
-            ? context.tickerId.split(':')[1]
-            : context.tickerId;
-        const isSameSymbol = !_symbol || _symbol === '' || _symbol === ctxRawSymbol;
+        // "Same" is also CHART-TYPE aware: the chart's data is its chart-typed view,
+        // so on a Heikin-Ashi chart only "SYM;heikinashi" is the same series — a plain
+        // "SYM" (e.g. via ticker.standard()) must fetch STANDARD data through a
+        // secondary context, and vice versa on a standard chart.
+        const reqParts = typeof _symbol === 'string' ? splitTickerModifier(_symbol) : { symbol: _symbol, modifier: null };
+        const reqModifier = reqParts.modifier === 'standard' ? null : reqParts.modifier; // ";standard" ≡ no modifier
+        const isSameSymbol = !_symbol || _symbol === '' || (reqParts.symbol === ctxParts.symbol && reqModifier === chartModifier);
 
         if (ctxTimeframeIdx === reqTimeframeIdx && isSameSymbol) {
             // Resolve any helper objects (TimeComponentHelper, NAHelper, Series, etc.)

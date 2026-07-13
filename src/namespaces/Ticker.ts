@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Alaa-eddine KADDOURI
 
 import { Series } from '../Series';
+import { splitTickerModifier, stripTickerModifier, withTickerModifier } from '../tickerModifier';
 
 /**
  * Pine Script `ticker.*` namespace.
@@ -9,11 +10,17 @@ import { Series } from '../Series';
  * The methods here construct "ticker ID" strings that are passed to
  * `request.security` / `request.security_lower_tf` to fetch data for a
  * specific symbol — potentially with extra modifiers (session,
- * adjustment, non-standard chart type). PineTS' data providers serve
- * standard candles only; chart-type modifiers (Heikin-Ashi, Renko,
- * Kagi, Line Break, Point & Figure) are silently dropped at the
- * `request.security` boundary, since we can't render alternative
- * bar-construction algorithms from the raw OHLCV feed.
+ * adjustment, non-standard chart type).
+ *
+ * CHART-TYPE modifiers travel as an EXTENDED-TICKER suffix
+ * (`"BINANCE:BTCUSDT;heikinashi"` — see `tickerModifier.ts`):
+ * `ticker.heikinashi()` appends it, `ticker.standard()` strips it, and
+ * `request.security` passes it through to the data source untouched. An
+ * embedding host that owns the transform honors it; PineTS' own bundled
+ * providers serve standard candles only and strip it at their boundary
+ * (documented no-op for standalone use). The other non-standard types
+ * (Renko, Kagi, Line Break, Point & Figure) remain plain-symbol stubs —
+ * no data source we route to can construct those bars.
  *
  * For the plain "no-modifier" cases — which cover virtually every
  * real-world Pine script — the returned tickerid strings match
@@ -36,17 +43,20 @@ export class Ticker {
     }
 
     /**
-     * ticker.inherit(from_tickerid, symbol) → simple string
+     * ticker.inherit(from_tickerid, symbol) → string
      *
-     * Returns a ticker ID that uses `symbol` and inherits modifier
-     * settings (session, currency, adjustment, chart type) from
-     * `from_tickerid`. For data-fetching purposes the result is
-     * effectively `symbol` — modifiers can't be honored without a TV
-     * datafeed, and `symbol` is what `request.security` needs.
+     * Returns a ticker ID that uses `symbol` and inherits modifier settings from
+     * `from_tickerid`. The CHART-TYPE modifier is honored: inheriting from a
+     * `";heikinashi"` ticker (e.g. `syminfo.tickerid` on a Heikin-Ashi chart)
+     * yields `"symbol;heikinashi"`, so the derived request keeps the chart type.
+     * The other modifier kinds (session, currency, adjustment) can't be honored
+     * without a TV datafeed and are dropped, as before.
      */
     inherit(_from_tickerid: any, symbol: any): string {
-        const sym = this._coerce(symbol);
-        return sym;
+        const from = this._coerce(_from_tickerid);
+        const sym = stripTickerModifier(this._coerce(symbol));
+        const { modifier } = splitTickerModifier(from);
+        return modifier && modifier !== 'standard' ? withTickerModifier(sym, modifier) : sym;
     }
 
     /**
@@ -79,31 +89,31 @@ export class Ticker {
     /**
      * ticker.standard(symbol?) → simple string
      *
-     * Returns the symbol stripped of any non-standard chart-type
-     * modifiers. Since PineTS doesn't synthesise non-standard chart
-     * types in the first place, this is effectively a pass-through
-     * (the standard form IS what our providers serve). If `symbol` is
-     * undefined, falls back to `syminfo.tickerid`.
+     * Returns the symbol stripped of any chart-type modifier suffix —
+     * on a Heikin-Ashi chart, `ticker.standard(syminfo.tickerid)` turns
+     * `"BINANCE:BTCUSDT;heikinashi"` back into `"BINANCE:BTCUSDT"`, so a
+     * `request.security` call on the result fetches STANDARD candles.
+     * If `symbol` is undefined, falls back to `syminfo.tickerid`.
      */
     standard(symbol?: any): string {
         if (symbol === undefined || symbol === null) {
-            return this.context?.pine?.syminfo?.tickerid || this.context?.tickerId || '';
+            return stripTickerModifier(this.context?.pine?.syminfo?.tickerid || this.context?.tickerId || '');
         }
-        return this._coerce(symbol);
+        return stripTickerModifier(this._coerce(symbol));
     }
 
     /**
-     * ticker.heikinashi(symbol) → simple string
+     * ticker.heikinashi(symbol) → extended-ticker string
      *
-     * In TV this returns an encoded tickerid that instructs the
-     * datafeed to deliver Heikin-Ashi bars. PineTS' providers don't
-     * synthesise HA candles, so we return the plain symbol — downstream
-     * `request.security` fetches standard candles, NOT HA-transformed
-     * ones. Behavior diverges from TV when the script depends on the
-     * HA values matching TV's HA computation. Documented limitation.
+     * Returns the symbol with the Heikin-Ashi chart-type modifier
+     * appended (`"BINANCE:BTCUSDT;heikinashi"`). `request.security`
+     * passes it through to the data source: an embedding host that owns
+     * the Heikin-Ashi transform serves derived bars; PineTS' own bundled
+     * providers strip the modifier and serve standard candles (documented
+     * standalone limitation). Idempotent on already-modified tickers.
      */
     heikinashi(symbol: any): string {
-        return this._coerce(symbol);
+        return withTickerModifier(this._coerce(symbol), 'heikinashi');
     }
 
     /**
