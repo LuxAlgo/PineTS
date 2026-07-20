@@ -16,7 +16,7 @@ export function lowest(context: any) {
         if (length <= 0) return NaN;
 
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `lowest_${length}`;
+        const stateKey = _callId ? `${_callId}_${length}` : `lowest_${length}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {

@@ -19,7 +19,7 @@ export function sma(context: any) {
 
         // Incremental SMA calculation using rolling sum
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `sma_${period}`;
+        const stateKey = _callId ? `${_callId}_${period}` : `sma_${period}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {

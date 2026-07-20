@@ -20,7 +20,7 @@ export function rsi(context: any) {
 
         // Incremental RSI calculation
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `rsi_${period}`;
+        const stateKey = _callId ? `${_callId}_${period}` : `rsi_${period}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
@@ -39,58 +39,9 @@ export function rsi(context: any) {
                 currentInitLosses: [],
                 currentResult: NaN,
             };
-            if (context.idx > 0) {
-                rebuildRsi(context.taState[stateKey], source, period, context.idx);
-                context.taState[stateKey].lastIdx = context.idx;
-            }
         }
 
         const state = context.taState[stateKey];
-
-        // Handle gap/conditional execution: catch up skipped bars from series
-        if (context.idx > state.lastIdx + 1) {
-            const series = Series.from(source);
-            // Catch up starting from state.lastIdx (re-evaluating it with the closed series value)
-            // up to context.idx - 1.
-            for (let i = state.lastIdx; i < context.idx; i++) {
-                const dist = context.idx - i;
-                const val = series.get(dist);
-                if (val === null || val === undefined || Number.isNaN(val)) {
-                    continue;
-                }
-                const prevVal = state.committedPrevValue;
-                if (prevVal === null || Number.isNaN(prevVal)) {
-                    state.committedPrevValue = val;
-                    continue;
-                }
-                const diff = val - prevVal;
-                const gain = diff > 0 ? diff : 0;
-                const loss = diff < 0 ? -diff : 0;
-
-                if (state.committedInitGains.length < period) {
-                    state.committedInitGains.push(gain);
-                    state.committedInitLosses.push(loss);
-                    state.committedPrevValue = val;
-
-                    if (state.committedInitGains.length === period) {
-                        state.committedAvgGain = state.committedInitGains.reduce((a: number, b: number) => a + b, 0) / period;
-                        state.committedAvgLoss = state.committedInitLosses.reduce((a: number, b: number) => a + b, 0) / period;
-                    }
-                } else {
-                    state.committedAvgGain = (state.committedAvgGain * (period - 1) + gain) / period;
-                    state.committedAvgLoss = (state.committedAvgLoss * (period - 1) + loss) / period;
-                    state.committedPrevValue = val;
-                }
-            }
-            state.lastIdx = context.idx - 1;
-
-            // Sync tentative state with newly caught-up committed state
-            state.currentPrevValue = state.committedPrevValue;
-            state.currentAvgGain = state.committedAvgGain;
-            state.currentAvgLoss = state.committedAvgLoss;
-            state.currentInitGains = [...state.committedInitGains];
-            state.currentInitLosses = [...state.committedInitLosses];
-        }
 
         // Commit logic: lock previous tentative state
         if (context.idx > state.lastIdx) {
@@ -169,51 +120,4 @@ export function rsi(context: any) {
         state.currentResult = context.precision(rsi);
         return state.currentResult;
     };
-}
-
-function rebuildRsi(state: any, source: any, period: number, currentIdx: number) {
-    const series = Series.from(source);
-    const lookback = Math.min(currentIdx, 250);
-    const startIdx = currentIdx - lookback;
-
-    let prevVal: number | null = null;
-    const initGains: number[] = [];
-    const initLosses: number[] = [];
-    let avgGain = 0;
-    let avgLoss = 0;
-
-    for (let i = startIdx; i < currentIdx; i++) {
-        const val = series.get(currentIdx - i);
-        if (val === null || val === undefined || Number.isNaN(val)) {
-            continue;
-        }
-        if (prevVal === null || Number.isNaN(prevVal)) {
-            prevVal = val;
-            continue;
-        }
-        const diff = val - prevVal;
-        const gain = diff > 0 ? diff : 0;
-        const loss = diff < 0 ? -diff : 0;
-
-        if (initGains.length < period) {
-            initGains.push(gain);
-            initLosses.push(loss);
-            prevVal = val;
-
-            if (initGains.length === period) {
-                avgGain = initGains.reduce((a, b) => a + b, 0) / period;
-                avgLoss = initLosses.reduce((a, b) => a + b, 0) / period;
-            }
-        } else {
-            avgGain = (avgGain * (period - 1) + gain) / period;
-            avgLoss = (avgLoss * (period - 1) + loss) / period;
-            prevVal = val;
-        }
-    }
-
-    state.committedPrevValue = prevVal;
-    state.committedAvgGain = avgGain;
-    state.committedAvgLoss = avgLoss;
-    state.committedInitGains = initGains;
-    state.committedInitLosses = initLosses;
 }

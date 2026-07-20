@@ -28,7 +28,7 @@ export function bb(context: any) {
 
         // Incremental Bollinger Bands calculation using circular buffer
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `bb_${length}_${mult}`;
+        const stateKey = _callId ? `${_callId}_${length}_${mult}` : `bb_${length}_${mult}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {

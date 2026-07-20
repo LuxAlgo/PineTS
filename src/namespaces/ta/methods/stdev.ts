@@ -9,7 +9,7 @@ export function stdev(context: any) {
         if (length <= 0) return NaN;
 
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `stdev_${length}_${bias}`;
+        const stateKey = _callId ? `${_callId}_${length}_${bias}` : `stdev_${length}_${bias}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {

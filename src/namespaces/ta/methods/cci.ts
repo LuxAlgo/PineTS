@@ -28,7 +28,7 @@ export function cci(context: any) {
 
         // Use incremental calculation with circular buffer
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `cci_${length}`;
+        const stateKey = _callId ? `${_callId}_${length}` : `cci_${length}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {

@@ -16,7 +16,7 @@ export function highest(context: any) {
         if (length <= 0) return NaN;
 
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `highest_${length}`;
+        const stateKey = _callId ? `${_callId}_${length}` : `highest_${length}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {

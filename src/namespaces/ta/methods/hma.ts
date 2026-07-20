@@ -34,7 +34,7 @@ export function hma(context: any) {
         const rawHma = 2 * wma1 - wma2;
 
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `hma_raw_${period}`;
+        const stateKey = _callId ? `${_callId}_${period}` : `hma_raw_${period}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
