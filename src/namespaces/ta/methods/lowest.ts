@@ -11,7 +11,7 @@ export function lowest(context: any) {
         }
 
         const length = Series.from(_length).get(0);
-        if (length <= 0) return NaN;
+        if (!Number.isFinite(length) || !Number.isInteger(length) || length <= 0) return NaN;
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId ? `${_callId}_${length}` : `lowest_${length}`;

@@ -39,42 +39,37 @@ export function hma(context: any) {
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
                 lastIdx: context.idx - 1,
-                // Circular buffer committed state
-                committedValues: new Array(sqrtPeriod),
-                committedHead: 0,
-                committedCount: 0,
-                // Circular buffer tentative state
                 values: new Array(sqrtPeriod),
                 head: 0,
                 count: 0,
+                rollbackHead: 0,
+                rollbackCount: 0,
+                rollbackIndex: 0,
+                rollbackValue: undefined,
                 currentResult: NaN,
             };
             if (context.idx > 0) {
                 rebuildRollingHma(context.taState[stateKey], source, halfPeriod, period, sqrtPeriod);
-                context.taState[stateKey].lastIdx = context.idx;
             }
         }
 
         const state = context.taState[stateKey];
 
-        // Handle gap/conditional execution: rebuild from series if we skipped bars
         if (context.idx > state.lastIdx + 1) {
             rebuildRollingHma(state, source, halfPeriod, period, sqrtPeriod);
-            state.lastIdx = context.idx;
         }
 
-        // Commit logic: lock previous tentative state
         if (context.idx > state.lastIdx) {
-            state.committedValues = [...state.values];
-            state.committedHead = state.head;
-            state.committedCount = state.count;
+            state.rollbackHead = state.head;
+            state.rollbackCount = state.count;
+            state.rollbackIndex = state.count < sqrtPeriod ? state.count : state.head;
+            state.rollbackValue = state.values[state.rollbackIndex];
             state.lastIdx = context.idx;
+        } else {
+            state.head = state.rollbackHead;
+            state.count = state.rollbackCount;
+            state.values[state.rollbackIndex] = state.rollbackValue;
         }
-
-        // Rollback logic: always initialize current bar's tentative state from committed state
-        state.values = [...state.committedValues];
-        state.head = state.committedHead;
-        state.count = state.committedCount;
 
         const value = Number.isFinite(rawHma) ? rawHma : NaN;
 
@@ -92,32 +87,24 @@ export function hma(context: any) {
             return NaN;
         }
 
-        let numerator = 0;
-        let denominator = 0;
-        let hasNaN = false;
-
-        const lastInserted = (state.head - 1 + sqrtPeriod) % sqrtPeriod;
-        for (let j = 0; j < sqrtPeriod; j++) {
-            const idx = (lastInserted - j + sqrtPeriod) % sqrtPeriod;
-            const v = state.values[idx];
-            if (v === undefined || v === null || Number.isNaN(v)) {
-                hasNaN = true;
-                break;
-            }
-            const weight = sqrtPeriod - j;
-            numerator += v * weight;
-            denominator += weight;
-        }
-
-        if (hasNaN) {
-            state.currentResult = NaN;
-            return NaN;
-        }
-
-        const hma = numerator / denominator;
+        const hma = weightedSum(state.values, state.head, sqrtPeriod) / ((sqrtPeriod * (sqrtPeriod + 1)) / 2);
         state.currentResult = context.precision(hma);
         return state.currentResult;
     };
+}
+
+function weightedSum(values: readonly number[], head: number, length: number) {
+    let result = 0;
+    let weight = length;
+    for (let index = head - 1; index >= 0; index -= 1) {
+        result += values[index] * weight;
+        weight -= 1;
+    }
+    for (let index = length - 1; index >= head; index -= 1) {
+        result += values[index] * weight;
+        weight -= 1;
+    }
+    return result;
 }
 
 function getWmaAt(source: any, idx: number, period: number) {
@@ -144,21 +131,17 @@ function getRawHmaAt(source: any, idx: number, halfPeriod: number, period: numbe
 }
 
 function rebuildRollingHma(state: any, source: any, halfPeriod: number, period: number, sqrtPeriod: number) {
-    const tempValues = [];
-    let tempCount = 0;
+    const values = [];
     for (let i = 1; i <= sqrtPeriod; i++) {
         const v = getRawHmaAt(source, i, halfPeriod, period);
         if (Number.isFinite(v)) {
-            tempValues.unshift(v); // oldest to newest
-            tempCount++;
+            values.unshift(v);
         } else {
             break;
         }
     }
-    state.committedValues = new Array(sqrtPeriod);
-    for (let i = 0; i < tempCount; i++) {
-        state.committedValues[i] = tempValues[i];
-    }
-    state.committedHead = 0;
-    state.committedCount = tempCount;
+    state.values = new Array(sqrtPeriod);
+    for (let index = 0; index < values.length; index += 1) state.values[index] = values[index];
+    state.head = 0;
+    state.count = values.length;
 }

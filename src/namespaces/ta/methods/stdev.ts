@@ -21,10 +21,6 @@ export function stdev(context: any) {
                 rollbackCount: 0,
                 rollbackIndex: 0,
                 rollbackValue: undefined,
-                sum: 0,
-                nanCount: 0,
-                rollbackSum: 0,
-                rollbackNaNCount: 0,
                 currentResult: NaN,
             };
             if (context.idx > 0) rebuildRollingStdev(context.taState[stateKey], source, length);
@@ -38,15 +34,11 @@ export function stdev(context: any) {
             state.rollbackCount = state.count;
             state.rollbackIndex = state.count < length ? state.count : state.head;
             state.rollbackValue = state.values[state.rollbackIndex];
-            state.rollbackSum = state.sum;
-            state.rollbackNaNCount = state.nanCount;
             state.lastIdx = context.idx;
         } else {
             state.head = state.rollbackHead;
             state.count = state.rollbackCount;
             state.values[state.rollbackIndex] = state.rollbackValue;
-            state.sum = state.rollbackSum;
-            state.nanCount = state.rollbackNaNCount;
         }
 
         const currentValue = Series.from(source).get(0);
@@ -55,29 +47,35 @@ export function stdev(context: any) {
             state.values[state.count] = value;
             state.count += 1;
         } else {
-            const evicted = state.values[state.head];
-            if (Number.isNaN(evicted)) {
-                state.nanCount -= 1;
-            } else {
-                state.sum -= evicted;
-            }
             state.values[state.head] = value;
             state.head += 1;
             if (state.head === length) state.head = 0;
         }
 
-        if (Number.isNaN(value)) {
-            state.nanCount += 1;
-        } else {
-            state.sum += value;
-        }
-
-        if (state.count < length || state.nanCount > 0) {
+        if (state.count < length) {
             state.currentResult = NaN;
             return NaN;
         }
 
-        const mean = state.sum / length;
+        let sum = 0;
+        for (let index = state.head - 1; index >= 0; index -= 1) {
+            const item = state.values[index];
+            if (item === undefined || item === null || Number.isNaN(item)) {
+                state.currentResult = NaN;
+                return NaN;
+            }
+            sum += item;
+        }
+        for (let index = length - 1; index >= state.head; index -= 1) {
+            const item = state.values[index];
+            if (item === undefined || item === null || Number.isNaN(item)) {
+                state.currentResult = NaN;
+                return NaN;
+            }
+            sum += item;
+        }
+
+        const mean = sum / length;
         let sumSquaredDiff = 0;
         for (let index = state.head - 1; index >= 0; index -= 1) {
             const item = state.values[index];
@@ -112,6 +110,4 @@ function rebuildRollingStdev(state: any, source: any, length: number) {
     for (let index = 0; index < values.length; index += 1) state.values[index] = values[index];
     state.head = 0;
     state.count = values.length;
-    state.sum = values.reduce((sum: number, value: number) => sum + value, 0);
-    state.nanCount = 0;
 }

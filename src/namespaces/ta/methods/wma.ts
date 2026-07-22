@@ -17,105 +17,115 @@ export function wma(context: any) {
         const period = Series.from(_period).get(0);
         if (period <= 0) return NaN;
 
-        // Incremental WMA calculation using circular buffer
         if (!context.taState) context.taState = {};
         const stateKey = _callId ? `${_callId}_${period}` : `wma_${period}`;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
                 lastIdx: context.idx - 1,
-                committedValues: new Array(period),
-                committedHead: 0,
-                committedCount: 0,
                 values: new Array(period),
                 head: 0,
                 count: 0,
+                rollbackHead: 0,
+                rollbackCount: 0,
+                rollbackIndex: 0,
+                rollbackValue: undefined,
+                sum: 0,
+                weightedSum: 0,
+                nanCount: 0,
+                rollbackSum: 0,
+                rollbackWeightedSum: 0,
+                rollbackNaNCount: 0,
                 currentResult: NaN,
             };
-            if (context.idx > 0) {
-                rebuildRollingWma(context.taState[stateKey], source, period);
-                context.taState[stateKey].lastIdx = context.idx;
-            }
+            if (context.idx > 0) rebuildRollingWma(context.taState[stateKey], source, period);
         }
 
         const state = context.taState[stateKey];
+        if (context.idx > state.lastIdx + 1) rebuildRollingWma(state, source, period);
 
-        // Handle gap/conditional execution: rebuild from series if we skipped bars
-        if (context.idx > state.lastIdx + 1) {
-            rebuildRollingWma(state, source, period);
-            state.lastIdx = context.idx;
-        }
-
-        // Commit logic: lock previous tentative state
         if (context.idx > state.lastIdx) {
-            state.committedValues = [...state.values];
-            state.committedHead = state.head;
-            state.committedCount = state.count;
+            state.rollbackHead = state.head;
+            state.rollbackCount = state.count;
+            state.rollbackIndex = state.count < period ? state.count : state.head;
+            state.rollbackValue = state.values[state.rollbackIndex];
+            state.rollbackSum = state.sum;
+            state.rollbackWeightedSum = state.weightedSum;
+            state.rollbackNaNCount = state.nanCount;
             state.lastIdx = context.idx;
+        } else {
+            state.head = state.rollbackHead;
+            state.count = state.rollbackCount;
+            state.values[state.rollbackIndex] = state.rollbackValue;
+            state.sum = state.rollbackSum;
+            state.weightedSum = state.rollbackWeightedSum;
+            state.nanCount = state.rollbackNaNCount;
         }
-
-        // Rollback logic: always initialize current bar's tentative state from committed state
-        state.values = [...state.committedValues];
-        state.head = state.committedHead;
-        state.count = state.committedCount;
 
         const currentValue = Series.from(source).get(0);
         const value = currentValue === undefined || currentValue === null ? NaN : Number(currentValue);
-
         if (state.count < period) {
             state.values[state.count] = value;
             state.count += 1;
         } else {
+            const evicted = state.values[state.head];
+            if (Number.isNaN(evicted)) {
+                state.nanCount -= 1;
+            } else {
+                state.sum -= evicted;
+            }
             state.values[state.head] = value;
             state.head += 1;
             if (state.head === period) state.head = 0;
         }
 
-        if (state.count < period) {
+        if (Number.isNaN(value)) {
+            state.nanCount += 1;
+        } else {
+            state.sum += value;
+        }
+
+        if (state.count < period || state.nanCount > 0) {
             state.currentResult = NaN;
             return NaN;
         }
 
-        let hasNaN = false;
-        let numerator = 0;
-        let denominator = 0;
+        state.weightedSum = weightedSum(state.values, state.head, period);
 
-        const lastInserted = (state.head - 1 + period) % period;
-        for (let j = 0; j < period; j++) {
-            const idx = (lastInserted - j + period) % period;
-            const v = state.values[idx];
-            if (v === undefined || v === null || Number.isNaN(v)) {
-                hasNaN = true;
-                break;
-            }
-            const weight = period - j;
-            numerator += v * weight;
-            denominator += weight;
-        }
-
-        state.currentResult = hasNaN ? NaN : context.precision(numerator / denominator);
+        const denominator = (period * (period + 1)) / 2;
+        state.currentResult = context.precision(state.weightedSum / denominator);
         return state.currentResult;
     };
 }
 
+function weightedSum(values: readonly number[], head: number, length: number) {
+    let result = 0;
+    let weight = length;
+    for (let index = head - 1; index >= 0; index -= 1) {
+        result += values[index] * weight;
+        weight -= 1;
+    }
+    for (let index = length - 1; index >= head; index -= 1) {
+        result += values[index] * weight;
+        weight -= 1;
+    }
+    return result;
+}
+
 function rebuildRollingWma(state: any, source: any, period: number) {
-    const tempValues = [];
-    let tempCount = 0;
+    const values = [];
     const series = Series.from(source);
-    for (let i = 1; i <= period; i++) {
-        const rawV = series.get(i);
-        const v = rawV === undefined || rawV === null ? NaN : Number(rawV);
-        if (Number.isFinite(v)) {
-            tempValues.unshift(v); // oldest to newest
-            tempCount++;
-        } else {
-            break;
-        }
+    for (let offset = 1; offset <= period; offset += 1) {
+        const rawValue = series.get(offset);
+        const value = rawValue === undefined || rawValue === null ? NaN : Number(rawValue);
+        if (!Number.isFinite(value)) break;
+        values.unshift(value);
     }
-    state.committedValues = new Array(period);
-    for (let i = 0; i < tempCount; i++) {
-        state.committedValues[i] = tempValues[i];
-    }
-    state.committedHead = 0;
-    state.committedCount = tempCount;
+    state.values = new Array(period);
+    for (let index = 0; index < values.length; index += 1) state.values[index] = values[index];
+    state.head = 0;
+    state.count = values.length;
+    state.sum = values.reduce((sum: number, value: number) => sum + value, 0);
+    state.weightedSum = state.count === period ? weightedSum(state.values, state.head, period) : 0;
+    state.nanCount = 0;
 }
