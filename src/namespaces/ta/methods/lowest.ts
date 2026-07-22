@@ -4,8 +4,6 @@ import { Series } from '../../../Series';
 
 export function lowest(context: any) {
     return (source: any, _length: any, _callId?: string) => {
-        // if the _length is of type string, this is probably the _callId 
-        // ==> this is a weak approach to determine syntaxes : ta.low(length) vs ta.low(source, length)
         if (typeof _length === 'string' && _callId === undefined) {
             _callId = _length;
             _length = source;
@@ -17,88 +15,73 @@ export function lowest(context: any) {
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId ? `${_callId}_${length}` : `lowest_${length}`;
+        const callsiteKey = _callId ? `lowest_callsite_${_callId}` : 'lowest_callsite';
+        const callsite = context.taState[callsiteKey];
+        const isContinuousCall = callsite?.lastIdx === context.idx - 1;
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
-                lastIdx: context.idx - 1,
-                committedValues: new Array(length),
-                committedHead: 0,
-                committedCount: 0,
-                values: new Array(length),
-                head: 0,
-                count: 0,
-                currentResult: NaN,
+                lastIdx: -1,
+                prevWindow: [],
+                prevCallCount: 0,
+                currentWindow: [],
+                currentCallCount: 0,
             };
-            if (context.idx > 0) {
-                rebuildRollingLowest(context.taState[stateKey], source, length);
-                context.taState[stateKey].lastIdx = context.idx;
+            if (isContinuousCall) {
+                seedWindow(context.taState[stateKey], source, length);
             }
         }
 
         const state = context.taState[stateKey];
-
-        if (context.idx > state.lastIdx + 1) {
-            rebuildRollingLowest(state, source, length);
+        if (context.idx > state.lastIdx + 1 && isContinuousCall) {
+            seedWindow(state, source, length);
             state.lastIdx = context.idx;
         }
-
         if (context.idx > state.lastIdx) {
-            state.committedValues = [...state.values];
-            state.committedHead = state.head;
-            state.committedCount = state.count;
+            if (state.lastIdx >= 0) {
+                state.prevWindow = [...state.currentWindow];
+                state.prevCallCount = state.currentCallCount;
+            }
             state.lastIdx = context.idx;
         }
 
-        state.values = [...state.committedValues];
-        state.head = state.committedHead;
-        state.count = state.committedCount;
+        const window = [...state.prevWindow];
+        window.unshift(Series.from(source).get(0));
+        while (window.length > length) window.pop();
 
-        const currentValue = Series.from(source).get(0);
-        const value = currentValue === undefined || currentValue === null ? NaN : Number(currentValue);
-
-        if (state.count < length) {
-            state.values[state.count] = value;
-            state.count += 1;
-        } else {
-            state.values[state.head] = value;
-            state.head += 1;
-            if (state.head === length) state.head = 0;
+        const callCount = state.prevCallCount + 1;
+        if (window.length < length && (callCount >= length || context.idx >= length - 1)) {
+            const series = Series.from(source);
+            while (window.length < length) window.push(series.get(window.length));
         }
 
-        if (state.count < length) {
-            state.currentResult = NaN;
-            return NaN;
-        }
+        state.currentWindow = window;
+        state.currentCallCount = callCount;
+        context.taState[callsiteKey] = { lastIdx: context.idx };
 
-        let min = Infinity;
-        let hasValid = false;
-        for (let i = 0; i < length; i++) {
-            const v = state.values[i];
-            if (v !== undefined && v !== null && !Number.isNaN(v)) {
-                if (v < min) {
-                    min = v;
-                }
-                hasValid = true;
+        if (window.length < length) return NaN;
+        let lowestValue = Infinity;
+        let hasValue = false;
+        for (const value of window) {
+            if (value !== undefined && value !== null && !Number.isNaN(value)) {
+                lowestValue = Math.min(lowestValue, value);
+                hasValue = true;
             }
         }
-
-        state.currentResult = hasValid ? context.precision(min) : NaN;
-        return state.currentResult;
+        return hasValue ? context.precision(lowestValue) : NaN;
     };
 }
 
-function rebuildRollingLowest(state: any, source: any, length: number) {
-    const tempValues = [];
+function seedWindow(state: any, source: any, length: number) {
     const series = Series.from(source);
-    for (let i = 1; i <= length; i++) {
-        const rawV = series.get(i);
-        const v = rawV === undefined || rawV === null ? NaN : Number(rawV);
-        tempValues.unshift(v);
+    state.prevWindow = [];
+    state.currentWindow = [];
+    state.prevCallCount = 0;
+    state.currentCallCount = 0;
+    for (let offset = 1; offset < length; offset += 1) {
+        const value = series.get(offset);
+        if (value === undefined || value === null) break;
+        state.prevWindow.push(value);
     }
-    state.committedValues = new Array(length);
-    for (let i = 0; i < length; i++) {
-        state.committedValues[i] = tempValues[i];
-    }
-    state.committedHead = 0;
-    state.committedCount = length;
+    state.prevCallCount = state.prevWindow.length;
 }

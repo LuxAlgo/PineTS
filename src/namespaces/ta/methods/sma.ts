@@ -28,10 +28,12 @@ export function sma(context: any) {
                 committedHead: 0,
                 committedCount: 0,
                 committedSum: 0,
+                committedNaNCount: 0,
                 values: new Array(period),
                 head: 0,
                 count: 0,
                 sum: 0,
+                nanCount: 0,
                 currentResult: NaN,
             };
             if (context.idx > 0) {
@@ -54,6 +56,7 @@ export function sma(context: any) {
             state.committedHead = state.head;
             state.committedCount = state.count;
             state.committedSum = state.sum;
+            state.committedNaNCount = state.nanCount;
             state.lastIdx = context.idx;
         }
 
@@ -62,6 +65,7 @@ export function sma(context: any) {
         state.head = state.committedHead;
         state.count = state.committedCount;
         state.sum = state.committedSum;
+        state.nanCount = state.committedNaNCount;
 
         const currentValue = Series.from(source).get(0);
         const value = currentValue === undefined || currentValue === null ? NaN : Number(currentValue);
@@ -70,37 +74,24 @@ export function sma(context: any) {
             state.values[state.count] = value;
             state.count += 1;
         } else {
+            const evicted = state.values[state.head];
+            if (Number.isNaN(evicted)) {
+                state.nanCount -= 1;
+            } else {
+                state.sum -= evicted;
+            }
             state.values[state.head] = value;
             state.head += 1;
             if (state.head === period) state.head = 0;
         }
 
-        let sum = 0;
-        let hasNaN = false;
-        if (state.count < period) {
-            for (let i = state.count - 1; i >= 0; i--) {
-                const v = state.values[i];
-                if (v === undefined || v === null || Number.isNaN(v)) {
-                    hasNaN = true;
-                    break;
-                }
-                sum += v;
-            }
+        if (Number.isNaN(value)) {
+            state.nanCount += 1;
         } else {
-            const lastInserted = (state.head - 1 + period) % period;
-            for (let j = 0; j < period; j++) {
-                const idx = (lastInserted - j + period) % period;
-                const v = state.values[idx];
-                if (v === undefined || v === null || Number.isNaN(v)) {
-                    hasNaN = true;
-                    break;
-                }
-                sum += v;
-            }
+            state.sum += value;
         }
-        state.sum = hasNaN ? NaN : sum;
 
-        state.currentResult = state.count < period
+        state.currentResult = state.count < period || state.nanCount > 0
             ? NaN
             : context.precision(state.sum / period);
 
@@ -131,4 +122,5 @@ function rebuildRollingSum(state: any, source: any, period: number) {
     state.committedHead = 0;
     state.committedCount = tempCount;
     state.committedSum = tempSum;
+    state.committedNaNCount = 0;
 }

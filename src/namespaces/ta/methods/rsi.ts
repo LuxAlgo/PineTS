@@ -48,8 +48,8 @@ export function rsi(context: any) {
             state.committedPrevValue = state.currentPrevValue;
             state.committedAvgGain = state.currentAvgGain;
             state.committedAvgLoss = state.currentAvgLoss;
-            state.committedInitGains = [...state.currentInitGains];
-            state.committedInitLosses = [...state.currentInitLosses];
+            state.committedInitGains = state.currentInitGains;
+            state.committedInitLosses = state.currentInitLosses;
             state.lastIdx = context.idx;
         }
 
@@ -57,8 +57,8 @@ export function rsi(context: any) {
         state.currentPrevValue = state.committedPrevValue;
         state.currentAvgGain = state.committedAvgGain;
         state.currentAvgLoss = state.committedAvgLoss;
-        state.currentInitGains = [...state.committedInitGains];
-        state.currentInitLosses = [...state.committedInitLosses];
+        state.currentInitGains = state.committedInitGains;
+        state.currentInitLosses = state.committedInitLosses;
 
         const currentValue = Series.from(source).get(0);
 
@@ -79,8 +79,8 @@ export function rsi(context: any) {
 
         let avgGain = state.currentAvgGain;
         let avgLoss = state.currentAvgLoss;
-        const initGains = [...state.currentInitGains];
-        const initLosses = [...state.currentInitLosses];
+        const initGains = state.currentInitGains.length < period ? [...state.currentInitGains] : state.currentInitGains;
+        const initLosses = state.currentInitLosses.length < period ? [...state.currentInitLosses] : state.currentInitLosses;
 
         const diff = currentValue - prevValue;
         const gain = diff > 0 ? diff : 0;
