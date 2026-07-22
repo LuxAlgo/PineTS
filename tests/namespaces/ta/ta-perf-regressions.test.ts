@@ -261,4 +261,33 @@ plot(rsi_sparse, "rsi_sparse")
         expectSeriesClose(plots.atr_cond.data, atrWhenCalled(bars, 14, shouldCallConditional), 0, 'atr_cond');
         expectSeriesClose(plots.rsi_sparse.data, rsiWhenCalled(close, 14, shouldCallSparse), 0, 'rsi_sparse');
     });
+
+    it('preserves conditional highest and lowest call-site history', async () => {
+        const bars = makeBars();
+        const pineTS = new PineTS([...bars], 'TEST', 'D');
+        const { plots } = await pineTS.run(`
+//@version=6
+indicator("ta perf conditional range regression")
+float high_cond = na
+float low_cond = na
+if close > open
+    high_cond := ta.highest(close, 5)
+if close > open
+    low_cond := ta.lowest(close, 5)
+plot(high_cond, "high_cond")
+plot(low_cond, "low_cond")
+`);
+        const expectedHigh = [
+            NaN, NaN, NaN, NaN, 116.3087787872, 130.981631831, NaN, 130.981631831,
+            130.981631831, NaN, 130.981631831, 130.981631831, NaN, 124.2377281485,
+            124.2377281485, NaN, 124.2377281485, 121.687207033,
+        ];
+        const expectedLow = [
+            NaN, NaN, NaN, NaN, 100, 103.4734792123, NaN, 101.892343527,
+            101.892343527, NaN, 101.892343527, 101.892343527, NaN, 101.892343527,
+            94.0041803316, NaN, 94.0041803316, 94.0041803316,
+        ];
+        expectSeriesClose(plots.high_cond.data, expectedHigh, 0, 'high_cond');
+        expectSeriesClose(plots.low_cond.data, expectedLow, 0, 'low_cond');
+    });
 });
