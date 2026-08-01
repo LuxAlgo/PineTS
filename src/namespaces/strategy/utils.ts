@@ -2214,3 +2214,88 @@ export function initializeStrategy(context: any, config: any): void {
         _exit_fallback_last_bar: -1,
     };
 }
+
+/**
+ * Deep-clone a plain-data value (primitives, arrays, plain objects, Map).
+ * Strategy state holds only plain data — Trade/Order/ledger rows are object
+ * literals, `_exit_call_history` is a Map<string, number> — so this covers
+ * every field without a structuredClone dependency.
+ */
+function clonePlainValue<T>(value: T): T {
+    if (Array.isArray(value)) {
+        return value.map(clonePlainValue) as unknown as T;
+    }
+    if (value instanceof Map) {
+        const copy = new Map();
+        value.forEach((v, k) => copy.set(k, clonePlainValue(v)));
+        return copy as unknown as T;
+    }
+    if (value !== null && typeof value === 'object') {
+        const copy: any = {};
+        for (const key of Object.keys(value)) {
+            copy[key] = clonePlainValue((value as any)[key]);
+        }
+        return copy;
+    }
+    return value;
+}
+
+/**
+ * Snapshot the full strategy ledger for streaming rollback.
+ *
+ * Iterates the ACTUAL own keys of the state object instead of a hand-kept
+ * field list, so internal fields written via `(strategy as any)`
+ * (`_ledger_entries`, `_mc_exit_lock`, `_pending_close_mc`, ...) are covered
+ * even though they are absent from the StrategyState type.
+ *
+ * Two fields get special treatment:
+ *   - `config`: skipped — rebuilt by `strategy.any()` on every script
+ *     evaluation, so the live value is always current.
+ *   - `closedtrades`: length-only. The array is append-only (single write
+ *     site: the `push` in closePartialPosition) and rows are fresh literals
+ *     never mutated afterwards, so truncation restores it exactly. This
+ *     keeps the snapshot O(open state), not O(backtest length).
+ *
+ * Returns null for indicator contexts (no strategy declared).
+ */
+export function snapshotStrategyState(strategy: StrategyState | undefined): any | null {
+    if (!strategy) return null;
+    const fields: Record<string, any> = {};
+    for (const key of Object.keys(strategy)) {
+        if (key === 'config' || key === 'closedtrades') continue;
+        fields[key] = clonePlainValue((strategy as any)[key]);
+    }
+    return { fields, closedtradesLength: strategy.closedtrades.length };
+}
+
+/**
+ * Restore the strategy ledger from a snapshotStrategyState() snapshot.
+ *
+ * MUTATES the existing state object in place — `Context.strategy` is public
+ * and documented as "the same object every getter reads from", so its
+ * identity must never change. The snapshot may be applied many times (once
+ * per streaming tick), so values are cloned OUT of it: handing the live
+ * state the snapshot's own arrays would let the next re-execution corrupt
+ * the restore point.
+ *
+ * Keys added to the state after the snapshot was taken (i.e. during a
+ * discarded execution of the forming bar) are deleted.
+ */
+export function restoreStrategyState(strategy: StrategyState | undefined, snapshot: any | null): void {
+    if (!strategy || !snapshot) return;
+
+    for (const key of Object.keys(strategy)) {
+        if (key === 'config' || key === 'closedtrades') continue;
+        if (!Object.prototype.hasOwnProperty.call(snapshot.fields, key)) {
+            delete (strategy as any)[key];
+        }
+    }
+
+    if (strategy.closedtrades.length > snapshot.closedtradesLength) {
+        strategy.closedtrades.length = snapshot.closedtradesLength;
+    }
+
+    for (const key of Object.keys(snapshot.fields)) {
+        (strategy as any)[key] = clonePlainValue(snapshot.fields[key]);
+    }
+}

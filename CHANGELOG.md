@@ -1,5 +1,18 @@
 # Change Log
 
+## [0.9.30] - 2026-08-01 - Streaming Strategy-Ledger Rollback
+
+### Fixed
+
+- **Strategy ledger not rolled back on streaming re-execution**: The live streaming path (`stream()` / paginated `run()` / `updateTail()`) re-executes the forming bar on every tick, and once more with its final OHLC when the next bar arrives. The rollback restored `var` Series, results, market-data series and drawings — but **not** `context.strategy`. Every discarded execution therefore leaked one pending order (`strategy.entry`/`strategy.order` push unconditionally, and the `order.bar >= context.idx` fill guard skips-without-consuming), and all leaked duplicates filled together at the next bar's open: **`position_size` inflated by ticks+2 per bar** instead of the scripted amount (2× even with zero intra-bar ticks, since the previously-forming bar is always re-executed once on new-candle arrival). The pyramiding cap could not catch it — it counts open trades, which stay flat while the duplicates are still queued. New **`snapshotStrategyState`/`restoreStrategyState`** (`namespaces/strategy/utils.ts`) ride the existing `_snapshotVarState`/`_restoreVarState` cycle, so all three restore points (paginated live loop, `updateTail`, `_runComplete` split-execute) are covered: the full ledger — `pending_orders`, `opentrades`, position/equity scalars, peaks/ratchets, win-loss counters, and internal fields written via `(strategy as any)` (`_ledger_entries`, `_mc_exit_lock`, `_pending_close_mc`, …) — is restored to its pre-last-bar state before each re-execution. `closedtrades` is snapshotted length-only (append-only array, O(open state) cost, not O(backtest length)); `config` is skipped (rebuilt by `strategy()` each evaluation); `context.strategy` is mutated **in place** (its identity is public API). Also prevents conditional exits queued on the forming bar from firing against that bar's own H/L via re-execution, and stops the monotonic ratchets (`equity_peak`, `max_drawdown`, `risk_halted`, …) latching intra-tick extremes that never existed as a closed bar. Static/closed-history backtests are unaffected (snapshots were already taken there; restore only runs on streaming re-execution).
+- **Note for users**: `calc_on_every_tick` remains stored-but-unread. With this fix the streaming engine behaves as `calc_on_every_tick = true` (script evaluates every tick; ledger effects commit at bar close). Honoring `false` (evaluate on bar close only) is a separate planned feature.
+
+### Added
+
+- **Tests**: `tests/namespaces/strategy/streaming-rollback.test.ts` — offline scripted-provider streaming harness (one provider poll == one tick): streaming ≡ static ledger parity at T ∈ {0, 1, 4} ticks per forming bar (position, trades, netprofit, `equity_peak`, `max_drawdown`, `max_contracts_held_all`), single-pending-order invariant while forming, default-pyramiding "enter when flat" breakout (opens exactly 1 unit), exit-bracket no-fire-on-own-bar + no-duplicate-across-ticks, and structural guards (market-data series length parity, contiguous `bar_index`).
+
+---
+
 ## [0.9.29] - 2026-07-11 - Heikin Ashi Chart Type & Extended Tickers
 
 ### Added
