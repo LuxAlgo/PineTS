@@ -5,7 +5,7 @@ import { Context } from './Context.class';
 import { splitTickerModifier, withTickerModifier } from './tickerModifier';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
-import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, isAdverseFirstBar, applyPendingCloseMarginCall } from './namespaces/strategy/utils';
+import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, isAdverseFirstBar, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState } from './namespaces/strategy/utils';
 
 // ── Timeframe duration utility ──────────────────────────────────────
 //prettier-ignore
@@ -955,7 +955,8 @@ export class PineTS {
     }
 
     /**
-     * Snapshot the var/let/const/params Series state for streaming rollback.
+     * Snapshot the var/let/const/params Series state — plus the strategy
+     * ledger, via snapshotStrategyState — for streaming rollback.
      * Captures the data array length and last value for each variable so we can
      * restore to this exact state before re-executing the last bar.
      *
@@ -1004,6 +1005,12 @@ export class PineTS {
             snapshot.lctx = lctxSnaps;
         }
 
+        // Strategy ledger (pending_orders / opentrades / position / equity /
+        // peaks). Without this, orders queued by a discarded execution of the
+        // forming bar survive the rollback and fill as duplicates on the next
+        // bar. Null for indicator contexts.
+        snapshot.strategy = snapshotStrategyState(context.strategy);
+
         // Also snapshot result and data array lengths
         snapshot.resultLength = this._getResultLength(context.result);
         snapshot.dataLength = context.data.close?.data?.length ?? 0;
@@ -1048,6 +1055,11 @@ export class PineTS {
                 i++;
             });
         }
+
+        // Roll the strategy ledger back to its pre-last-bar state (no-op for
+        // indicators). Mutates context.strategy in place — its identity is
+        // public API.
+        restoreStrategyState(context.strategy, snapshot.strategy);
     }
 
     /**
