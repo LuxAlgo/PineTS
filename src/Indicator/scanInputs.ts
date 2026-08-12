@@ -3,6 +3,7 @@
 
 import { pineToJS } from '../transpiler/pineToJS/pineToJS.index';
 import { resolveColorToRgba, rgbaToHex8 } from '../namespaces/color/PineColor';
+import { SOURCE_BUILTINS } from '../namespaces/input/utils';
 import type { IPineInput, PineInputType, PineInputDisplay } from './types';
 
 /**
@@ -22,8 +23,6 @@ import type { IPineInput, PineInputType, PineInputDisplay } from './types';
  * lookup ALSO works keyed by `title`, so this is intentional — at runtime an
  * input with no title isn't user-overridable (matches Pine semantics).
  */
-
-const SOURCE_BUILTINS = new Set(['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'volume']);
 
 // Per-function positional parameter order. Decoding rule: walk positional args
 // L→R; the Nth positional binds to the Nth param name here. Named args (any
