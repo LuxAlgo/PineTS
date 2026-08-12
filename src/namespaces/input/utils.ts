@@ -1,5 +1,29 @@
 import { parseArgsForPineParams } from '../utils';
+import { Series } from '../../Series';
 import { InputOptions } from './types';
+
+/**
+ * Builtin source-series names a runtime `input.source` override may carry.
+ * Overrides cross a serialization boundary (host constructor map, worker
+ * postMessage), so a source override arrives as the series NAME — never the
+ * series itself. Also used by the meta scanner (scanInputs) to type-detect
+ * source defaults.
+ */
+export const SOURCE_BUILTINS = new Set(['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'volume']);
+
+/**
+ * Dereference a builtin source NAME to the named series' current-bar value.
+ * Returns `undefined` when the name is not a builtin or the series is absent —
+ * callers fall back to the declared default. Reading `.get(0)` per bar matches
+ * exactly what the transpiler's `input.param(<series>)` wrapping produces for
+ * the un-overridden default, so both paths stay value-identical.
+ */
+export function resolveSourceName(context: any, name: string): number | undefined {
+    if (!SOURCE_BUILTINS.has(name)) return undefined;
+    const series = context?.data?.[name];
+    if (series == null) return undefined;
+    return Series.from(series).get(0);
+}
 const INPUT_SIGNATURES = [
     ['defval', 'title', 'tooltip', 'inline', 'group', 'display'],
     ['defval', 'title', 'tooltip', 'group', 'confirm', 'display'],
