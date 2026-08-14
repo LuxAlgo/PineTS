@@ -50,4 +50,4 @@ Click [here](api-coverage.md) to check the implementation status of [Pine Script
 
 ---
 
-Created by [Alaa-eddine KADDOURI](https://github.com/alaa-eddine) | Licensed under AGPL-3.0
+Copyright (C) 2026-present [LuxAlgo](https://www.luxalgo.com) | Licensed under AGPL-3.0

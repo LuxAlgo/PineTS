@@ -1018,4 +1018,4 @@ For full documentation including frequency constants, alert modes, and complete 
 -   Check [API Coverage](../api-coverage/) to see all available technical analysis functions
 -   Explore [Language Coverage](../lang-coverage/) to understand Pine Script compatibility
 -   Try our demo indicators: [WillVixFix](../indicators/willvixfix/index.html) and [Squeeze Momentum](../indicators/sqzmom/index.html)
--   Contribute on [GitHub](https://github.com/alaa-eddine/PineTS)
+-   Contribute on [GitHub](https://github.com/LuxAlgo/PineTS)
