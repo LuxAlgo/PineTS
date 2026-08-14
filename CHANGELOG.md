@@ -443,7 +443,7 @@ The **`strategy.*`** surface is implemented 1:1. Numeric output may still diverg
 - **`closeTime` Normalization**: `BinanceProvider` and `MockProvider` now normalize `closeTime` to the TradingView convention (`closeTime = nextBar.openTime`) instead of Binance's raw `nextBarOpen - 1ms`. `IProvider` docs updated to specify this convention. For array-based data missing `closeTime`, `PineTS` now estimates it as `openTime + timeframe duration` (falls back to 1D when unknown).
 - **`time_tradingday` Uses Close Date**: Was returning midnight UTC of the bar's open date. Now correctly returns midnight UTC of the **close date** (matching TradingView). E.g. a weekly bar opening `2019-01-07` → closes `2019-01-14` → `time_tradingday = 2019-01-14 00:00 UTC`.
 - **`timestamp(dateString)` Exchange Timezone**: Date strings like `"2019-06-10 00:00"` were parsed in the host system's local timezone. Now explicitly resolved in the exchange timezone (`syminfo.timezone`), matching TradingView behaviour. Strings with explicit offsets or `Z` are honoured as-is.
-- **`TimeHelper` as `Series`** ([#156](https://github.com/QuantForgeOrg/PineTS/issues/156)): `Series.from()` now unwraps NAMESPACES_LIKE dual-use objects (`time`, `time_close`, etc.) by detecting the `.__value` Series property, instead of wrapping the object itself. Added a null-guard to prevent a crash when the source is `null`. (contribution by [@dcaoyuan](https://github.com/dcaoyuan))
+- **`TimeHelper` as `Series`** ([#156](https://github.com/LuxAlgo/PineTS/issues/156)): `Series.from()` now unwraps NAMESPACES_LIKE dual-use objects (`time`, `time_close`, etc.) by detecting the `.__value` Series property, instead of wrapping the object itself. Added a null-guard to prevent a crash when the source is `null`. (contribution by [@dcaoyuan](https://github.com/dcaoyuan))
 - **`Log` Timestamps Use Chart Timezone**: `log.info/warning/error` hardcoded UTC for bar timestamp prefixes. They now respect the timezone set via `setTimezone()`, falling back to the exchange timezone.
 - **`Etc/UTC` Alias**: Added `'Etc/UTC'` to the fast-path UTC check in `getDatePartsInTimezone()`, fixing date-part calculations for providers that use the canonical `Etc/UTC` identifier (common for crypto).
 - **`ta.vwap` Session Timezone**: VWAP day-boundary detection now uses `getDatePartsInTimezone(openTime, syminfo.timezone)` instead of `toISOString().slice(0, 10)`, so session resets are correct for non-UTC exchanges.
@@ -544,7 +544,7 @@ The **`strategy.*`** surface is implemented 1:1. Numeric output may still diverg
 - **`matrix.pinv()` — Real Pseudoinverse**: Rewrote `matrix.pinv()` from a placeholder stub to a correct Moore-Penrose pseudoinverse: square → `inv()`, tall (m > n) → `(AᵀA)⁻¹Aᵀ`, wide (m < n) → `Aᵀ(AAᵀ)⁻¹`.
 - **`array.min()` / `array.max()` Performance**: Added an O(N) fast path for the common `nth=0` case instead of always sorting O(N log N).
 - **`array.median()`, `percentile_linear_interpolation()`, `percentile_nearest_rank()` Performance**: Single-pass copy-and-validate optimizations.
-- **`isPlot()` with Undefined Title**: Fixed `isPlot()` to accept plot objects that have `_plotKey` but no `title` property (e.g., fill plots created via callsite ID), preventing `fill()` from misidentifying its arguments (contribution by @dcaoyuan, [#142](https://github.com/QuantForgeOrg/PineTS/issues/142)).
+- **`isPlot()` with Undefined Title**: Fixed `isPlot()` to accept plot objects that have `_plotKey` but no `title` property (e.g., fill plots created via callsite ID), preventing `fill()` from misidentifying its arguments (contribution by @dcaoyuan, [#142](https://github.com/LuxAlgo/PineTS/issues/142)).
 - **Duplicate `map` in `CONTEXT_PINE_VARS`**: Removed an accidental duplicate `'map'` entry from `settings.ts`.
 
 ## [0.9.1] - 2026-03-04 - Enum Values, ATR/DMI/Supertrend Fixes, UDT & Transpiler Improvements
@@ -610,12 +610,12 @@ The **`strategy.*`** surface is implemented 1:1. Numeric output may still diverg
 - **Line Namespace (`line.*`)**: Full implementation of the line drawing namespace including `line.new()`, `line.copy()`, and all setter/getter methods (`set_x1`, `set_y1`, `set_x2`, `set_y2`, `set_color`, `set_width`, `set_style`, `set_extend`, etc.).
 - **Linefill Namespace (`linefill.*`)**: Implementation of `linefill.new()` for filling the area between two line objects, with `set_color`, `get_color`, `delete`, and related methods.
 - **Fill Support (`fill()`)**: Implementation of the `fill()` function for filling areas between plots and hlines.
-- **Plot Callsite IDs**: Transpiler now injects unique callsite IDs (`{__callsiteId: "#N"}`) for every `plot()`/`hline()`/`fill()` call to handle duplicate plot titles ([#110](https://github.com/QuantForgeOrg/PineTS/issues/110)).
+- **Plot Callsite IDs**: Transpiler now injects unique callsite IDs (`{__callsiteId: "#N"}`) for every `plot()`/`hline()`/`fill()` call to handle duplicate plot titles ([#110](https://github.com/LuxAlgo/PineTS/issues/110)).
 - **Transpiler Dotted Types**: Added support for dotted type annotations in Pine Script (e.g., `chart.point`, `line`).
 
 ### Fixed
 
-- **Plot Title Collisions**: Multiple plots with the same title no longer overwrite each other; collisions are resolved with human-readable `title#N` keys ([#110](https://github.com/QuantForgeOrg/PineTS/issues/110)).
+- **Plot Title Collisions**: Multiple plots with the same title no longer overwrite each other; collisions are resolved with human-readable `title#N` keys ([#110](https://github.com/LuxAlgo/PineTS/issues/110)).
 - **Var Declaration Side Effects**: Factory method calls (e.g., `line.new()`, `line.copy()`) in `var` declarations are now deferred via arrow function thunks to prevent orphan object creation on every bar.
 - **Array Initialization**: Fixed `array.new<type>()` with no arguments (e.g., `array.new<chart.point>()`).
 - **Label & Line Value Resolution**: Values passed to label and line setters can now be Series, bound functions, or plain scalars — all are correctly resolved.
