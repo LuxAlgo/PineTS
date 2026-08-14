@@ -121,7 +121,7 @@ await pine.run(($) => {
 
 After the call, `context.strategy.config` holds the merged options (defaults + your overrides) and the rest of `context.strategy` is initialized — see the [object reference below](#the-contextstrategy-object).
 
-**Supported options** (every field is `StrategyConfig` in [`PineTS/src/namespaces/strategy/types.ts`](https://github.com/alaa-eddine/PineTS/blob/main/src/namespaces/strategy/types.ts)):
+**Supported options** (every field is `StrategyConfig` in [`PineTS/src/namespaces/strategy/types.ts`](https://github.com/LuxAlgo/PineTS/blob/main/src/namespaces/strategy/types.ts)):
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
@@ -150,7 +150,7 @@ PineTS implements the same order lifecycle as TradingView:
 2. **On bar N+1's open, the engine processes it** — fills it if market, or checks limit/stop conditions. Slippage and commissions are applied at fill time.
 3. **Position-mutating events** (open / close / reverse) are mirrored on the flat scalars (`position_size`, `position_avg_price`, `position_entry_name`).
 
-Internal lifecycle is handled by `processStrategyOrders()` and `processExitOrders()` in [`strategy/utils.ts`](https://github.com/alaa-eddine/PineTS/blob/main/src/namespaces/strategy/utils.ts), invoked at the start of every bar.
+Internal lifecycle is handled by `processStrategyOrders()` and `processExitOrders()` in [`strategy/utils.ts`](https://github.com/LuxAlgo/PineTS/blob/main/src/namespaces/strategy/utils.ts), invoked at the start of every bar.
 
 ### `strategy.order()`
 
@@ -247,7 +247,7 @@ if ($.idx === 1) {
 
 ## The `context.strategy` object
 
-After `strategy()` is declared, `context.strategy` exposes the live state — the same object every getter reads from. It's documented in [`StrategyState`](https://github.com/alaa-eddine/PineTS/blob/main/src/namespaces/strategy/types.ts):
+After `strategy()` is declared, `context.strategy` exposes the live state — the same object every getter reads from. It's documented in [`StrategyState`](https://github.com/LuxAlgo/PineTS/blob/main/src/namespaces/strategy/types.ts):
 
 ```typescript
 interface StrategyState {

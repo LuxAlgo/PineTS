@@ -73,7 +73,7 @@
         "prepublishOnly": "npm run build:prod:all",
         "knip": "knip"
     },
-    "author": "Alaa-eddine KADDOURI",
+    "author": "LuxAlgo",
     "license": "AGPL-3.0-only",
     "dependencies": {
         "acorn": "^8.14.0",

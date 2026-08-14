@@ -259,4 +259,4 @@ After getting started, try exploring our demo indicators:
 - [WillVixFix Indicator](../indicators/willvixfix/index.html)
 - [Squeeze Momentum Indicator](../indicators/sqzmom/index.html)
 
-Or contribute to the project on [GitHub](https://github.com/alaa-eddine/PineTS)!
+Or contribute to the project on [GitHub](https://github.com/LuxAlgo/PineTS)!

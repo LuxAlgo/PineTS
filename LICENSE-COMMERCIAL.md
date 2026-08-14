@@ -25,4 +25,4 @@ For pricing, terms, and inquiries, Please [reach out](mailto:business@luxalgo.co
 
 ---
 
-_Copyright (c) 2025-present LuxAlgo_
+_Copyright (c) 2026-present LuxAlgo_
