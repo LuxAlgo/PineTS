@@ -7,15 +7,15 @@ description: Pine Script in TypeScript - Write trading indicators with TypeScrip
 show_downloads: true
 google_analytics:
 github:
-    repository_url: https://github.com/alaa-eddine/PineTS
+    repository_url: https://github.com/LuxAlgo/PineTS
 
 # Just the Docs specific settings
 color_scheme: dark
 aux_links:
     'PineTS on GitHub':
-        - 'https://github.com/alaa-eddine/PineTS'
+        - 'https://github.com/LuxAlgo/PineTS'
 heading_anchors: true
 nav_sort: case_sensitive
 back_to_top: true
 back_to_top_text: 'Back to top'
-footer_content: 'Created by <a href="https://github.com/alaa-eddine">Alaa-eddine KADDOURI</a> | Licensed under AGPL-3.0'
+footer_content: 'Copyright (C) 2026-present <a href="https://www.luxalgo.com">LuxAlgo</a> | Licensed under AGPL-3.0'

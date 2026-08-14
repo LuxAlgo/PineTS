@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (C) 2025 Alaa-eddine KADDOURI
+// Copyright (C) 2026 LuxAlgo
 
 /**
  * Inverse of convert_to_account: from account currency → symbol currency.

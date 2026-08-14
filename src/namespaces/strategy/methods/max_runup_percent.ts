@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (C) 2025 Alaa-eddine KADDOURI
+// Copyright (C) 2026 LuxAlgo
 
 /**
  * Maximum equity run-up percent. Mirrors the `max_drawdown_percent`

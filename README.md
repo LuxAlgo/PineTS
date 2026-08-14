@@ -16,6 +16,7 @@ PineTS enables algorithmic traders, quant developers, and platforms to integrate
   <a href="./.github/badges/coverage.svg"><img src="./.github/badges/coverage.svg" alt="Coverage"></a>
   <a href="https://github.com/LuxAlgo/PineTS#api-coverage"><img src="./.github/badges/api-coverage.svg" alt="API Coverage"></a>
   <a href="https://luxalgo.github.io/PineTS/"><img src="https://img.shields.io/badge/docs-github--pages-blue?style=flat-square" alt="Documentation"></a>
+  <a href="https://github.com/wilsonfreitas/awesome-quant"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Quant" /></a>
 </p>
 
 <p align="center">
@@ -403,5 +404,6 @@ PineTS is dual-licensed:
 ---
 
 <p align="center">
-  <sub>Built with passion by <a href="https://www.luxalgo.com">LuxAlgo</a></sub>
+  <sub>Built with passion by <a href="https://www.luxalgo.com">LuxAlgo</a></sub><br>
+  <sub>Copyright (C) 2026-present LuxAlgo</sub>
 </p>

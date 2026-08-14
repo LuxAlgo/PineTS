@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (C) 2025 Alaa-eddine KADDOURI
+// Copyright (C) 2026 LuxAlgo
 
 /**
  * Convert a value from the symbol's currency to the account currency.

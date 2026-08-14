@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (C) 2025 Alaa-eddine KADDOURI
+// Copyright (C) 2026 LuxAlgo
 
 /**
  * Average profit across winning closed trades. NaN when no winners yet.
