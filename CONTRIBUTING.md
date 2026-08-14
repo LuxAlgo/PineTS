@@ -136,7 +136,7 @@ These require upfront discussion to ensure alignment with project direction and 
 
 ```bash
 # Clone the repository
-git clone https://github.com/QuantForgeOrg/PineTS.git
+git clone https://github.com/LuxAlgo/PineTS.git
 cd PineTS
 
 # Install dependencies
@@ -316,9 +316,9 @@ npx prettier --write .
 
 ### Where to Ask:
 
-- **General Questions**: [GitHub Discussions](https://github.com/QuantForgeOrg/PineTS/discussions)
-- **Bug Reports**: [GitHub Issues](https://github.com/QuantForgeOrg/PineTS/issues)
-- **Feature Proposals**: [GitHub Discussions](https://github.com/QuantForgeOrg/PineTS/discussions) first
+- **General Questions**: [GitHub Discussions](https://github.com/LuxAlgo/PineTS/discussions)
+- **Bug Reports**: [GitHub Issues](https://github.com/LuxAlgo/PineTS/issues)
+- **Feature Proposals**: [GitHub Discussions](https://github.com/LuxAlgo/PineTS/discussions) first
 - **Private Contact**: [QuantForge Contact Form](https://quantforge.org/contact/)
 
 ### Resources:
