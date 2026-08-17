@@ -251,20 +251,25 @@ export function processStrategyOrders(context: any): void {
 
         // Orders placed on bar N can only fill on bar N+1 or later
         // Skip if this order was placed on the current bar (context.idx)
-        if (order.bar >= context.idx) {
+        if (order.bar > context.idx) {
             continue;
         }
-
+        if (order.bar === context.idx &&!(strategy.config.process_orders_on_close === true &&order.type === 'market')) {
+        continue;
+        }
         let shouldFill = false;
         let fillPrice = openPrice;
 
         // Determine if order should be filled based on type
         switch (order.type) {
             case 'market':
-                // Market orders fill at current bar's open (which is "next bar's open" from order placement)
                 shouldFill = true;
-                fillPrice = openPrice;
-                break;
+                    fillPrice =
+                        strategy.config.process_orders_on_close === true &&
+                        order.bar === context.idx
+                            ? closePrice
+                            : openPrice;
+            break;
 
             case 'limit':
                 // Limit orders fill when price reaches the limit level
