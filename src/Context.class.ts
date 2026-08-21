@@ -17,6 +17,7 @@ import { PineTypeObject } from './namespaces/PineTypeObject';
 import { Strategy, StrategyState } from './namespaces/strategy/strategy.index';
 import { Series } from './Series';
 import { Log } from './namespaces/Log';
+import { Runtime } from './namespaces/Runtime';
 import { Str } from './namespaces/Str';
 import types, { display, shape } from './namespaces/Types';
 import { Timeframe } from './namespaces/Timeframe';
@@ -259,6 +260,7 @@ export class Context {
                 return _this.inputs;
             },
             log: new Log(this),
+            runtime: new Runtime(this),
             str: new Str(this),
             // linefill namespace will be bound below via bindContextObject
             ...coreFunctions,
