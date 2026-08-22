@@ -148,6 +148,19 @@ export const NAMESPACE_COLLISION_NAMES = new Set([
     'strategy',
     'log',
     'str',
+    // Constant/enum namespaces (member access only). TradingView allows user
+    // variables to share these names while namespace member access still
+    // works (e.g. `position = 1` alongside `position.top_right`), so the
+    // user variable must be renamed. `dayofweek` is dual-use (built-in
+    // variable + enum) — renaming only triggers when the user DECLARES a
+    // variable with the name, so bare built-in reads are unaffected.
+    'position',
+    'font',
+    'order',
+    'currency',
+    'dayofweek',
+    'adjustment',
+    'barmerge',
 ]);
 
 // JavaScript reserved keywords that ARE valid Pine identifiers but invalid as
