@@ -2,6 +2,8 @@
 
 import { Series } from '../Series';
 import { parseArgsForPineParams } from './utils';
+import { parseSessionSpec, isInSessionSpec } from './sessionSpec';
+import { PineRuntimeError } from '../errors/PineRuntimeError';
 
 // ── Timeframe alignment utilities ───────────────────────────────────
 
@@ -271,33 +273,20 @@ export class TimeHelper {
     }
 
     /**
-     * Basic session check: parses "HHMM-HHMM" format and tests if
-     * the timestamp falls within the session window.
+     * Session check: parses a full Pine session string — comma-separated
+     * "HHMM-HHMM" windows with an optional ":days" suffix (1=Sunday..7=Saturday)
+     * — and tests whether the timestamp falls within the session.
+     * Malformed session strings halt the script, mirroring TradingView.
      */
     private _isInSession(timestamp: number, session: string, timezone: string): boolean {
-        // Parse session format "HHMM-HHMM" (e.g. "0930-1600")
-        const match = session.match(/^(\d{2})(\d{2})-(\d{2})(\d{2})$/);
-        if (!match) return true; // If session format is unrecognized, pass through
-
-        const startHour = parseInt(match[1], 10);
-        const startMin = parseInt(match[2], 10);
-        const endHour = parseInt(match[3], 10);
-        const endMin = parseInt(match[4], 10);
-
-        // Get hour/minute in the target timezone using the shared utility
-        const parts = getDatePartsInTimezone(timestamp, timezone);
-        const hour = parts.hour;
-        const minute = parts.minute;
-
-        const barTime = hour * 60 + minute;
-        const sessionStart = startHour * 60 + startMin;
-        const sessionEnd = endHour * 60 + endMin;
-
-        if (sessionStart <= sessionEnd) {
-            return barTime >= sessionStart && barTime < sessionEnd;
+        const spec = parseSessionSpec(session);
+        if (!spec) {
+            throw new PineRuntimeError(`Invalid session specification: "${session}"`, 'time');
         }
-        // Overnight session (e.g. "1800-0930")
-        return barTime >= sessionStart || barTime < sessionEnd;
+
+        const parts = getDatePartsInTimezone(timestamp, timezone);
+        const minutesOfDay = parts.hour * 60 + parts.minute;
+        return isInSessionSpec(spec, minutesOfDay, parts.dayOfWeek);
     }
 }
 
