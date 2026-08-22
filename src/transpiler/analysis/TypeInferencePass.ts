@@ -1,38 +1,44 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * TypeInferencePass — Pine base-type inference (RC2b P0).
+ * TypeInferencePass — Pine v5 const-int division inference.
  *
  * Runs BEFORE the main lowering pass, on the clean AST (operands are still bare
- * identifiers, `input.int(...)` calls, and literals — not yet `$.get(...)`).
+ * identifiers and literals — not yet `$.get(...)`), and ONLY for Pine v5 sources
+ * (the caller in `transpiler/index.ts` gates on the //@version directive).
  *
- * Purpose: replicate Pine's `int / int → int` semantics. JavaScript `/` is always
- * float division (`11 / 2 === 5.5`), but Pine truncates toward zero when both
- * operands are integers (`11 / 2 === 5`, `-11 / 2 === -5`). Int-ness is a
- * compile-time fact — a `float` series holding `4.0` is an ordinary JS number at
- * runtime — so a static pass is the only correct discriminator.
+ * Purpose: replicate Pine v5's `const int / const int → int` truncation.
+ * Per TradingView's v6 migration guide ("Fractional division of constants"):
  *
- * When a `/` BinaryExpression has BOTH operands provably `int`, it is rewritten in
- * place to `$.pine.math.__idiv(left, right)`; the main pass then lowers the operand
- * subtrees inside the call args. Anything not provably int keeps native `/`, so
- * partial coverage never corrupts a genuine float division — the worst case is a
- * missed truncation.
+ *   - In v5, `int / int` truncates toward zero ONLY when BOTH operands are
+ *     qualified as 'const' (compile-time constants): `5 / 2 === 2`.
+ *   - If at least one operand is 'input', 'simple', or 'series' — loop counters,
+ *     mutable (`:=`-reassigned) variables, `var` declarations, `input.int(...)`,
+ *     int builtins like `bar_index` — the fractional remainder is PRESERVED
+ *     even in v5: `i / 4 === 0.75`.
+ *   - In v6, `int / int` NEVER truncates, regardless of qualifiers. (v6 scripts
+ *     never reach this pass.)
  *
- * Scope note (P0): the ONLY consumer of type info is the `/` rewrite, so we track
- * a minimal lattice — `int` vs `notint` (float / string / bool / na / unknown).
- * `notint` simply means "not provably int", which is all the rewrite needs. A
- * fuller int/float/bool/string lattice (for str.tostring formatting, casts, etc.)
- * can be layered on later without changing this rewrite.
+ * When a `/` BinaryExpression has BOTH operands provably const int, it is
+ * rewritten in place to `$.pine.math.__idiv(left, right)`; the main pass then
+ * lowers the operand subtrees inside the call args. Anything not provably
+ * const-int keeps native `/`, so partial coverage never corrupts a genuine
+ * fractional division — the worst case is a missed truncation.
+ *
+ * Lattice: `constint` (compile-time int constant) → `int` (int-typed but
+ * input/simple/series-qualified) → `notint` (float / string / bool / na /
+ * unknown). Only `constint / constint` triggers the rewrite; the `int` tier
+ * exists so int-ness still propagates through arithmetic without ever
+ * upgrading a non-const operand to const.
  */
-import * as walk from 'acorn-walk';
 import ScopeManager from './ScopeManager';
 import { ASTFactory } from '../utils/ASTFactory';
 
-type T = 'int' | 'notint';
+type T = 'constint' | 'int' | 'notint';
 
 /**
- * Built-in variables that are `int`-typed in Pine. Their divisions (`bar_index / 2`)
- * are integer division even though at runtime they are plain JS numbers.
+ * Built-in variables that are `int`-typed in Pine. They are series-qualified,
+ * never 'const', so they can propagate int-ness but never trigger truncation.
  */
 const INT_BUILTIN_VARS = new Set<string>([
     'bar_index', 'last_bar_index',
@@ -41,17 +47,17 @@ const INT_BUILTIN_VARS = new Set<string>([
 ]);
 
 /**
- * Built-in calls that RETURN `int` (dotted callee name). CONSERVATIVE subset —
- * only functions whose result is unambiguously an int (counts, indices, bar
- * offsets). Anything absent defaults to `notint` (no truncation), so an omission
- * is a safe missed-truncation, never a wrong one.
+ * Built-in calls that RETURN `int` (dotted callee name). All are 'input',
+ * 'simple' or 'series' qualified — never 'const' — so they propagate int-ness
+ * without enabling truncation. CONSERVATIVE subset — anything absent defaults
+ * to `notint`, which is a safe missed inference, never a wrong one.
  *
  * Deliberately EXCLUDED (fail-safe on uncertainty):
  * - `ta.pivothigh` / `ta.pivotlow` — return the pivot PRICE (float), not a bar
  *   count. (Listing them as int caused a real over-truncation regression.)
  * - `math.round` — overloaded (1-arg → int, 2-arg → float).
  * - `math.sign`, `str.pos`, `input.time` — return type uncertain; excluded until
- *   verified rather than risk truncating a float.
+ *   verified rather than risk mis-typing a float.
  */
 const INT_RETURNING_CALLS = new Set<string>([
     'input.int',
@@ -92,6 +98,43 @@ function calleeName(callee: any): string | null {
     return null;
 }
 
+/**
+ * Collect every identifier name that is EVER written after declaration —
+ * `:=` reassignments (AssignmentExpression) and loop-counter updates
+ * (UpdateExpression / compound assignment in for-headers). Pine qualifies a
+ * mutated variable as 'series' program-wide, so a single write anywhere
+ * disqualifies the name from 'const' everywhere. Name-based (not scope-based):
+ * a shadowed name may be over-disqualified, which fails safe (missed
+ * truncation), never wrong.
+ */
+function collectMutatedNames(ast: any): Set<string> {
+    const mutated = new Set<string>();
+    (function scan(node: any): void {
+        if (!node || typeof node !== 'object') return;
+        if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier') {
+            mutated.add(node.left.name);
+        } else if (node.type === 'UpdateExpression' && node.argument?.type === 'Identifier') {
+            mutated.add(node.argument.name);
+        }
+        for (const key in node) {
+            if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'raw') continue;
+            const child = node[key];
+            if (Array.isArray(child)) {
+                for (const c of child) if (c && typeof c === 'object') scan(c);
+            } else if (child && typeof child === 'object') {
+                scan(child);
+            }
+        }
+    })(ast);
+    return mutated;
+}
+
+/** JOIN two types: int-ness survives only if both sides are int-ish, and the
+ *  result of a join is never const (a value that can vary is not a constant). */
+function join(a: T, b: T): T {
+    return a !== 'notint' && b !== 'notint' ? 'int' : 'notint';
+}
+
 /** Scope stack of variable-name → inferred type. Pine rarely shadows, but function
  *  bodies get their own frame so a param never leaks a type to the global scope. */
 class Env {
@@ -108,46 +151,46 @@ class Env {
         return undefined;
     }
     /**
-     * Reassignment (`x := ...`): JOIN with the existing type. A variable is `int`
-     * only if EVERY value it holds is `int`; once it takes a `notint` value (its
-     * `na`/float initializer, or any float assignment) it stays `notint` forever.
-     * This mirrors Pine's "type is fixed at declaration" — a `var float x = na`
-     * reassigned to a float pivot stays float — and fails safe: a mis-typed
-     * signature can never upgrade a float variable to int and truncate it.
+     * Reassignment (`x := ...`): JOIN with the existing type. A variable is
+     * int-ish only if EVERY value it holds is int-ish; once it takes a `notint`
+     * value (its `na`/float initializer, or any float assignment) it stays
+     * `notint` forever. This mirrors Pine's "type is fixed at declaration" — a
+     * `var float x = na` reassigned to a float pivot stays float — and fails
+     * safe: a mis-typed signature can never upgrade a float variable to int.
      */
     assign(name: string, t: T): void {
         for (let i = this.stack.length - 1; i >= 0; i--) {
             if (this.stack[i].has(name)) {
-                const cur = this.stack[i].get(name);
-                this.stack[i].set(name, cur === 'int' && t === 'int' ? 'int' : 'notint');
+                this.stack[i].set(name, join(this.stack[i].get(name)!, t));
                 return;
             }
         }
-        this.stack[this.stack.length - 1].set(name, t);
+        this.stack[this.stack.length - 1].set(name, join(t, t));
     }
 }
 
 export function runTypeInferencePass(ast: any, _scopeManager: ScopeManager): void {
     const env = new Env();
+    const mutatedNames = collectMutatedNames(ast);
 
     // Visit a node; for expressions, return its inferred type AND rewrite any
-    // provably-int `/` inside it. Every child is visited exactly once so no
-    // division is missed. Unknown/unhandled shapes fall back to generic child
+    // provably-const-int `/` inside it. Every child is visited exactly once so
+    // no division is missed. Unknown/unhandled shapes fall back to generic child
     // recursion and yield `notint` (safe: no rewrite).
     function visit(node: any): T {
         if (!node || typeof node !== 'object') return 'notint';
 
         switch (node.type) {
             case 'Literal':
-                if (typeof node.value === 'number') return isIntLiteral(node) ? 'int' : 'notint';
+                if (typeof node.value === 'number') return isIntLiteral(node) ? 'constint' : 'notint';
                 return 'notint';
 
             case 'Identifier':
-                if (INT_BUILTIN_VARS.has(node.name)) return 'int';
+                if (INT_BUILTIN_VARS.has(node.name)) return 'int'; // series int, never const
                 return env.get(node.name) ?? 'notint';
 
             case 'UnaryExpression':
-                // Unary +/- preserve numeric type (`-11` is int); `!`/`~` are notint.
+                // Unary +/- preserve numeric type (`-11` is const int); `!`/`~` are notint.
                 if (node.operator === '-' || node.operator === '+') return visit(node.argument);
                 visit(node.argument);
                 return 'notint';
@@ -155,21 +198,23 @@ export function runTypeInferencePass(ast: any, _scopeManager: ScopeManager): voi
             case 'BinaryExpression': {
                 const lt = visit(node.left);
                 const rt = visit(node.right);
-                const bothInt = lt === 'int' && rt === 'int';
                 if (node.operator === '/') {
-                    if (bothInt) {
-                        // int / int → int (truncated toward zero). Rewrite in place;
-                        // the main pass lowers node.left / node.right in the args.
+                    if (lt === 'constint' && rt === 'constint') {
+                        // v5 const int / const int → const int (truncated toward
+                        // zero). Rewrite in place; the main pass lowers
+                        // node.left / node.right in the args.
                         const call = ASTFactory.createMathIntDivCall(node.left, node.right);
                         Object.assign(node, call);
-                        return 'int';
+                        return 'constint';
                     }
+                    // Any non-const int operand → fractional result (even in v5).
                     return 'notint';
                 }
-                // `+ - * %` preserve int when both operands are int (so a downstream
-                // `/` sees the propagated int-ness). Comparisons / others → notint.
+                // `+ - * %` preserve int-ness (and const-ness) so a downstream
+                // `/` sees it. Comparisons / others → notint.
                 if (node.operator === '+' || node.operator === '-' || node.operator === '*' || node.operator === '%') {
-                    return bothInt ? 'int' : 'notint';
+                    if (lt === 'constint' && rt === 'constint') return 'constint';
+                    return lt !== 'notint' && rt !== 'notint' ? 'int' : 'notint';
                 }
                 return 'notint';
             }
@@ -178,7 +223,9 @@ export function runTypeInferencePass(ast: any, _scopeManager: ScopeManager): voi
                 visit(node.test);
                 const c = visit(node.consequent);
                 const a = visit(node.alternate);
-                return c === 'int' && a === 'int' ? 'int' : 'notint';
+                // Never const: we don't track bool const-ness of the test, and a
+                // missed truncation is safe while a wrong one is not.
+                return join(c, a);
             }
 
             case 'LogicalExpression':
@@ -203,8 +250,17 @@ export function runTypeInferencePass(ast: any, _scopeManager: ScopeManager): voi
 
             case 'VariableDeclaration': {
                 for (const d of node.declarations || []) {
-                    const t = d.init ? visit(d.init) : 'notint';
-                    if (d.id?.type === 'Identifier') env.set(d.id.name, t);
+                    let t = d.init ? visit(d.init) : 'notint';
+                    if (d.id?.type === 'Identifier') {
+                        // Const-ness requires an immutable non-`var` binding:
+                        // `var`/`varip` declarations and any name that is ever
+                        // reassigned (incl. loop counters) are at best simple/
+                        // series ints in Pine's qualifier model.
+                        if (t === 'constint' && (node.kind === 'var' || mutatedNames.has(d.id.name))) {
+                            t = 'int';
+                        }
+                        env.set(d.id.name, t);
+                    }
                 }
                 return 'notint';
             }
@@ -212,7 +268,7 @@ export function runTypeInferencePass(ast: any, _scopeManager: ScopeManager): voi
             case 'AssignmentExpression': {
                 const t = visit(node.right);
                 // `x := ...` reassignment: JOIN with the existing type (never
-                // upgrades a notint variable to int — see Env.assign).
+                // upgrades a notint variable, never yields const — see Env.assign).
                 if (node.left?.type === 'Identifier') env.assign(node.left.name, t);
                 else visit(node.left);
                 return t;

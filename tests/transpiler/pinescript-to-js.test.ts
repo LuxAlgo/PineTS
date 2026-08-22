@@ -408,9 +408,11 @@ plot(sum)
         expect(jsCode).toContain('+');
         expect(jsCode).toContain('-');
         expect(jsCode).toContain('*');
-        // `10 / 2` is int/int division, which lowers to the Pine integer-division
-        // helper (RC2b: `__idiv`) rather than a raw `/`. `%` still transpiles native.
-        expect(jsCode).toContain('__idiv');
+        // Pine v6 never truncates int/int division (see the v6 migration guide,
+        // "Fractional division of constants"), so `10 / 2` stays a native `/`
+        // and must NOT lower to the v5-only `__idiv` helper.
+        expect(jsCode).toContain('/');
+        expect(jsCode).not.toContain('__idiv');
         expect(jsCode).toContain('%');
     });
 

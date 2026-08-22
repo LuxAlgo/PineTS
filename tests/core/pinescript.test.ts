@@ -2650,12 +2650,13 @@ describe('PineScript Language', () => {
         console.log('>>> TEST: Operator Precedence Complex');
         console.log('>>> result: ', context.result);
 
-        // RC2b (Pine int/int → int): `5 / 2` is integer division (= 2, not 2.5),
-        // so complex1 = 2 + 3*4 - 5/2 = 2 + 12 - 2 = 12; and complex2 =
-        // ((2+3)*(4-5))/2 = -5/2 = -2 (truncated toward zero, not -2.5).
+        // PineTS-syntax input follows JavaScript semantics: `/` is always float
+        // division (only Pine v5 const/const divisions truncate, and this is not
+        // Pine source). So complex1 = 2 + 3*4 - 5/2 = 2 + 12 - 2.5 = 11.5, and
+        // complex2 = ((2+3)*(4-5))/2 = -5/2 = -2.5.
         const expected = {
-            complex1: [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12],
-            complex2: [-2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2],
+            complex1: [11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5, 11.5],
+            complex2: [-2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5, -2.5],
             complex3: [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true],
             complex4: [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true],
         };
