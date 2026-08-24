@@ -8,4 +8,4 @@ parent: API Coverage
 
 | Function          | Status |
 | ----------------- | ------ |
-| `runtime.error()` |        |
+| `runtime.error()` | ✅     |
