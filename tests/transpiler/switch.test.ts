@@ -241,9 +241,11 @@ plot(ma)
             const transpiledFn = transpile(indicatorCode, { debug: false });
             const code = transpiledFn.toString();
 
-            // Verify that default case includes both runtime.error and float(na)
+            // Verify that default case includes both runtime.error and float(na).
+            // `runtime` is a context-bound namespace, so the message argument is
+            // param-wrapped: runtime.param('...') feeding runtime.error(pN).
             expect(code).toContain('default:');
-            expect(code).toContain("runtime.error('No matching MA type found.')");
+            expect(code).toMatch(/runtime\.param\('No matching MA type found\.'/);
             expect(code).toMatch(/default:[^]*?runtime\.error[^]*?float/);
         });
 
@@ -267,7 +269,8 @@ plot(result)
             const code = transpiledFn.toString();
 
             // Check that both statements are present in default case
-            expect(code).toMatch(/default:[^]*?runtime\.error\('Invalid value'\)[^]*?return.*?float/);
+            // (message is param-wrapped before the runtime.error call)
+            expect(code).toMatch(/default:[^]*?runtime\.param\('Invalid value'[^]*?runtime\.error\([^]*?return.*?float/);
         });
     });
 
