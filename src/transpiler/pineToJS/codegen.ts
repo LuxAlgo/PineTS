@@ -605,6 +605,19 @@ export class CodeGenerator {
         if (isMethod) {
             this.write(this.indentStr.repeat(this.indent));
             this.write(`${jsFnName}.__pineMethod__ = true;\n`);
+
+            // Emit the declared receiver type (first-parameter type) so the
+            // transpile phase can dispatch dot-calls on BUILT-IN receivers
+            // (e.g. `method cell(table tb, ...)` called as `tb.cell(...)`)
+            // to the user method by static type matching. Emitted separately
+            // from __pineParamTypes__ because that marker skips the receiver
+            // when it is named `this` (renamed to `self`).
+            const recvParam = node.params[0];
+            const recvType = recvParam?.type === 'AssignmentPattern' ? recvParam.left?.varType : recvParam?.varType;
+            if (typeof recvType === 'string' && recvType.length > 0) {
+                this.write(this.indentStr.repeat(this.indent));
+                this.write(`${jsFnName}.__pineReceiverType__ = ${JSON.stringify(recvType)};\n`);
+            }
         }
 
         // Emit param-type marker for any params that carried a Pine type
@@ -714,6 +727,13 @@ export class CodeGenerator {
             ) {
                 this.write(this.indentStr.repeat(this.indent));
                 this.write(`"__pineUdtVar:${declaredName}=${declaredType}";\n`);
+            } else if (declaredName && typeof declaredType === 'string' && declaredType.length > 0) {
+                // Built-in / generic type annotations (`table`, `array<float>`,
+                // `series float`, ...) — preserved so the AnalysisPass can
+                // register the variable's static type for user-method
+                // dot-call dispatch on built-in receivers.
+                this.write(this.indentStr.repeat(this.indent));
+                this.write(`${JSON.stringify(`__pineTypedVar:${declaredName}=${declaredType}`)};\n`);
             }
         }
     }
