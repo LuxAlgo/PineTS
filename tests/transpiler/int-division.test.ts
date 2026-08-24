@@ -1,61 +1,76 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * RC2b — Pine integer division (`int / int → int`) regression suite.
+ * Pine integer division (`int / int`) regression suite.
  *
- * Pine truncates `/` toward zero when BOTH operands are integers (`11 / 2 === 5`,
- * `-11 / 2 === -5`); JavaScript `/` is always float. The TypeInferencePass rewrites
- * a `/` to `$.pine.math.__idiv(...)` ONLY when both operands are provably int, and
- * MUST leave every other division as native `/` (fail-safe — a missed truncation is
- * acceptable, a wrong truncation of a float is a bug).
+ * Reference: TradingView's "To Pine Script version 6" migration guide, section
+ * "Fractional division of constants":
  *
- * These tests lock down both directions:
- *   - int-division IS applied for the provable-int cases, and
- *   - float / unknown divisions are NEVER truncated — including the two real
- *     over-truncation regressions this suite exists to prevent:
- *       (1) `ta.pivothigh` / `ta.pivotlow` return a float PRICE, not an int bar
- *           count (they were wrongly typed int, truncating pivot-range math);
- *       (2) a `var float x = na` reassigned from a float value must stay float
- *           (JOIN-on-reassignment: once notint, always notint).
+ *   - Pine v5: `int / int` truncates toward zero ONLY when BOTH operands are
+ *     qualified as 'const' (e.g. `5 / 2 === 2`). If at least one operand is
+ *     'input', 'simple', or 'series' (loop counters, mutable variables,
+ *     `input.int(...)`, `bar_index`, ...), the fractional remainder is PRESERVED
+ *     (`i / 4 === 0.75`).
+ *   - Pine v6: `int / int` NEVER truncates, regardless of qualifiers
+ *     (`5 / 2 === 2.5`).
+ *
+ * The TypeInferencePass therefore rewrites `/` to `$.pine.math.__idiv(...)` only
+ * for v5 sources AND only when both operands are provably const int. Everything
+ * else — v6 scripts, bare PineTS syntax (JS semantics), and any non-const int
+ * operand — keeps native float `/`.
+ *
+ * This suite also guards two historical over-truncation regressions:
+ *   (1) `ta.pivothigh` / `ta.pivotlow` return a float PRICE, not an int bar count;
+ *   (2) a `var float x = na` reassigned from a float value must stay float.
  */
 import { describe, it, expect } from 'vitest';
 import { PineTS } from '../../src/PineTS.class';
 import { Provider } from '@pinets/marketData/Provider.class';
 import { transpile } from '../../src/transpiler/index';
 
-/** Transpile a Pine v6 snippet and return the generated JS as a string. */
-function tj(body: string): string {
-    return transpile(`//@version=6\nindicator("t")\n${body}`).toString();
+/** Transpile a Pine snippet at the given version, return the generated JS. */
+function tj(body: string, version: 5 | 6 = 5): string {
+    return transpile(`//@version=${version}\nindicator("t")\n${body}`).toString();
 }
 
 const IDIV = '__idiv';
 
-describe('RC2b: Pine integer division (__idiv)', () => {
-    describe('applies int-division (→ __idiv) when both operands are provably int', () => {
-        it('int literal / int literal', () => {
-            expect(tj('x = 11 / 2')).toContain(IDIV);
+describe('Pine v5: __idiv applied ONLY for const int / const int', () => {
+    it('int literal / int literal', () => {
+        expect(tj('x = 11 / 2')).toContain(IDIV);
+    });
+    it('const-int arithmetic / int literal', () => {
+        expect(tj('y = (3 + 4) / 2')).toContain(IDIV);
+    });
+    it('unary-minus int literal', () => {
+        expect(tj('y = -11 / 2')).toContain(IDIV);
+    });
+    it('const int variable (literal init, never reassigned) / int', () => {
+        expect(tj('iv = 7\ny = iv / 2')).toContain(IDIV);
+    });
+
+    describe('non-const int operands preserve the fractional remainder (no __idiv)', () => {
+        it('input.int is input-qualified, not const', () => {
+            expect(tj('depth = input.int(11)\ny = depth / 2')).not.toContain(IDIV);
         });
-        it('input.int-typed variable / int', () => {
-            expect(tj('depth = input.int(11)\ny = depth / 2')).toContain(IDIV);
+        it('bar_index is a series int, not const', () => {
+            expect(tj('y = bar_index / 2')).not.toContain(IDIV);
         });
-        it('int-typed builtin (bar_index) / int', () => {
-            expect(tj('y = bar_index / 2')).toContain(IDIV);
+        it('loop counter is a series int, not const', () => {
+            expect(tj('int gridSteps = 4\nfloat f = na\nfor i = 1 to 3\n    f := i / gridSteps')).not.toContain(IDIV);
         });
-        it('int-only arithmetic / int', () => {
-            expect(tj('y = (3 + 4) / 2')).toContain(IDIV);
+        it('reassigned int variable is series, not const', () => {
+            expect(tj('c = 0\nc := c + 1\ny = c / 2')).not.toContain(IDIV);
         });
-        it('unary-minus int literal', () => {
-            expect(tj('y = -11 / 2')).toContain(IDIV);
+        it('var-declared int is not const', () => {
+            expect(tj('var v = 8\ny = v / 2')).not.toContain(IDIV);
         });
-        it('int variable (literal init) / int', () => {
-            expect(tj('iv = 7\ny = iv / 2')).toContain(IDIV);
-        });
-        it('int variable reassigned only to ints stays int', () => {
-            expect(tj('c = 0\nc := c + 1\ny = c / 2')).toContain(IDIV);
+        it('const var divided by a later-reassigned var', () => {
+            expect(tj('k = 8\nm = 2\ny = k / m\nm := 4')).not.toContain(IDIV);
         });
     });
 
-    describe('never truncates float / unknown divisions (stays native /)', () => {
+    describe('never truncates float / unknown divisions', () => {
         it('float builtin (close) / int', () => {
             expect(tj('y = close / 2')).not.toContain(IDIV);
         });
@@ -69,8 +84,7 @@ describe('RC2b: Pine integer division (__idiv)', () => {
             expect(tj('y = close / high')).not.toContain(IDIV);
         });
 
-        // REGRESSION (1): ta.pivothigh / ta.pivotlow return the pivot PRICE (float),
-        // not an int bar count. They must NOT trigger int-division.
+        // REGRESSION (1): ta.pivothigh / ta.pivotlow return the pivot PRICE (float).
         it('ta.pivothigh() / int stays float', () => {
             expect(tj('ph = ta.pivothigh(5, 5)\ny = ph / 2')).not.toContain(IDIV);
         });
@@ -79,9 +93,7 @@ describe('RC2b: Pine integer division (__idiv)', () => {
         });
 
         // REGRESSION (2, zigzag): a `var float x = na` reassigned from a float
-        // pivot must stay float. JOIN semantics: once a variable holds a notint
-        // value (its na initializer), it stays notint forever, so a mis-typed
-        // signature can never upgrade it to int and truncate its range math.
+        // pivot must stay float (JOIN semantics: once notint, always notint).
         it('var float = na reassigned from a float pivot stays float', () => {
             const js = tj([
                 'var float lastHigh = na',
@@ -97,49 +109,102 @@ describe('RC2b: Pine integer division (__idiv)', () => {
             expect(js).not.toContain(IDIV);
         });
     });
+});
 
-    // pine2js must preserve float-ness through codegen, otherwise int/float
-    // division is indistinguishable downstream (`2.0` flattened to `2`).
-    describe('float-literal preservation (pine2js codegen)', () => {
-        it('preserves an integer-valued float literal (2.0 stays 2.0)', () => {
-            expect(tj('y = 2.0')).toContain('2.0');
-        });
-        it('normalizes a dot-prefix literal (.5 → 0.5)', () => {
-            expect(tj('y = .5')).toContain('0.5');
-        });
+describe('Pine v6: int division NEVER truncates (no __idiv, ever)', () => {
+    it('int literal / int literal', () => {
+        expect(tj('x = 11 / 2', 6)).not.toContain(IDIV);
+    });
+    it('const int variable / int', () => {
+        expect(tj('iv = 7\ny = iv / 2', 6)).not.toContain(IDIV);
+    });
+    it('const-int arithmetic / int', () => {
+        expect(tj('y = (3 + 4) / 2', 6)).not.toContain(IDIV);
+    });
+    it('loop counter / int variable', () => {
+        expect(tj('int gridSteps = 4\nfloat f = na\nfor i = 1 to 3\n    f := i / gridSteps', 6)).not.toContain(IDIV);
     });
 });
 
-describe('RC2b: integer division runtime values', () => {
-    async function evalExprs(exprs: Record<string, string>): Promise<Record<string, any>> {
+describe('bare PineTS syntax: JS float-division semantics (no __idiv)', () => {
+    it('int literal / int literal stays native /', () => {
+        const js = transpile(`($) => {\n    const { plot } = $.pine;\n    plot(11 / 2, 'y');\n}`).toString();
+        expect(js).not.toContain(IDIV);
+    });
+});
+
+// pine2js must preserve float-ness through codegen, otherwise int/float
+// division is indistinguishable downstream (`2.0` flattened to `2`).
+describe('float-literal preservation (pine2js codegen)', () => {
+    it('preserves an integer-valued float literal (2.0 stays 2.0)', () => {
+        expect(tj('y = 2.0')).toContain('2.0');
+    });
+    it('normalizes a dot-prefix literal (.5 → 0.5)', () => {
+        expect(tj('y = .5')).toContain('0.5');
+    });
+});
+
+describe('integer division runtime values', () => {
+    async function runPine(script: string): Promise<Record<string, any>> {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
-        const lines = Object.entries(exprs).map(([name, e]) => `plotchar(${e}, '${name}');`).join('\n');
-        const code = `const { plotchar } = context.pine;\n${lines}`;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(script);
         const out: Record<string, any> = {};
-        for (const name of Object.keys(exprs)) out[name] = plots[name].data[0].value;
+        for (const [name, plot] of Object.entries(plots) as any) {
+            if (!name.startsWith('__')) out[name] = plot.data.at(-1).value;
+        }
         return out;
     }
 
-    it('truncates int/int toward zero', async () => {
-        const r = await evalExprs({ a: '11 / 2', b: '10 / 2', c: '7 / 2', d: '-11 / 2', e: '-7 / 2' });
-        expect(r.a).toBe(5);
-        expect(r.b).toBe(5);
-        expect(r.c).toBe(3);
-        expect(r.d).toBe(-5); // toward zero, NOT floor (-6)
-        expect(r.e).toBe(-3);
+    // Expected values from TradingView's v6 migration guide ("Fractional
+    // division of constants") and Pine v5 semantics.
+    it('v5: truncates const/const toward zero, preserves fraction otherwise', async () => {
+        const r = await runPine([
+            '//@version=5',
+            'indicator("t")',
+            'int gridSteps = 4',
+            'float fromLoop = na',
+            'for i = 1 to 3',
+            '    fromLoop := i / gridSteps',
+            'plot(fromLoop, "loop")',
+            'plot(11 / 2, "lit")',
+            'plot(-11 / 2, "negLit")',
+            'plot(5 / 2.0, "mixed")',
+        ].join('\n'));
+        expect(r.loop).toBe(0.75); // loop counter is series int → fractional even in v5
+        expect(r.lit).toBe(5); // const/const → truncated
+        expect(r.negLit).toBe(-5); // toward zero, NOT floor (-6)
+        expect(r.mixed).toBe(2.5);
     });
 
-    it('keeps float division exact', async () => {
-        const r = await evalExprs({ a: '11 / 2.0', b: '2.5 / 2', c: '(1.0 * 5) / 2' });
-        expect(r.a).toBe(5.5);
-        expect(r.b).toBe(1.25);
-        expect(r.c).toBe(2.5);
+    it('v6: always fractional', async () => {
+        const r = await runPine([
+            '//@version=6',
+            'indicator("t")',
+            'int gridSteps = 4',
+            'float fromLoop = na',
+            'for i = 1 to 3',
+            '    fromLoop := i / gridSteps',
+            'plot(fromLoop, "loop")',
+            'plot(5 / 2, "lit")',
+            'plot(5 / 2.0, "mixed")',
+        ].join('\n'));
+        expect(r.loop).toBe(0.75);
+        expect(r.lit).toBe(2.5);
+        expect(r.mixed).toBe(2.5);
     });
 
-    it('preserves div-by-zero semantics (Infinity / NaN), not na', async () => {
-        const r = await evalExprs({ a: '1 / 0', b: '0 / 0' });
-        expect(r.a).toBe(Infinity);
-        expect(Number.isNaN(r.b)).toBe(true);
+    it('v5: div-by-zero semantics preserved through __idiv (Infinity / NaN)', async () => {
+        const r = await runPine(['//@version=5', 'indicator("t")', 'plot(1 / 0, "inf")', 'plot(0 / 0, "nan")'].join('\n'));
+        expect(r.inf).toBe(Infinity);
+        expect(Number.isNaN(r.nan)).toBe(true);
+    });
+
+    it('bare PineTS syntax: JS float division', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
+        const { plots } = await pineTS.run(($: any) => {
+            const { plotchar } = $.pine;
+            plotchar(11 / 2, 'a');
+        });
+        expect(plots['a'].data[0].value).toBe(5.5);
     });
 });

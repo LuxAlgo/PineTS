@@ -62,6 +62,6 @@
         "timestamp()": true,
         "weekofyear()": true,
         "year()": true,
-        "runtime.error()": false
+        "runtime.error()": true
     }
 }

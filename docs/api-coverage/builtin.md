@@ -82,4 +82,4 @@ parent: API Coverage
 | `timestamp()`      | ✅     | Timestamp function    |
 | `weekofyear()`     | ✅     | Week of year function |
 | `year()`           | ✅     | Year function         |
-| `runtime.error()`  |        | Runtime error         |
+| `runtime.error()`  | ✅     | Runtime error         |

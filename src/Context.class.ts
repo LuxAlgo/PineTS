@@ -6,6 +6,7 @@ import { PineArray } from './namespaces/array/array.index';
 import { PineMap } from './namespaces/map/map.index';
 import { PineMatrix } from './namespaces/matrix/matrix.index';
 import { Barstate } from './namespaces/Barstate';
+import { Session } from './namespaces/Session';
 import { Core, NAHelper, AlertHelper } from './namespaces/Core';
 import { PineColor } from './namespaces/color/PineColor';
 import { TimeHelper, TimeComponentHelper, EXTRACTORS, getDatePartsInTimezone } from './namespaces/Time';
@@ -17,6 +18,7 @@ import { PineTypeObject } from './namespaces/PineTypeObject';
 import { Strategy, StrategyState } from './namespaces/strategy/strategy.index';
 import { Series } from './Series';
 import { Log } from './namespaces/Log';
+import { Runtime } from './namespaces/Runtime';
 import { Str } from './namespaces/Str';
 import types, { display, shape } from './namespaces/Types';
 import { Timeframe } from './namespaces/Timeframe';
@@ -222,10 +224,23 @@ export class Context {
             //FIXME : this is a temporary solution to get the barstate values,
             //we need to implement a better way to handle realtime states
             barstate: new Barstate(this),
+            session: new Session(this),
             get bar_index() {
                 return _this.data.bar_index;
             },
             get last_bar_index() {
+                // TV semantics: `last_bar_index` is the bar_index of the LAST
+                // bar of the chart's history — a CONSTANT across the whole
+                // historical run (it only grows when new realtime bars are
+                // appended). `bar_index` values are the raw indices into the
+                // full preloaded `marketData` array, so its last index is the
+                // constant we need. Falling back to the progressively-fed
+                // `data.close` window (current bar's index) is best-effort if
+                // marketData isn't available.
+                const md = _this.marketData;
+                if (Array.isArray(md) && md.length > 0) {
+                    return md.length - 1;
+                }
                 return _this.data.close.length - 1;
             },
             get last_bar_time() {
@@ -259,6 +274,7 @@ export class Context {
                 return _this.inputs;
             },
             log: new Log(this),
+            runtime: new Runtime(this),
             str: new Str(this),
             // linefill namespace will be bound below via bindContextObject
             ...coreFunctions,
