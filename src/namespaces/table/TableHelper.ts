@@ -4,6 +4,33 @@ import { Series } from '../../Series';
 import { TableObject } from './TableObject';
 import { silentInSecondary } from '../silentInSecondary';
 
+// Complete named-parameter lists for named-args detection. These MUST cover
+// every parameter of the corresponding Pine function: if a key is missing, a
+// call naming ONLY missing keys (e.g. `table.new(..., force_overlay=true)`)
+// falls through to positional handling — the options object lands in the next
+// positional slot and its values are silently dropped.
+//prettier-ignore
+const TABLE_NEW_PARAMS = [
+    'position', 'columns', 'rows', 'bgcolor', 'frame_color', 'frame_width',
+    'border_color', 'border_width', 'force_overlay',
+];
+//prettier-ignore
+const TABLE_CELL_PARAMS = [
+    'column', 'row', 'text', 'width', 'height', 'text_color', 'text_halign',
+    'text_valign', 'text_size', 'bgcolor', 'tooltip', 'text_font_family',
+];
+const TABLE_RANGE_PARAMS = ['start_column', 'start_row', 'end_column', 'end_row'];
+
+// Detect the transpiler's trailing named-args object: a plain {key: val} bag
+// carrying at least one known parameter name. TableObject is excluded because
+// it shares property names with table.new params (bgcolor, position, ...) and
+// can legitimately appear as a trailing positional arg (e.g. `table.clear(t)`).
+function isNamedArgs(arg: any, params: string[]): boolean {
+    return !!arg && typeof arg === 'object' && !Array.isArray(arg)
+        && !(arg instanceof TableObject)
+        && params.some((p) => p in arg);
+}
+
 export class TableHelper {
     private _tables: TableObject[] = [];
 
@@ -68,9 +95,7 @@ export class TableHelper {
         // e.g. table.new("top_right", 3, 3, {bgcolor: "#1e293b", frame_color: "#475569", ...})
         // or   table.new({position: "top_right", columns: 3, rows: 3, bgcolor: "#1e293b", ...})
         const lastArg = args[args.length - 1];
-        const hasOpts = lastArg && typeof lastArg === 'object' && !Array.isArray(lastArg)
-            && ('bgcolor' in lastArg || 'frame_color' in lastArg || 'border_color' in lastArg
-                || 'position' in lastArg || 'columns' in lastArg || 'rows' in lastArg);
+        const hasOpts = isNamedArgs(lastArg, TABLE_NEW_PARAMS);
 
         if (hasOpts) {
             const opts = lastArg;
@@ -148,12 +173,7 @@ export class TableHelper {
         // Detect trailing options object from transpiler's named-args pattern
         // e.g. table.cell(t1, 0, 0, {text: "X", text_color: "#fff", ...})
         const lastArg = args[args.length - 1];
-        const hasOpts = lastArg && typeof lastArg === 'object' && !Array.isArray(lastArg)
-            && ('text' in lastArg || 'bgcolor' in lastArg || 'text_color' in lastArg
-                || 'text_size' in lastArg || 'text_halign' in lastArg || 'tooltip' in lastArg
-                || 'column' in lastArg || 'row' in lastArg
-                || 'height' in lastArg || 'width' in lastArg
-                || 'text_valign' in lastArg || 'text_font_family' in lastArg);
+        const hasOpts = isNamedArgs(lastArg, TABLE_CELL_PARAMS);
 
         if (hasOpts) {
             const opts = lastArg;
@@ -227,8 +247,7 @@ export class TableHelper {
         let end_row: any;
 
         const lastArg = args[args.length - 1];
-        const hasOpts = lastArg && typeof lastArg === 'object' && !Array.isArray(lastArg)
-            && ('start_column' in lastArg || 'start_row' in lastArg || 'end_column' in lastArg);
+        const hasOpts = isNamedArgs(lastArg, TABLE_RANGE_PARAMS);
 
         if (hasOpts) {
             const opts = lastArg;
@@ -271,8 +290,7 @@ export class TableHelper {
         let end_row: any;
 
         const lastArg = args[args.length - 1];
-        const hasOpts = lastArg && typeof lastArg === 'object' && !Array.isArray(lastArg)
-            && ('start_column' in lastArg || 'start_row' in lastArg || 'end_column' in lastArg);
+        const hasOpts = isNamedArgs(lastArg, TABLE_RANGE_PARAMS);
 
         if (hasOpts) {
             const opts = lastArg;
