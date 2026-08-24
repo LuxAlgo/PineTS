@@ -58,20 +58,25 @@ import { runTransformationPass, transformEqualityChecks, propagateAsyncAwait } f
 import { extractPineScriptVersion, pineToJS } from './pineToJS/pineToJS.index';
 import { buildLtfSlices } from './slicing/buildLtfSlices';
 
-function getPineTSFromSource(source: string | Function): string {
+/**
+ * Resolve the input into PineTS code plus the Pine Script version it came from.
+ * `version` is null for PineTS-syntax / function input (no //@version marker):
+ * such code is JavaScript-like and follows JS semantics, not a Pine version.
+ */
+function getPineTSFromSource(source: string | Function): { code: string; version: number | null } {
     if (typeof source === 'function') {
-        return source.toString();
+        return { code: source.toString(), version: null };
     } else {
         const pineScriptVersion = extractPineScriptVersion(source);
         if (pineScriptVersion === null) {
             //assume it's PineTS syntax ==> use it as is
-            return source;
+            return { code: source, version: null };
         }
         if (pineScriptVersion >= 5) {
             //assume it's Pine Script syntax ==> use pineToJS to transpile it
             const pineToJSResult = pineToJS(source);
             if (pineToJSResult.success) {
-                return pineToJSResult.code;
+                return { code: pineToJSResult.code, version: pineScriptVersion };
             } else {
                 throw new Error(`Failed to transpile Pine Script version ${pineScriptVersion}: ${pineToJSResult.error}`);
             }
@@ -89,7 +94,8 @@ export function transpile(source: string | Function, options: { debug: boolean; 
 
     const { debug } = options;
 
-    let code = getPineTSFromSource(source);
+    const { code: sourceCode, version: pineVersion } = getPineTSFromSource(source);
+    let code = sourceCode;
 
     // Pre-process: Wrap in context function if not already wrapped
     code = wrapInContextFunction(code);
@@ -127,11 +133,19 @@ export function transpile(source: string | Function, options: { debug: boolean; 
     // Returns the original parameter name of the root function if any
     const originalParamName = runAnalysisPass(ast, scopeManager) || '';
 
-    // Type inference (RC2b): replicate Pine `int / int → int`. Runs on the clean
-    // pre-lowering AST (operands still bare identifiers / `input.int(...)` /
-    // literals) and rewrites provably-int `/` to `$.pine.math.__idiv(...)`. The
-    // main pass below then lowers the operand subtrees inside the call args.
-    runTypeInferencePass(ast, scopeManager);
+    // Type inference: replicate Pine v5 `const int / const int → int` truncation.
+    // Runs on the clean pre-lowering AST (operands still bare identifiers /
+    // literals) and rewrites provably-const-int `/` to `$.pine.math.__idiv(...)`;
+    // the main pass below then lowers the operand subtrees inside the call args.
+    //
+    // Version-gated: only Pine v5 truncates, and only when BOTH operands are
+    // 'const'-qualified ints. Pine v6+ always performs fractional division
+    // (see TradingView's v6 migration guide, "Fractional division of constants"),
+    // and PineTS-syntax / function input (pineVersion === null) is JavaScript,
+    // where `/` is always float division.
+    if (pineVersion !== null && pineVersion < 6) {
+        runTypeInferencePass(ast, scopeManager);
+    }
 
     // Second pass: transform the code
     runTransformationPass(ast, scopeManager, originalParamName, options, sourceLines);
