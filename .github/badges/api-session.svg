@@ -1,14 +1,14 @@
-<svg width="134.76" height="24" viewBox="0 0 1123 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="session: 0/9 (0%)">
-  <title>session: 0/9 (0%)</title>
+<svg width="151.56" height="24" viewBox="0 0 1263 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="session: 9/9 (100%)">
+  <title>session: 9/9 (100%)</title>
   <g>
     <rect fill="#555" width="504" height="200"/>
-    <rect fill="#E43" x="504" width="619" height="200"/>
+    <rect fill="#3C1" x="504" width="759" height="200"/>
   </g>
   <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
     <text x="60" y="148" textLength="404" fill="#000" opacity="0.1">session</text>
     <text x="50" y="138" textLength="404">session</text>
-    <text x="559" y="148" textLength="519" fill="#000" opacity="0.1">0/9 (0%)</text>
-    <text x="549" y="138" textLength="519">0/9 (0%)</text>
+    <text x="559" y="148" textLength="659" fill="#000" opacity="0.1">9/9 (100%)</text>
+    <text x="549" y="138" textLength="659">9/9 (100%)</text>
   </g>
   
 </svg>
