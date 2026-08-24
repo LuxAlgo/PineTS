@@ -144,6 +144,7 @@ export const NAMESPACE_COLLISION_NAMES = new Set([
     'alert',
     'barstate',
     'syminfo',
+    'session',
     'timeframe',
     'strategy',
     'log',
@@ -242,11 +243,13 @@ export const CONTEXT_PINE_VARS = [
     'timeframe',
     'syminfo',
     'barstate',
+    'session',
 
     //builtin variables
     'bar_index',
     'last_bar_index',
     'last_bar_time',
+    'timenow',
     'inputs',
     'time',
     'time_close',
