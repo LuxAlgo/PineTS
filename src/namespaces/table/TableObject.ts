@@ -6,6 +6,17 @@ export function resetTableIdCounter() {
     _tableIdCounter = 0;
 }
 
+/**
+ * Pine truncates fractional "int" values at the point of use: since v6,
+ * `int / int` keeps the static type `int` but can carry a fractional value
+ * (e.g. `(i / 6) + 1` with a loop counter), and TradingView truncates it
+ * toward zero when it is consumed as a table coordinate. NaN (Pine `na`)
+ * stays NaN so the bounds checks below reject it as a silent no-op.
+ */
+export function truncCoord(v: number): number {
+    return Number.isFinite(v) ? Math.trunc(v) : NaN;
+}
+
 export interface TableCell {
     text: string;
     width: number;
@@ -57,8 +68,8 @@ export class TableObject {
     ) {
         this.id = _tableIdCounter++;
         this.position = position;
-        this.columns = columns;
-        this.rows = rows;
+        this.columns = truncCoord(columns);
+        this.rows = truncCoord(rows);
         this.bgcolor = bgcolor;
         this.frame_color = frame_color;
         this.frame_width = frame_width;
@@ -70,9 +81,9 @@ export class TableObject {
 
         // Initialize cells grid (rows × columns) with nulls
         this.cells = [];
-        for (let r = 0; r < rows; r++) {
+        for (let r = 0; r < this.rows; r++) {
             this.cells[r] = [];
-            for (let c = 0; c < columns; c++) {
+            for (let c = 0; c < this.columns; c++) {
                 this.cells[r][c] = null;
             }
         }
@@ -105,7 +116,9 @@ export class TableObject {
     }
 
     setCell(column: number, row: number, props: Partial<TableCell>): void {
-        if (row < 0 || row >= this.rows || column < 0 || column >= this.columns) return;
+        column = truncCoord(column);
+        row = truncCoord(row);
+        if (!(row >= 0 && row < this.rows && column >= 0 && column < this.columns)) return;
 
         const existing = this.cells[row][column];
         if (existing && existing._merged && existing._merge_parent) {
@@ -127,12 +140,16 @@ export class TableObject {
     }
 
     getCell(column: number, row: number): TableCell | null {
-        if (row < 0 || row >= this.rows || column < 0 || column >= this.columns) return null;
+        column = truncCoord(column);
+        row = truncCoord(row);
+        if (!(row >= 0 && row < this.rows && column >= 0 && column < this.columns)) return null;
         return this.cells[row][column];
     }
 
     clearCell(column: number, row: number): void {
-        if (row < 0 || row >= this.rows || column < 0 || column >= this.columns) return;
+        column = truncCoord(column);
+        row = truncCoord(row);
+        if (!(row >= 0 && row < this.rows && column >= 0 && column < this.columns)) return;
         this.cells[row][column] = null;
     }
 
