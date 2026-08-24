@@ -1,5 +1,23 @@
 # Change Log
 
+## [0.9.32] - 2026-08-24 - Session Support, `runtime.error` & Version-Accurate Integer Division
+
+### Fixed
+
+- **`int / int` truncation ignored the Pine version and the operands' qualifiers**: 0.9.28's integer-division pass truncated **every** division whose operands statically inferred as `int`. Real Pine truncates only in **v5**, and only when both operands are **`const`-qualified** ints — loop counters, mutable variables, `input.int` and int builtins keep the fractional remainder, and **v6 never truncates at all** (TradingView v6 migration guide, "Fractional division of constants"). The detected `//@version` is now threaded through **`transpile()`** and the pass is gated to v5 sources (v6+ and bare PineTS/JS input keep native float `/`). **`TypeInferencePass`** was reworked from a binary int/notint split to a **`constint` / `int` / `notint`** lattice with a mutated-names pre-scan, so only compile-time-constant int operands trigger the `math.__idiv` rewrite.
+- **`runtime.error()` crashed with `ReferenceError: runtime is not defined`**: the `runtime` namespace did not exist, so any script *referencing* it failed as soon as the call executed — instead of TV's behavior (no-op when the guarding branch is not taken, halt with the script's message when it is). New **`src/namespaces/Runtime.ts`**: `runtime.error(message)` throws the existing catchable `PineRuntimeError` (`method: 'runtime.error'`), registered on `$.pine` and added to `CONTEXT_PINE_VARS` so the transpiler injects the namespace binding.
+- **`last_bar_index` tracked the running `bar_index` instead of the chart's constant last-bar index**: it was derived from the progressively-fed `data.close` window, so it returned the **current** bar's index on every bar — `bar_index < last_bar_index` was false everywhere, breaking every "not the last bar" guard. It now reads the length of the fully-preloaded `marketData` array: a constant across the whole historical run, as in TV (it only grows when realtime bars are appended). The window-based read remains as a best-effort fallback when `marketData` is unavailable.
+- **`time(timeframe, session, timezone)` mis-parsed session specs**: any `:days` suffix failed the `HHMM-HHMM` regex, so **every bar was silently treated as in-session**. The new parser (**`src/namespaces/sessionSpec.ts`**) handles full Pine session strings — comma-separated `HHMM-HHMM` windows, the `:days` suffix (`1` = Sunday … `7` = Saturday), overnight sessions belonging to the day they **end**, `"0000"` as end-of-day, and `"24x7"` — and malformed strings now throw `PineRuntimeError` like TV instead of passing silently.
+- **`timenow` crashed with a `ReferenceError`**: the runtime getter existed, but the identifier was never registered in the transpiler settings, so it was never injected into the generated code.
+- **User variables named after a constant namespace crashed**: TV allows `position`, `font`, `order`, `currency`, `dayofweek`, `adjustment` and `barmerge` as user variable names while namespace member access still works. These seven were missing from `NAMESPACE_COLLISION_NAMES`, so the codegen rename pass never renamed the user variable and the namespace was no longer injected from `$.pine` → `ReferenceError: <name> is not defined`.
+
+### Added
+
+- **`session` namespace**: `session.regular` / `session.extended` constants, `session.isfirstbar` / `session.islastbar` (plus their `*_regular` variants), and `session.ismarket` / `session.ispremarket` / `session.ispostmarket`.
+- **Tests**: `tests/namespaces/runtime.test.ts` (guarded call is a no-op, halts with the exact message, throws a catchable `PineRuntimeError`, PineTS-syntax path); `tests/core/last-bar-index.test.ts` (constant on every bar, equals the final `bar_index`, `bar_index < last_bar_index` true on all bars but the last); `tests/namespaces/time-session-spec.test.ts`, `tests/namespaces/session-namespace.test.ts` and `tests/core/timenow.test.ts`; `tests/transpiler/namespace-identifier-collision.test.ts` (each of the seven namespaces shadowed, plus non-shadowed usage); and a reworked `tests/transpiler/int-division.test.ts` with reference-correct v5/v6 expectations (the original repro kept as a guard).
+
+---
+
 ## [0.9.31] - 2026-08-12 - Input Source Runtime Overrides
 
 ### Fixed
