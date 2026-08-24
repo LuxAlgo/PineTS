@@ -227,6 +227,18 @@ export class Context {
                 return _this.data.bar_index;
             },
             get last_bar_index() {
+                // TV semantics: `last_bar_index` is the bar_index of the LAST
+                // bar of the chart's history — a CONSTANT across the whole
+                // historical run (it only grows when new realtime bars are
+                // appended). `bar_index` values are the raw indices into the
+                // full preloaded `marketData` array, so its last index is the
+                // constant we need. Falling back to the progressively-fed
+                // `data.close` window (current bar's index) is best-effort if
+                // marketData isn't available.
+                const md = _this.marketData;
+                if (Array.isArray(md) && md.length > 0) {
+                    return md.length - 1;
+                }
                 return _this.data.close.length - 1;
             },
             get last_bar_time() {
