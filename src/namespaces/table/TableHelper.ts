@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../Series';
-import { TableObject } from './TableObject';
+import { TableObject, truncCoord } from './TableObject';
 import { silentInSecondary } from '../silentInSecondary';
 
 export class TableHelper {
@@ -248,10 +248,10 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
 
-        const sc = this._resolve(start_column) ?? 0;
-        const sr = this._resolve(start_row) ?? 0;
-        const ec = this._resolve(end_column) ?? sc;
-        const er = this._resolve(end_row) ?? sr;
+        const sc = truncCoord(this._resolve(start_column) ?? 0);
+        const sr = truncCoord(this._resolve(start_row) ?? 0);
+        const ec = truncCoord(this._resolve(end_column) ?? sc);
+        const er = truncCoord(this._resolve(end_row) ?? sr);
 
         for (let r = sr; r <= er; r++) {
             for (let c = sc; c <= ec; c++) {
@@ -292,10 +292,13 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
 
-        const sc = this._resolve(start_column) ?? 0;
-        const sr = this._resolve(start_row) ?? 0;
-        const ec = this._resolve(end_column) ?? 0;
-        const er = this._resolve(end_row) ?? 0;
+        const sc = truncCoord(this._resolve(start_column) ?? 0);
+        const sr = truncCoord(this._resolve(start_row) ?? 0);
+        const ec = truncCoord(this._resolve(end_column) ?? 0);
+        const er = truncCoord(this._resolve(end_row) ?? 0);
+
+        // na coordinates: silent no-op (matches the cell-access behavior).
+        if (isNaN(sc) || isNaN(sr) || isNaN(ec) || isNaN(er)) return;
 
         // Mark all cells in the region as merged, pointing to the start cell
         for (let r = sr; r <= er; r++) {
