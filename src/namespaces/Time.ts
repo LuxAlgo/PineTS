@@ -312,25 +312,49 @@ const TIME_COMPONENT_ARGS_TYPES = {
  * Single parameterized class for all 8 dual-use time component identifiers:
  * dayofmonth, dayofweek, hour, minute, month, second, weekofyear, year.
  *
- * - Bare `dayofmonth` → `dayofmonth.__value` → extract from current bar openTime
+ * - Bare `dayofmonth` → `$.get(dayofmonth.__value, 0)` → current bar's value
+ * - `dayofmonth[1]` → `$.get(dayofmonth.__value, 1)` → previous bar's value
  * - `dayofmonth(time)` → extract from given timestamp
  * - `dayofmonth(time, timezone)` → extract from timestamp in given timezone
+ *
+ * `__value` MUST be a Series (same shape as TimeHelper.__value): these
+ * identifiers are series in Pine, so history indexing has to reach previous
+ * bars. A scalar here would make `$.get(hour.__value, 1)` ignore the offset
+ * and `param(...)` fall into its one-element scalar buffer — `hour[1]` would
+ * be na on every bar and `hour != hour[1]` would never fire.
  */
 export class TimeComponentHelper {
     private context: any;
     private extractor: (parts: DateParts) => number;
+
+    /** Extracted component per bar, kept in lockstep with data.openTime. */
+    private _cache: number[] = [];
+    private _cacheTimezone: string | null = null;
 
     constructor(context: any, extractor: (parts: DateParts) => number) {
         this.context = context;
         this.extractor = extractor;
     }
 
-    get __value() {
-        const currentTime = Series.from(this.context.data.openTime).get(0);
-        if (isNaN(currentTime)) return NaN;
+    get __value(): Series {
+        const openTime = this.context.data.openTime;
+        const times: any[] = openTime instanceof Series ? openTime.data : Array.isArray(openTime) ? openTime : [];
         const timezone = this.context.pine?.syminfo?.timezone || 'UTC';
-        const parts = getDatePartsInTimezone(currentTime, timezone);
-        return this.extractor(parts);
+
+        if (timezone !== this._cacheTimezone) {
+            this._cache = [];
+            this._cacheTimezone = timezone;
+        }
+        const cache = this._cache;
+        // Streaming updates pop bars off openTime before re-pushing them;
+        // truncate so re-processed bars are re-extracted.
+        if (cache.length > times.length) cache.length = times.length;
+        for (let i = cache.length; i < times.length; i++) {
+            const t = times[i];
+            cache.push(t == null || isNaN(t) ? NaN : this.extractor(getDatePartsInTimezone(t, timezone)));
+        }
+
+        return new Series(cache, openTime instanceof Series ? openTime.offset : 0);
     }
 
     param(source: any, index: number = 0) {
@@ -340,9 +364,9 @@ export class TimeComponentHelper {
     any(...args: any[]) {
         const unwrapped = args.map((a) => (a instanceof Series ? a.get(0) : a));
 
-        // No args → same as bare identifier
+        // No args → same as bare identifier (current bar's value)
         if (unwrapped.length === 0) {
-            return this.__value;
+            return this.__value.get(0);
         }
 
         const parsed = parseArgsForPineParams<any>(unwrapped, TIME_COMPONENT_SIGNATURES, TIME_COMPONENT_ARGS_TYPES);
