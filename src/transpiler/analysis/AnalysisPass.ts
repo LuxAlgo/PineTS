@@ -178,6 +178,15 @@ export function preProcessUdtRegistry(ast: any, scopeManager: ScopeManager): voi
                     const typeName = inferUdtTypeFromInit(decl.init, scopeManager);
                     if (typeName) {
                         scopeManager.markVariableAsUdtInstance(decl.id.name, typeName);
+                        continue;
+                    }
+                    // Not a UDT — try built-in constructor inference
+                    // (`table.new(...)`, `array.from(...)`, ...) so dot-calls
+                    // of user methods on built-in receivers can be dispatched
+                    // by static type matching.
+                    const builtinType = inferBuiltinTypeFromInit(decl.init);
+                    if (builtinType) {
+                        scopeManager.setVarStaticType(decl.id.name, builtinType);
                     }
                     continue;
                 }
@@ -222,6 +231,24 @@ export function preProcessUdtRegistry(ast: any, scopeManager: ScopeManager): voi
                     }
                 }
             }
+            // Explicit built-in / generic type annotations (`var table tb = ...`,
+            // `array<float> eq = ...`) preserved by codegen as
+            // `"__pineTypedVar:<varName>=<type>"` markers.
+            else if (
+                expr?.type === 'Literal' &&
+                typeof expr.value === 'string' &&
+                expr.value.startsWith('__pineTypedVar:')
+            ) {
+                const rest = expr.value.slice('__pineTypedVar:'.length);
+                const eq = rest.indexOf('=');
+                if (eq > 0) {
+                    const varName = rest.slice(0, eq);
+                    const typeName = rest.slice(eq + 1);
+                    if (/^[A-Za-z_$][\w$]*$/.test(varName) && typeName) {
+                        scopeManager.setVarStaticType(varName, typeName);
+                    }
+                }
+            }
         },
     });
 
@@ -240,15 +267,27 @@ export function preProcessUdtRegistry(ast: any, scopeManager: ScopeManager): voi
             if (left?.type !== 'MemberExpression' ||
                 left.computed ||
                 left.property?.type !== 'Identifier' ||
-                left.property.name !== '__pineParamTypes__' ||
                 left.object?.type !== 'Identifier') return;
-            if (expr.right?.type !== 'ObjectExpression') return;
+            const rawName = left.object.name;
             // Methods carry a `$M_` JS-name prefix; strip it so the registry
             // is keyed by the Pine name `transformFunctionDeclaration` will
             // look up at call time.
-            const rawName = left.object.name;
             const funcName = rawName.startsWith('$M_') ? rawName.slice(3) : rawName;
+
+            // `$M_<name>.__pineReceiverType__ = '<type>'` — declared receiver
+            // type of a user `method`, used for dot-call dispatch on built-in
+            // receivers.
+            if (left.property.name === '__pineReceiverType__') {
+                if (expr.right?.type === 'Literal' && typeof expr.right.value === 'string') {
+                    scopeManager.setMethodReceiverType(funcName, expr.right.value);
+                }
+                return;
+            }
+
+            if (left.property.name !== '__pineParamTypes__') return;
+            if (expr.right?.type !== 'ObjectExpression') return;
             const paramTypes: Record<string, string> = {};
+            const rawParamTypes: Record<string, string> = {};
             for (const prop of expr.right.properties) {
                 if (prop.type !== 'Property') continue;
                 // Codegen emits JSON-quoted keys (`"b"`) which acorn parses as
@@ -259,6 +298,7 @@ export function preProcessUdtRegistry(ast: any, scopeManager: ScopeManager): voi
                 else if (prop.key?.type === 'Literal' && typeof prop.key.value === 'string') paramName = prop.key.value;
                 if (!paramName) continue;
                 if (prop.value?.type !== 'Literal' || typeof prop.value.value !== 'string') continue;
+                rawParamTypes[paramName] = prop.value.value;
                 // varType may include qualifiers like 'series BAR' — the type
                 // name is the last whitespace-delimited token.
                 const typeName = prop.value.value.split(/\s+/).pop()!;
@@ -269,8 +309,59 @@ export function preProcessUdtRegistry(ast: any, scopeManager: ScopeManager): voi
             if (Object.keys(paramTypes).length > 0) {
                 scopeManager.setFunctionParamUdtTypes(funcName, paramTypes);
             }
+            // Unfiltered registry: built-in-typed params (e.g. `f(table t)`)
+            // get scope-locally registered in the static-type registry when
+            // entering the function body (see transformFunctionDeclaration).
+            if (Object.keys(rawParamTypes).length > 0) {
+                scopeManager.setFunctionParamStaticTypes(funcName, rawParamTypes);
+            }
         },
     });
+}
+
+/**
+ * Namespaces whose factory calls produce built-in instances that user
+ * `method`s can be declared on. `chart.point` is intentionally absent (its
+ * factories are nested member chains, handled conservatively as unknown).
+ */
+const BUILTIN_INSTANCE_NAMESPACES = new Set(['table', 'line', 'label', 'box', 'linefill', 'polyline', 'array', 'matrix', 'map']);
+
+/**
+ * Inspect an initializer expression and return the built-in BASE type name
+ * ('table', 'array', ...) when it unambiguously constructs a built-in
+ * instance — otherwise undefined. Mirrors `inferUdtTypeFromInit` for
+ * built-in receivers.
+ *
+ * Recognized shapes: `<ns>.new(...)`, `<ns>.copy(...)`, `<ns>.from(...)`,
+ * `<ns>.new_<type>(...)` (array typed constructors), plus ternaries where
+ * both branches resolve to the same type.
+ */
+function inferBuiltinTypeFromInit(init: any): string | undefined {
+    if (!init) return undefined;
+
+    if (
+        init.type === 'CallExpression' &&
+        init.callee?.type === 'MemberExpression' &&
+        !init.callee.computed &&
+        init.callee.object?.type === 'Identifier' &&
+        init.callee.property?.type === 'Identifier' &&
+        BUILTIN_INSTANCE_NAMESPACES.has(init.callee.object.name)
+    ) {
+        const method = init.callee.property.name;
+        if (method === 'new' || method === 'copy' || method === 'from' || method.startsWith('new_')) {
+            return init.callee.object.name;
+        }
+    }
+
+    if (init.type === 'ConditionalExpression') {
+        const consequentType = inferBuiltinTypeFromInit(init.consequent);
+        const alternateType = inferBuiltinTypeFromInit(init.alternate);
+        if (consequentType && consequentType === alternateType) {
+            return consequentType;
+        }
+    }
+
+    return undefined;
 }
 
 /**

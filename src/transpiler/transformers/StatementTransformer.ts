@@ -1494,9 +1494,15 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
         // This ensures they:
         // 1. Stay as plain identifiers (no renaming to $.let.scoped_name)
         // 2. Get $.get() wrapping when used (e.g., X1.size() → $.get(X1, 0).size())
+        // Parameters with a default value are AssignmentPattern nodes — the
+        // bound name is on `.left`. Skipping them made references to defaulted
+        // params inside named-arg object literals resolve through the global
+        // context (`$.let.<name>` → undefined) instead of the JS parameter.
         node.params.forEach((param: any) => {
             if (param.type === 'Identifier') {
                 scopeManager.addLocalSeriesVar(param.name);
+            } else if (param.type === 'AssignmentPattern' && param.left?.type === 'Identifier') {
+                scopeManager.addLocalSeriesVar(param.left.name);
             }
         });
 
@@ -1522,6 +1528,19 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
             }
         }
 
+        // Same scope-local registration for BUILT-IN-typed params (e.g.
+        // `f(table t)`), from the unfiltered param-type registry, so dot-calls
+        // of user methods on those params (`t.divider(0)`) dispatch by static
+        // receiver-type matching inside the body.
+        const rawParamTypes = fnName ? scopeManager.getFunctionParamStaticTypes(fnName) : undefined;
+        const savedStaticBindings: Record<string, string | undefined> = {};
+        if (rawParamTypes) {
+            for (const [paramName, typeName] of Object.entries(rawParamTypes)) {
+                savedStaticBindings[paramName] = scopeManager.getVarStaticType(paramName);
+                scopeManager.setVarStaticType(paramName, typeName);
+            }
+        }
+
         // Just delegate to the callback to continue the recursion
         c(node.body, scopeManager);
 
@@ -1529,6 +1548,8 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
         node.params.forEach((param: any) => {
             if (param.type === 'Identifier') {
                 scopeManager.removeLocalSeriesVar(param.name);
+            } else if (param.type === 'AssignmentPattern' && param.left?.type === 'Identifier') {
+                scopeManager.removeLocalSeriesVar(param.left.name);
             }
         });
         if (paramTypes) {
@@ -1537,6 +1558,15 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
                 const prev = savedUdtBindings[paramName];
                 if (prev !== undefined) {
                     scopeManager.markVariableAsUdtInstance(paramName, prev);
+                }
+            }
+        }
+        if (rawParamTypes) {
+            for (const paramName of Object.keys(rawParamTypes)) {
+                scopeManager.unsetVarStaticType(paramName);
+                const prev = savedStaticBindings[paramName];
+                if (prev !== undefined) {
+                    scopeManager.setVarStaticType(paramName, prev);
                 }
             }
         }
