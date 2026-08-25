@@ -1,5 +1,13 @@
 # Change Log
 
+## [Unreleased]
+
+### Fixed
+
+- **Out-of-bounds array/matrix access no longer fails silently — TV parity restored**: `array.get/set/insert/remove` and `matrix.get/set/row/col` emitted a non-blocking `context.warn()` and returned `na`/no-op on an out-of-bounds index, so scripts like `array.new<float>(0)` + `a.get(2)` ran to completion instead of halting. TradingView raises a runtime error here ("Index xx is out of bounds. Array size is yy" — see the Pine docs on arrays). These methods now throw the catchable `PineRuntimeError` (with `method` set to the offending call, e.g. `'array.get'`); v6 negative-index normalization is unchanged, and the reported index is the one the script passed (not the normalized one). `stream()` consumers now receive an `'error'` event instead of a `'warning'` for these violations. New regression suite: `tests/namespaces/array/oob-runtime-error.test.ts` (includes the original report's script); `bounds-check`, `negative-index` and `runtime-error-capture` tests updated to expect the throw.
+
+---
+
 ## [0.9.32] - 2026-08-24 - Session Support, `runtime.error` & Version-Accurate Integer Division
 
 ### Fixed

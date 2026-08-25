@@ -352,7 +352,7 @@ evt.on('alert', (alert) => {
     console.log('Alert:', alert.message);
 });
 
-// Handle runtime warnings (non-blocking, e.g. array OOB)
+// Handle runtime warnings (non-blocking)
 evt.on('warning', (warning) => {
     console.warn('Warning:', warning.message);
 });
@@ -564,7 +564,7 @@ interface Context {
     result: any; // Computed results
     plots: any; // Plot data
     alerts: any[]; // Alert events from alert() and alertcondition()
-    warnings: any[]; // Runtime warnings (e.g. array OOB)
+    warnings: any[]; // Non-blocking runtime warnings
 
     // Market context
     marketData: any[]; // Raw market data
