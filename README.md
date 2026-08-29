@@ -1,11 +1,29 @@
-![PineTS](./.github/images/banner.png)
+<p align="center">
+  <img src="./.github/images/banner.png" alt="PineTS" />
+</p>
 
-**Pine Script® runtime for JavaScript**  
-Run TradingView® indicators in Node.js, browsers, and any JS environment.
+<p align="center">
+  <strong>Pine Script® runtime for JavaScript</strong><br>
+  Run TradingView® indicators in Node.js, browsers, and any JS environment.
+</p>
 
-![Backed by LuxAlgo](https://img.shields.io/badge/Backed_by-LuxAlgo-4185DD.svg?style=flat-square)![npm version](https://img.shields.io/npm/v/pinets.svg?style=flat-square)![License](https://img.shields.io/badge/License-AGPL--3.0%20%2F%20Commercial-blue.svg?style=flat-square)![Coverage](./.github/badges/coverage.svg)![API Coverage](./.github/badges/api-coverage.svg)![Documentation](https://img.shields.io/badge/docs-luxalgo-4185DD?style=flat-square)![Mentioned in Awesome Quant](https://awesome.re/mentioned-badge.svg)
+<p align="center">
+  <a href="https://www.luxalgo.com"><img src="https://img.shields.io/badge/Backed_by-LuxAlgo-4185DD.svg?style=flat-square" alt="Backed by LuxAlgo"></a>
+  <a href="https://www.npmjs.com/package/pinets"><img src="https://img.shields.io/npm/v/pinets.svg?style=flat-square" alt="npm version"></a>
+  <a href="#license"><img src="https://img.shields.io/badge/License-AGPL--3.0%20%2F%20Commercial-blue.svg?style=flat-square" alt="License"></a>
+  <a href="./.github/badges/coverage.svg"><img src="./.github/badges/coverage.svg" alt="Coverage"></a>
+  <a href="#api-coverage"><img src="./.github/badges/api-coverage.svg" alt="API Coverage"></a>
+  <a href="https://docs.luxalgo.com/developers/pinets"><img src="https://img.shields.io/badge/docs-luxalgo-4185DD?style=flat-square" alt="Documentation"></a>
+  <a href="https://github.com/wilsonfreitas/awesome-quant"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Quant" /></a>
+</p>
 
-[Quick Start](#quick-start) • [Features](#features) • [Usage](#usage) • [API Coverage](#api-coverage) • [Docs](#documentation)
+<p align="center">
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#features">Features</a> •
+  <a href="#usage">Usage</a> •
+  <a href="#api-coverage">API Coverage</a> •
+  <a href="#documentation">Docs</a>
+</p>
 
 ## What is PineTS?
 
@@ -380,7 +398,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guidelines.
 
 Thanks to all PineTS contributors:
 
-![alaa-eddine](https://avatars.githubusercontent.com/u/1016513?v=4&s=64 "alaa-eddine") ![dcaoyuan](https://avatars.githubusercontent.com/u/271571?v=4&s=64 "dcaoyuan") ![C9Bad](https://avatars.githubusercontent.com/u/57975070?v=4&s=64 "C9Bad") ![aakash-code](https://avatars.githubusercontent.com/u/71116743?v=4&s=64 "aakash-code")![alexgrover](https://avatars.githubusercontent.com/u/41912104?v=4&s=64 "alexgrover")![amoradi](https://avatars.githubusercontent.com/u/6855005?v=4&s=64 "amoradi")![smack369](https://avatars.githubusercontent.com/u/126825390?v=4&s=64 "smack369")![NexusAlien](https://avatars.githubusercontent.com/u/181855714?v=4&s=64 "NexusAlien")![yoonbae81](https://avatars.githubusercontent.com/u/20147594?v=4&s=64 "yoonbae81")
+<p align="left">
+<a href="https://github.com/alaa-eddine"><img src="https://avatars.githubusercontent.com/u/1016513?v=4&s=64" width="64" height="64" alt="alaa-eddine" title="alaa-eddine" /></a>
+<a href="https://github.com/dcaoyuan"><img src="https://avatars.githubusercontent.com/u/271571?v=4&s=64" width="64" height="64" alt="dcaoyuan" title="dcaoyuan" /></a>
+<a href="https://github.com/C9Bad"><img src="https://avatars.githubusercontent.com/u/57975070?v=4&s=64" width="64" height="64" alt="C9Bad" title="C9Bad" /></a>
+<a href="https://github.com/aakash-code"><img src="https://avatars.githubusercontent.com/u/71116743?v=4&s=64" width="64" height="64" alt="aakash-code" title="aakash-code" /></a>
+<a href="https://github.com/alexgrover"><img src="https://avatars.githubusercontent.com/u/41912104?v=4&s=64" width="64" height="64" alt="alexgrover" title="alexgrover" /></a>
+<a href="https://github.com/amoradi"><img src="https://avatars.githubusercontent.com/u/6855005?v=4&s=64" width="64" height="64" alt="amoradi" title="amoradi" /></a>
+<a href="https://github.com/smack369"><img src="https://avatars.githubusercontent.com/u/126825390?v=4&s=64" width="64" height="64" alt="smack369" title="smack369" /></a>
+<a href="https://github.com/NexusAlien"><img src="https://avatars.githubusercontent.com/u/181855714?v=4&s=64" width="64" height="64" alt="NexusAlien" title="NexusAlien" /></a>
+<a href="https://github.com/yoonbae81"><img src="https://avatars.githubusercontent.com/u/20147594?v=4&s=64" width="64" height="64" alt="yoonbae81" title="yoonbae81" /></a>
+</p>
 
 
 
