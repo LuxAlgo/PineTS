@@ -2,7 +2,7 @@
 // Copyright (C) 2026 LuxAlgo
 
 import * as walk from 'acorn-walk';
-import ScopeManager from '../analysis/ScopeManager';
+import ScopeManager, { normalizePineBaseType } from '../analysis/ScopeManager';
 import { ASTFactory, CONTEXT_NAME } from '../utils/ASTFactory';
 import { KNOWN_NAMESPACES, NAMESPACES_LIKE, ASYNC_METHODS, CALLSITE_ID_NAMESPACES } from '../settings';
 
@@ -1652,17 +1652,7 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         // Check if methodName is a user-defined function (and not a built-in property like push/pop/size unless shadowed?)
         const isUserFunction = scopeManager.isUserFunction(methodName);
 
-        // Guard: if the object is a function parameter, this is a built-in method
-        // call on a typed argument (e.g. t.cell() where t is a table param),
-        // NOT a call to the user function with the same name. Skip transformation.
         const _obj = node.callee.object;
-        const isBuiltinMethodOnParam = _obj.type === 'Identifier' && scopeManager.isLocalSeriesVar(_obj.name);
-
-        // Guard: if the callee object is a MemberExpression (property chain like
-        // aZZ.x.set(0, val)), this is a method call on a sub-property, NOT a user
-        // function call.  User function method calls only happen on direct variable
-        // references (e.g. obj.method(args) where obj is an Identifier).
-        const isChainedPropertyMethod = _obj.type === 'MemberExpression';
 
         // Only allow obj.method(args) → method(obj, args) for functions declared
         // with the Pine `method` keyword.  Regular functions (without `method`)
@@ -1670,17 +1660,48 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         // method call on the object, never a call to a user-defined function.
         const isUserMethod = scopeManager.isUserMethod(methodName);
 
-        // Receiver-type guard: only retarget `obj.method()` when `obj` is a known
-        // UDT instance. Without this guard, names that collide with user methods
-        // would also retarget for built-in receivers — e.g. a `method delete(...)`
-        // declared on a UDT would hijack `someLine.delete()` calls. Narrowing on
-        // `isUdtInstance` keeps built-in calls intact.
-        // The receiver may have already been wrapped into a `$.get(...)` call by
-        // an earlier pass — but the original Identifier name is preserved on
-        // the wrapper as `.name`, so a single lookup covers both shapes.
+        // ── Receiver-type dispatch (TV semantics) ─────────────────────────
+        // A user `method` wins over a built-in member when the receiver's
+        // STATIC type matches the method's declared first-parameter type —
+        // including name collisions with built-ins (`method cell(table tb,…)`
+        // shadows `table.cell` for table receivers) and receivers that are
+        // function params or UDT property chains.
+        //
+        // Static receiver type sources, in order:
+        //   1. UDT instance registry (incl. scope-locally marked UDT params)
+        //   2. Built-in static-type registry (explicit annotations via
+        //      `__pineTypedVar:` markers, initializer inference like
+        //      `table.new(...)`, scope-locally marked built-in-typed params)
+        //   3. UDT field chains (`bs.is_equity.to_sparkline()`) via the UDT
+        //      field-type metadata.
+        //
+        // The receiver may have already been wrapped into a `$.get(...)` call
+        // by an earlier pass — but the original Identifier name is preserved
+        // on the wrapper as `.name`, so a single lookup covers both shapes.
+        let receiverBaseType: string | undefined;
+        if (_obj.name) {
+            receiverBaseType = scopeManager.getVariableUdtType(_obj.name) ?? scopeManager.getVarStaticType(_obj.name);
+        } else if (_obj.type === 'MemberExpression' && !_obj.computed && _obj.property?.type === 'Identifier' && _obj.object?.name) {
+            const baseUdtType = scopeManager.getVariableUdtType(_obj.object.name);
+            if (baseUdtType) {
+                const fieldType = scopeManager.getUdtTypeFields(baseUdtType)?.[_obj.property.name];
+                receiverBaseType = normalizePineBaseType(fieldType);
+            }
+        }
+        const methodReceiverType = scopeManager.getMethodReceiverType(methodName);
+        const receiverTypeMatches = !!receiverBaseType && !!methodReceiverType && receiverBaseType === methodReceiverType;
+
+        // UDT-instance dispatch (pre-existing rule, kept as a fallback for
+        // methods whose declared receiver type could not be extracted): a
+        // direct reference to a known UDT instance always dispatches to the
+        // user method — UDT instances have no built-in members to call.
+        // When neither rule applies (receiver type unknown/mismatched and
+        // not a UDT instance), the call falls through to the built-in — a
+        // name that merely collides with a user method must not hijack e.g.
+        // `someLine.delete()`.
         const isReceiverUdtInstance = !!_obj.name && scopeManager.isUdtInstance(_obj.name);
 
-        if (isUserFunction && isUserMethod && !scopeManager.isContextBound(methodName) && !isBuiltinMethodOnParam && !isChainedPropertyMethod && isReceiverUdtInstance) {
+        if (isUserFunction && isUserMethod && !scopeManager.isContextBound(methodName) && (receiverTypeMatches || isReceiverUdtInstance)) {
             // It's a user variable/function.
             // Transform obj.method(args) -> method(obj, args)
             // 1. Get the object (first arg)
@@ -1705,6 +1726,9 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
             } else if (obj.type === 'CallExpression') {
                  // If object is a call expression, transform it first
                  transformCallExpression(obj, scopeManager);
+                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
+            } else if (obj.type === 'MemberExpression') {
+                 // UDT field chain receiver (e.g. `bs.is_equity.to_sparkline()`)
                  transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
             }
 

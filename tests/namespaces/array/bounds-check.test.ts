@@ -4,13 +4,15 @@
 /**
  * Array.get Bounds Checking Tests
  *
- * Tests that out-of-bounds array access emits a warning and returns na (NaN),
- * allowing the script to continue execution (non-blocking).
+ * Tests that out-of-bounds array access halts the script with a
+ * PineRuntimeError (TradingView parity), while valid indices —
+ * including v6 negative indices — return the correct values.
  */
 
 import { describe, it, expect } from 'vitest';
 import PineTS from '../../../src/PineTS.class';
 import { Provider } from '../../../src/marketData/Provider.class';
+import { PineRuntimeError } from '../../../src/errors/PineRuntimeError';
 
 describe('Array.get Bounds Checking', () => {
     const sDate = new Date('2024-01-01').getTime();
@@ -36,50 +38,34 @@ describe('Array.get Bounds Checking', () => {
         expect(last(result.val2)).toBe(100);  // -3 -> first element
     });
 
-    it('should return NaN and emit warning for negative index beyond bounds', async () => {
+    it('should throw PineRuntimeError for negative index beyond bounds', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, sDate, eDate);
 
         const sourceCode = (context: any) => {
-            const { array, na } = context.pine;
+            const { array } = context.pine;
 
             const arr = array.new_float(3, 100);
             const oob = array.get(arr, -4);    // out of bounds (beyond first)
-            const isNa = na(oob);
 
-            return { oob, isNa };
+            return { oob };
         };
 
-        const ctx = await pineTS.run(sourceCode);
-        const last = (arr: any[]) => arr[arr.length - 1];
-
-        expect(last(ctx.result.oob)).toBeNaN();
-        expect(last(ctx.result.isNa)).toBe(true);
-        expect(ctx.warnings.length).toBeGreaterThan(0);
-        expect(ctx.warnings[0].method).toBe('array.get');
+        await expect(pineTS.run(sourceCode)).rejects.toThrow(PineRuntimeError);
     });
 
-    it('should return NaN and emit warning for index >= array length', async () => {
+    it('should throw PineRuntimeError for index >= array length', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, sDate, eDate);
 
         const sourceCode = (context: any) => {
-            const { array, na } = context.pine;
+            const { array } = context.pine;
 
             const arr = array.new_float(3, 100);
             const val_at_length = array.get(arr, 3);    // index == length
-            const val_beyond = array.get(arr, 10);       // index > length
-            const isNa1 = na(val_at_length);
-            const isNa2 = na(val_beyond);
 
-            return { val_at_length, val_beyond, isNa1, isNa2 };
+            return { val_at_length };
         };
 
-        const ctx = await pineTS.run(sourceCode);
-        const last = (arr: any[]) => arr[arr.length - 1];
-
-        expect(last(ctx.result.val_at_length)).toBeNaN();
-        expect(last(ctx.result.val_beyond)).toBeNaN();
-        expect(last(ctx.result.isNa1)).toBe(true);
-        expect(last(ctx.result.isNa2)).toBe(true);
+        await expect(pineTS.run(sourceCode)).rejects.toThrow(/out of bounds/);
     });
 
     it('should return correct value for valid index', async () => {
@@ -108,28 +94,22 @@ describe('Array.get Bounds Checking', () => {
         expect(last(result.last_val)).toBe(30);
     });
 
-    it('should return NaN and emit warning for empty array access', async () => {
+    it('should throw PineRuntimeError for empty array access', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, sDate, eDate);
 
         const sourceCode = (context: any) => {
-            const { array, na } = context.pine;
+            const { array } = context.pine;
 
             const arr = array.new_float(0);
             const val = array.get(arr, 0);
-            const isNa = na(val);
 
-            return { val, isNa };
+            return { val };
         };
 
-        const ctx = await pineTS.run(sourceCode);
-        const last = (arr: any[]) => arr[arr.length - 1];
-
-        expect(last(ctx.result.val)).toBeNaN();
-        expect(last(ctx.result.isNa)).toBe(true);
-        expect(ctx.warnings.length).toBeGreaterThan(0);
+        await expect(pineTS.run(sourceCode)).rejects.toThrow(/out of bounds/);
     });
 
-    it('should include method name in warning', async () => {
+    it('should include method name and index in the runtime error', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, sDate, eDate);
 
         const sourceCode = (context: any) => {
@@ -138,9 +118,16 @@ describe('Array.get Bounds Checking', () => {
             array.get(arr, 5);
         };
 
-        const ctx = await pineTS.run(sourceCode);
-        expect(ctx.warnings.length).toBeGreaterThan(0);
-        expect(ctx.warnings[0].method).toBe('array.get');
-        expect(ctx.warnings[0].message).toContain('out of bounds');
+        let caught: unknown;
+        try {
+            await pineTS.run(sourceCode);
+        } catch (err) {
+            caught = err;
+        }
+
+        expect(caught).toBeInstanceOf(PineRuntimeError);
+        expect((caught as PineRuntimeError).method).toBe('array.get');
+        expect((caught as PineRuntimeError).message).toContain('Index 5 is out of bounds');
+        expect((caught as PineRuntimeError).message).toContain('array size is 3');
     });
 });

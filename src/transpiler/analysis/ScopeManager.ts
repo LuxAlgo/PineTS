@@ -40,6 +40,25 @@ const JS_GLOBAL_OBJECTS = new Set([
     'decodeURIComponent',
 ]);
 
+/**
+ * Reduce a Pine type annotation to its BASE type name:
+ *   'array<float>'        → 'array'
+ *   'series table'        → 'table'
+ *   'simple string'       → 'string'
+ *   'matrix<int>'         → 'matrix'
+ *   'MyType'              → 'MyType'
+ * Generic arguments are stripped first, then qualifier prefixes
+ * (series/simple/const/input/...) by taking the last whitespace token.
+ */
+export function normalizePineBaseType(pineType: string | undefined): string | undefined {
+    if (!pineType || typeof pineType !== 'string') return undefined;
+    let s = pineType.trim();
+    const lt = s.indexOf('<');
+    if (lt >= 0) s = s.slice(0, lt);
+    const parts = s.split(/\s+/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : undefined;
+}
+
 export class ScopeManager {
     private scopes: Map<string, string>[] = [];
     private scopeTypes: string[] = [];
@@ -135,6 +154,37 @@ export class ScopeManager {
      * function scope, keeping the global registry clean.
      */
     private functionParamUdtTypes: Map<string, Record<string, string>> = new Map();
+
+    /**
+     * Registry of variable names → static Pine BASE type ('table', 'array',
+     * 'line', ...). Populated from `__pineTypedVar:` markers (explicit
+     * annotations like `var table tb = ...`) and from built-in constructor
+     * initializers (`tb = table.new(...)`, `eq = array.from(...)`).
+     *
+     * Consumed by the dot-call dispatch in `transformCallExpression`: a user
+     * `method` declared on a built-in receiver type (e.g. `method cell(table
+     * tb, ...)`) must win over the built-in member when the receiver's static
+     * type matches the method's declared first-parameter type (TV semantics).
+     */
+    private varStaticTypes: Map<string, string> = new Map();
+
+    /**
+     * Registry of user `method` Pine names → declared receiver BASE type
+     * (first-parameter type, e.g. 'table' for `method cell(table tb, ...)`).
+     * Populated from `$M_<name>.__pineReceiverType__ = '...'` markers emitted
+     * by pine2js codegen.
+     */
+    private methodReceiverTypes: Map<string, string> = new Map();
+
+    /**
+     * Registry of user-defined function names → map of {paramName → BASE
+     * type} for ALL type-annotated params (unlike `functionParamUdtTypes`,
+     * which is filtered to UDT types). Consumed by
+     * `transformFunctionDeclaration` to scope-locally register built-in-typed
+     * params (e.g. `f(table t)`) in `varStaticTypes` so dot-calls of user
+     * methods on those params dispatch correctly inside the body.
+     */
+    private functionParamStaticTypes: Map<string, Record<string, string>> = new Map();
 
     public get nextParamIdArg(): any {
         return {
@@ -323,6 +373,41 @@ export class ScopeManager {
      */
     unmarkVariableAsUdtInstance(varName: string): void {
         this.udtInstances.delete(varName);
+    }
+
+    // ── Static (built-in) type registry ─────────────────────────────────
+    // Mirrors the UDT registry for BUILT-IN receiver types (table, array,
+    // line, ...) so user `method`s declared on built-in types can be
+    // dispatched by declared-receiver-type matching at dot-call sites.
+
+    setVarStaticType(varName: string, pineType: string): void {
+        const base = normalizePineBaseType(pineType);
+        if (base) this.varStaticTypes.set(varName, base);
+    }
+
+    getVarStaticType(varName: string): string | undefined {
+        return this.varStaticTypes.get(varName);
+    }
+
+    unsetVarStaticType(varName: string): void {
+        this.varStaticTypes.delete(varName);
+    }
+
+    setMethodReceiverType(pineName: string, pineType: string): void {
+        const base = normalizePineBaseType(pineType);
+        if (base) this.methodReceiverTypes.set(pineName, base);
+    }
+
+    getMethodReceiverType(pineName: string): string | undefined {
+        return this.methodReceiverTypes.get(pineName);
+    }
+
+    setFunctionParamStaticTypes(funcName: string, paramTypes: Record<string, string>): void {
+        this.functionParamStaticTypes.set(funcName, paramTypes);
+    }
+
+    getFunctionParamStaticTypes(funcName: string): Record<string, string> | undefined {
+        return this.functionParamStaticTypes.get(funcName);
     }
 
     addContextBoundVar(name: string, isRootParam: boolean = false): void {
