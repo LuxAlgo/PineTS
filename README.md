@@ -117,11 +117,7 @@ console.log('SMA values:', plots['SMA 20'].data);
 
 PineTS accepts native Pine Script® or a JavaScript friendly syntax. Both compile to the same runtime.
 
-
-| Native Pine Script® | PineTS Syntax (JavaScript) |
-| ------------------- | -------------------------- |
-|                     |                            |
-
+**Native Pine Script®**
 
 ```pinescript
 //@version=6
@@ -135,6 +131,7 @@ plot(sma, "Signal")
 ```
 
 
+**PineTS Syntax (JavaScript)**
 
 ```javascript
 //@PineTS
