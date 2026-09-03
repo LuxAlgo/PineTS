@@ -22,7 +22,8 @@
   <a href="#features">Features</a> •
   <a href="#usage">Usage</a> •
   <a href="#api-coverage">API Coverage</a> •
-  <a href="#documentation">Docs</a>
+  <a href="#documentation">Docs</a> •
+  <a href="#charting-with-vela">Vela</a>
 </p>
 
 ## What is PineTS?
@@ -326,6 +327,37 @@ Full guides live at **[docs.luxalgo.com/developers/pinets](https://docs.luxalgo.
 - [Pagination and Live Streaming](https://docs.luxalgo.com/developers/pinets/pagination)
 - [Architecture](https://docs.luxalgo.com/developers/pinets/architecture)
 - [API Coverage](https://docs.luxalgo.com/developers/pinets/api-coverage)
+
+
+
+## Charting with Vela
+
+[Vela](https://github.com/LuxAlgo/Vela) is LuxAlgo's open-source charting library. It ships no scripting engine of its own. [Vela PineTS](https://github.com/LuxAlgo/Vela-pinets) is the addon that runs Pine Script® `indicator()` and `strategy()` scripts on the chart, through Vela's public `ScriptingEngine` port, in-process (`PineEngine`) or off the main thread (`PineWorkerEngine`).
+
+<p align="center">
+  <img src="./.github/images/vela.png" alt="Vela charting PineTS indicators" />
+</p>
+
+```bash
+npm install @luxalgo/vela-pinets @luxalgo/vela pinets
+```
+
+```javascript
+import { Vela } from '@luxalgo/vela';
+import { PineEngine } from '@luxalgo/vela-pinets';
+
+const chart = new Vela('#chart', { symbol: 'BTCUSDT', timeframe: '60', live: true });
+chart.registerEngine('pine', new PineEngine());
+chart.addIndicator(`
+//@version=6
+indicator("EMA 20", overlay=true)
+plot(ta.ema(close, 20), color=color.orange, linewidth=2)
+`);
+```
+
+Use `PineWorkerEngine` instead of `PineEngine` when a heavy script should not block the chart. A `strategy()` script runs through the same engine; Vela-pinets maps PineTS's broker-emulator trades onto Vela's price-pane trade markers. Mutable `indicator()` / `strategy()` declaration arguments appear on Vela's **Properties** tab.
+
+**[Vela](https://github.com/LuxAlgo/Vela)** · **[Vela PineTS](https://github.com/LuxAlgo/Vela-pinets)** (`@luxalgo/vela-pinets`)
 
 
 
