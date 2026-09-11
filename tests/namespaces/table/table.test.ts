@@ -766,4 +766,48 @@ describe('TABLE Namespace', () => {
         expect(result.hasHelper[0]).toBe(true);
         expect(result.cellText[0]).toBe('Works');
     });
+
+    it('table.cell_set_text_formatting() and t.cell_set_text_formatting() update text formatting', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-11-20').getTime());
+
+        const { result } = await pineTS.run((context) => {
+            var t = table.new('top_right', 3, 2);
+            t.cell(0, 0, 'A');
+            t.cell(1, 0, 'B');
+            var defaultFormatting = t.getCell(0, 0).text_formatting;
+            table.cell_set_text_formatting(t, 0, 0, text.format_bold);
+            t.cell_set_text_formatting(1, 0, text.format_italic);
+            var cellA = t.getCell(0, 0).text_formatting;
+            var cellB = t.getCell(1, 0).text_formatting;
+            return { defaultFormatting, cellA, cellB };
+        });
+
+        expect(result.defaultFormatting[0]).toBe('none');
+        expect(result.cellA[0]).toBe('bold');
+        expect(result.cellB[0]).toBe('italic');
+    });
+
+    // Script compiles on TradingView (pine-facade translate_light).
+    it('native Pine: text_formatting in table.cell() and cell_set_text_formatting() reach plot data', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-01-10').getTime());
+
+        const { plots } = await pineTS.run(`
+//@version=6
+indicator("table text formatting", overlay = true)
+var t = table.new(position.top_right, 3, 1)
+if barstate.islast
+    table.cell(t, 0, 0, "a", text_formatting = text.format_bold)
+    table.cell(t, 1, 0, "b")
+    table.cell_set_text_formatting(t, 1, 0, text.format_italic)
+    table.cell(t, 2, 0, "c")
+    t.cell_set_text_formatting(2, 0, text.format_bold)
+plot(close)
+`);
+
+        const tbl = plots['__tables__'].data[0].value.find((t: any) => t.columns === 3);
+        const cells = tbl.cells[0];
+        expect(cells[0].text_formatting).toBe('bold');
+        expect(cells[1].text_formatting).toBe('italic');
+        expect(cells[2].text_formatting).toBe('bold');
+    });
 });

@@ -525,6 +525,7 @@ export class Context {
                 'cell_set_text_halign',
                 'cell_set_text_valign',
                 'cell_set_text_font_family',
+                'cell_set_text_formatting',
                 'set_position',
                 'set_bgcolor',
                 'set_border_color',

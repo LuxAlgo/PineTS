@@ -28,6 +28,7 @@ export interface TableCell {
     bgcolor: string;
     tooltip: string;
     text_font_family: string;
+    text_formatting: string;
     _merged: boolean;
     _merge_parent: [number, number] | null; // [col, row] of the merge origin
 }
@@ -174,6 +175,7 @@ export class TableObject {
     cell_set_text_halign(...args: any[]) { return this._helper.cell_set_text_halign(this, ...args); }
     cell_set_text_valign(...args: any[]) { return this._helper.cell_set_text_valign(this, ...args); }
     cell_set_text_font_family(...args: any[]) { return this._helper.cell_set_text_font_family(this, ...args); }
+    cell_set_text_formatting(...args: any[]) { return this._helper.cell_set_text_formatting(this, ...args); }
 
     set_position(...args: any[]) { return this._helper.set_position(this, ...args); }
     set_bgcolor(...args: any[]) { return this._helper.set_bgcolor(this, ...args); }
@@ -194,6 +196,7 @@ export class TableObject {
             bgcolor: '',
             tooltip: '',
             text_font_family: 'default',
+            text_formatting: 'none',
             _merged: false,
             _merge_parent: null,
         };

@@ -6,7 +6,7 @@
         "table.cell_set_text()": true,
         "table.cell_set_text_color()": true,
         "table.cell_set_text_font_family()": true,
-        "table.cell_set_text_formatting()": false,
+        "table.cell_set_text_formatting()": true,
         "table.cell_set_text_halign()": true,
         "table.cell_set_text_size()": true,
         "table.cell_set_text_valign()": true,
