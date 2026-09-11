@@ -116,6 +116,27 @@ plot(dayofweek.friday, "p")
         expect(lastValue(plots, 'p')).toBe(6);
     });
 
+    // Both scripts compile on TradingView. Before the fix `scale` was missing from
+    // CONTEXT_PINE_VARS, so any `scale.*` reference threw `scale is not defined`.
+    it('scale: indicator(scale = scale.none) resolves the namespace', async () => {
+        const { plots } = await newPineTS().run(`
+//@version=6
+indicator("scale namespace", overlay = true, scale = scale.none)
+plot(close, "p")
+`);
+        expect(Number.isFinite(lastValue(plots, 'p'))).toBe(true);
+    });
+
+    it('scale: user variable coexists with indicator(scale = scale.left)', async () => {
+        const { plots } = await newPineTS().run(`
+//@version=6
+indicator("scale collision", scale = scale.left)
+scale = 2.0
+plot(scale, "p")
+`);
+        expect(lastValue(plots, 'p')).toBe(2);
+    });
+
     it('dual-use dayofweek built-in variable still works when not shadowed', async () => {
         const { plots } = await newPineTS().run(`
 //@version=6

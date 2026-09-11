@@ -439,4 +439,38 @@ describe('Constants', () => {
         expect(result.linestyle_dotted[0]).toBe('linestyle_dotted');
         expect(result.linestyle_dashed[0]).toBe('linestyle_dashed');
     });
+
+    // ── scale ──────────────────────────────────────────────────────────
+    it('scale.* constants match TradingView values', async () => {
+        const pineTS = makePineTS();
+
+        const { result } = await pineTS.run((context) => {
+            return {
+                left: scale.left,
+                none: scale.none,
+                right: scale.right,
+            };
+        });
+
+        expect(result.left[0]).toBe('left');
+        expect(result.none[0]).toBe('none');
+        expect(result.right[0]).toBe('right');
+    });
+
+    // ── settlement_as_close ────────────────────────────────────────────
+    it('settlement_as_close.* constants match TradingView values', async () => {
+        const pineTS = makePineTS();
+
+        const { result } = await pineTS.run((context) => {
+            return {
+                inherit: settlement_as_close.inherit,
+                off: settlement_as_close.off,
+                on: settlement_as_close.on,
+            };
+        });
+
+        expect(result.inherit[0]).toBe('inherit');
+        expect(result.off[0]).toBe('off');
+        expect(result.on[0]).toBe('on');
+    });
 });
