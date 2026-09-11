@@ -16,7 +16,7 @@ parent: API Coverage
 | `table.cell_set_text()`             | ✅     | Set cell text                  |
 | `table.cell_set_text_color()`       | ✅     | Set cell text color            |
 | `table.cell_set_text_font_family()` | ✅     | Set cell text font family      |
-| `table.cell_set_text_formatting()`  |        | Set cell text formatting       |
+| `table.cell_set_text_formatting()`  | ✅     | Set cell text formatting       |
 | `table.cell_set_text_halign()`      | ✅     | Set cell text horizontal align |
 | `table.cell_set_text_size()`        | ✅     | Set cell text size             |
 | `table.cell_set_text_valign()`      | ✅     | Set cell text vertical align   |
