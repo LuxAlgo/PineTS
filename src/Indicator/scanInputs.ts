@@ -4,6 +4,7 @@
 import { pineToJS } from '../transpiler/pineToJS/pineToJS.index';
 import { resolveColorToRgba, rgbaToHex8 } from '../namespaces/color/PineColor';
 import { SOURCE_BUILTINS } from '../namespaces/input/utils';
+import { findInputCallInExpression, memberExpressionPath } from '../transpiler/utils/inputExpression';
 import type { IPineInput, PineInputType, PineInputDisplay } from './types';
 
 /**
@@ -167,79 +168,110 @@ function collectConstTable(ast: any): ConstTable {
  *   - `let len = input.int(14, "Len", ...)`  → VariableDeclaration → CallExpression
  *   - `len = input.int(...)` is reassignment — also a VariableDeclaration because
  *      Pine simple `=` lowers to `let` at the parser layer.
+ *   - `cfg.show := input.bool(...)`          → ExpressionStatement wrapping an
+ *      AssignmentExpression whose LHS is a member path. This is the settings /
+ *      config-object assignment style; the input is harvested under the member
+ *      path (`cfg.show`) as its varId.
+ *   - `width = input.int(1, ...) * 2` — the input call nested inside a pure
+ *      expression tree (Binary/Logical/Conditional/Unary); harvested under the
+ *      assigned variable name.
  *
  * Anything else returns null and is skipped.
  */
 function decodeInputCall(node: any, enumTable: EnumTable, constTable: ConstTable): IPineInput | null {
-    if (node.type !== 'VariableDeclaration') return null;
-    for (const decl of node.declarations ?? []) {
-        const init = decl?.init;
-        if (!init || init.type !== 'CallExpression') continue;
-
-        // Match input.<fn>(...) or bare input(...).
-        const callee = init.callee;
-        let fnName: string | null = null;
-        if (
-            callee?.type === 'MemberExpression' &&
-            callee.object?.type === 'Identifier' &&
-            callee.object.name === 'input' &&
-            callee.property?.type === 'Identifier'
-        ) {
-            fnName = callee.property.name;
-        } else if (callee?.type === 'Identifier' && callee.name === 'input') {
-            fnName = ''; // bare wrapper
+    if (node.type === 'VariableDeclaration') {
+        for (const decl of node.declarations ?? []) {
+            const meta = decodeInputAssignment(decl.id, decl?.init, enumTable, constTable);
+            if (meta) return meta;
         }
-        if (fnName === null) continue;
-        const isIntFloat = fnName === 'int' || fnName === 'float';
-        if (fnName !== '' && !isIntFloat && !(fnName in POSITIONAL_BY_FN)) continue;
-
-        // Split positionals from the trailing named-args ObjectExpression.
-        const args = init.arguments ?? [];
-        const lastArg = args[args.length - 1];
-        const hasNamed = lastArg?.type === 'ObjectExpression';
-        const positionals = hasNamed ? args.slice(0, -1) : args.slice();
-        const named: any[] = hasNamed ? (lastArg.properties ?? []) : [];
-
-        const raw: Record<string, any> = {};
-        if (fnName === 'int' || fnName === 'float') {
-            decodeIntFloatPositionals(positionals, named, raw);
-        } else {
-            decodePositionals(POSITIONAL_BY_FN[fnName], positionals, raw);
-        }
-        for (const p of named) {
-            if (p.type !== 'Property' || !p.key?.name) continue;
-            raw[p.key.name] = p.value;
-        }
-
-        // Now turn raw AST values into JS primitives, resolving enum + source refs.
-        const resolved: any = {};
-        for (const k of Object.keys(raw)) {
-            resolved[k] = resolveValue(raw[k], enumTable, constTable);
-        }
-
-        // Determine the type tag. For bare `input(...)`, infer from defval.
-        const type = fnName === '' ? inferAutoType(resolved.defval) : TYPE_BY_FN[fnName];
-        if (!type) continue;
-
-        const meta: IPineInput = { type, defval: resolved.defval };
-        // The assigned variable name — the primary override key. Only simple
-        // `name = input.*()` assignments carry one (Identifier id).
-        if (decl.id?.type === 'Identifier' && typeof decl.id.name === 'string') meta.varId = decl.id.name;
-        if (resolved.title !== undefined) meta.title = String(resolved.title);
-        if (resolved.tooltip !== undefined) meta.tooltip = String(resolved.tooltip);
-        if (resolved.group !== undefined) meta.group = String(resolved.group);
-        if (resolved.inline !== undefined) meta.inline = String(resolved.inline);
-        if (resolved.confirm !== undefined) meta.confirm = Boolean(resolved.confirm);
-        if (resolved.active !== undefined) meta.active = Boolean(resolved.active);
-        if (resolved.display !== undefined) meta.display = normalizeDisplay(resolved.display);
-        if (resolved.options !== undefined && Array.isArray(resolved.options)) meta.options = resolved.options;
-        if (typeof resolved.minval === 'number') meta.minval = resolved.minval;
-        if (typeof resolved.maxval === 'number') meta.maxval = resolved.maxval;
-        if (typeof resolved.step === 'number') meta.step = resolved.step;
-
-        return meta;
+        return null;
+    }
+    if (node.type === 'ExpressionStatement') {
+        const expr = node.expression;
+        if (!expr || expr.type !== 'AssignmentExpression' || expr.operator !== '=') return null;
+        const leftType = expr.left?.type;
+        if (leftType !== 'Identifier' && leftType !== 'MemberExpression') return null;
+        return decodeInputAssignment(expr.left, expr.right, enumTable, constTable);
     }
     return null;
+}
+
+/**
+ * Decode an input call assigned to `targetNode`, or return `null`.
+ *
+ * `initExpr` may BE the input call or a pure expression tree containing one
+ * (see findInputCallInExpression). The varId is `targetNode`'s Pine-level path
+ * (bare name for an Identifier, dotted chain for a MemberExpression) — this is
+ * also the key the transpiler injects as the runtime `{ __varId }` sentinel.
+ */
+function decodeInputAssignment(targetNode: any, initExpr: any, enumTable: EnumTable, constTable: ConstTable): IPineInput | null {
+    const init = findInputCallInExpression(initExpr);
+    if (!init) return null;
+
+    // Match input.<fn>(...) or bare input(...).
+    const callee = init.callee;
+    let fnName: string | null = null;
+    if (
+        callee?.type === 'MemberExpression' &&
+        callee.object?.type === 'Identifier' &&
+        callee.object.name === 'input' &&
+        callee.property?.type === 'Identifier'
+    ) {
+        fnName = callee.property.name;
+    } else if (callee?.type === 'Identifier' && callee.name === 'input') {
+        fnName = ''; // bare wrapper
+    }
+    if (fnName === null) return null;
+    const isIntFloat = fnName === 'int' || fnName === 'float';
+    if (fnName !== '' && !isIntFloat && !(fnName in POSITIONAL_BY_FN)) return null;
+
+    // Split positionals from the trailing named-args ObjectExpression.
+    const args = init.arguments ?? [];
+    const lastArg = args[args.length - 1];
+    const hasNamed = lastArg?.type === 'ObjectExpression';
+    const positionals = hasNamed ? args.slice(0, -1) : args.slice();
+    const named: any[] = hasNamed ? (lastArg.properties ?? []) : [];
+
+    const raw: Record<string, any> = {};
+    if (fnName === 'int' || fnName === 'float') {
+        decodeIntFloatPositionals(positionals, named, raw);
+    } else {
+        decodePositionals(POSITIONAL_BY_FN[fnName], positionals, raw);
+    }
+    for (const p of named) {
+        if (p.type !== 'Property' || !p.key?.name) continue;
+        raw[p.key.name] = p.value;
+    }
+
+    // Now turn raw AST values into JS primitives, resolving enum + source refs.
+    const resolved: any = {};
+    for (const k of Object.keys(raw)) {
+        resolved[k] = resolveValue(raw[k], enumTable, constTable);
+    }
+
+    // Determine the type tag. For bare `input(...)`, infer from defval.
+    const type = fnName === '' ? inferAutoType(resolved.defval) : TYPE_BY_FN[fnName];
+    if (!type) return null;
+
+    const meta: IPineInput = { type, defval: resolved.defval };
+    // The assigned target — the primary override key. Plain variable names come
+    // from Identifier ids; settings/config-object fields are dotted member
+    // paths (e.g. `htf1.settings.show`). Both match the runtime sentinel.
+    const varId = memberExpressionPath(targetNode);
+    if (varId !== undefined) meta.varId = varId;
+    if (resolved.title !== undefined) meta.title = String(resolved.title);
+    if (resolved.tooltip !== undefined) meta.tooltip = String(resolved.tooltip);
+    if (resolved.group !== undefined) meta.group = String(resolved.group);
+    if (resolved.inline !== undefined) meta.inline = String(resolved.inline);
+    if (resolved.confirm !== undefined) meta.confirm = Boolean(resolved.confirm);
+    if (resolved.active !== undefined) meta.active = Boolean(resolved.active);
+    if (resolved.display !== undefined) meta.display = normalizeDisplay(resolved.display);
+    if (resolved.options !== undefined && Array.isArray(resolved.options)) meta.options = resolved.options;
+    if (typeof resolved.minval === 'number') meta.minval = resolved.minval;
+    if (typeof resolved.maxval === 'number') meta.maxval = resolved.maxval;
+    if (typeof resolved.step === 'number') meta.step = resolved.step;
+
+    return meta;
 }
 
 /**
