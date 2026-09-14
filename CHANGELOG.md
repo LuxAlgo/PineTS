@@ -1,5 +1,13 @@
 # Change Log
 
+## [Unreleased]
+
+### Fixed
+
+- **User-defined functions named after a constant namespace crashed at the call site**: Pine allows a script to declare a function whose name matches a constant namespace (`position(x) => close + x`, `font(x) => …`) and to keep using the namespace's members in the same script. The pineToJS codegen collision pass renamed the *declaration* to `position_$N` but deliberately left bare call sites untouched (it assumed a bare callee is always the built-in, which holds for variable collisions like `fill = 3` + `fill(p1, p2)`), so `plot(position(14))` resolved to the constants object → `TypeError: position is not a function`. The pass now records which collision names were declared as functions and renames their bare callees too. Separately, the parser's `name → name_var` rewrite (a variable sharing a user function's name) fired on the namespace base of `position.top_right` once a `position()` function existed → `ReferenceError: position_var is not defined`; it now skips a collision-name identifier followed by `.`. Affects every entry of `NAMESPACE_COLLISION_NAMES`, and makes adding new names to that list (e.g. `scale`, PR #305) safe for scripts that use them as function names. Tests: `tests/transpiler/namespace-identifier-collision.test.ts` (function-call, member-access coexistence, nested / indirect calls, variable-collision guard).
+
+---
+
 ## [v0.9.33]
 
 ### Fixed

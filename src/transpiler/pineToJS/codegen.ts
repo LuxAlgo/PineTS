@@ -23,6 +23,12 @@ export class CodeGenerator {
     // Maps user-defined function names to their ordered parameter names.
     // Used to resolve named arguments to correct positional slots.
     private functionParams: Map<string, string[]>;
+    // Collision names (NAMESPACE_COLLISION_NAMES) that the user declared as a
+    // FUNCTION. A bare call `name(...)` to one of these can only be the user
+    // function (a constants namespace is not callable), so its callees must
+    // follow the `_$N` rename — unlike variable collisions, where `fill(...)`
+    // still means the built-in.
+    private userFunctionCollisions: Set<string>;
     constructor(options: { indentStr?: string; sourceCode?: string; includeSourceComments?: boolean } = {}) {
         this.indent = 0;
         this.indentStr = options.indentStr || '  ';
@@ -33,6 +39,7 @@ export class CodeGenerator {
         this.includeSourceComments = options.includeSourceComments || false; // default false
         this.paramRenameCounter = 0;
         this.functionParams = new Map();
+        this.userFunctionCollisions = new Set();
     }
 
     generate(ast) {
@@ -40,6 +47,7 @@ export class CodeGenerator {
         this.indent = 0;
         this.lastCommentedLine = -1;
         this.functionParams = new Map();
+        this.userFunctionCollisions = new Set();
 
         if (ast.type === 'Program') {
             // Pre-scan: collect user-defined function parameter lists and
@@ -70,7 +78,11 @@ export class CodeGenerator {
      *  1. Pine namespace collisions (NAMESPACE_COLLISION_NAMES — e.g. `fill`,
      *     `size`, `color`, `line`): user variable would shadow the namespace
      *     destructured from `$.pine`. The CALL SITE `fill(...)` is the
-     *     namespace, NOT the renamed variable, so callees are NOT renamed.
+     *     namespace, NOT the renamed variable, so callees are NOT renamed —
+     *     UNLESS the user declared a FUNCTION with that name
+     *     (`position(x) => close + x`, valid Pine): then a bare call
+     *     `position(14)` can only be the user function and its callees ARE
+     *     renamed (tracked in `userFunctionCollisions`).
      *
      *  2. JS reserved keyword collisions (JS_RESERVED_WORDS — e.g. `delete`,
      *     `super`, `static`): the generated JS would fail to parse
@@ -148,11 +160,16 @@ export class CodeGenerator {
         // name visible at the call site (`obj.delete()` looks up `delete`,
         // not `delete_$0`), breaking UFCS retargeting in ExpressionTransformer.
         if (node.type === 'FunctionDeclaration') {
-            if (node.id?.type === 'Identifier' &&
-                !node.id.isMethod &&
-                this.isReservedName(node.id.name) &&
-                !renameMap.has(node.id.name)) {
-                renameMap.set(node.id.name, `${node.id.name}_$${this.paramRenameCounter++}`);
+            if (node.id?.type === 'Identifier' && !node.id.isMethod && this.isReservedName(node.id.name)) {
+                if (!renameMap.has(node.id.name)) {
+                    renameMap.set(node.id.name, `${node.id.name}_$${this.paramRenameCounter++}`);
+                }
+                // Remember that this collision name is a user FUNCTION so that
+                // bare call sites `name(...)` follow the rename (see
+                // renameVariableRefsInAST). Overloads share one entry.
+                if (NAMESPACE_COLLISION_NAMES.has(node.id.name)) {
+                    this.userFunctionCollisions.add(node.id.name);
+                }
             }
         }
 
@@ -188,10 +205,14 @@ export class CodeGenerator {
                 // Two cases:
                 //   - JS_RESERVED_WORDS rename (e.g. user `method delete` → `delete_$N`):
                 //     the callee IS the user function — must be renamed.
-                //   - NAMESPACE_COLLISION_NAMES rename (e.g. user `var fill = ...` while
-                //     also calling the built-in `fill(...)`): the callee here refers to
-                //     the namespace, not the renamed user variable — leave it alone.
-                if (JS_RESERVED_WORDS.has(node.callee.name)) {
+                //   - NAMESPACE_COLLISION_NAMES rename of a user VARIABLE (e.g.
+                //     `var fill = ...` while also calling the built-in `fill(...)`):
+                //     the callee here refers to the namespace, not the renamed
+                //     variable — leave it alone.
+                //   - NAMESPACE_COLLISION_NAMES rename of a user FUNCTION
+                //     (`position(x) => ...` then `position(14)`): the callee IS the
+                //     user function — must be renamed.
+                if (JS_RESERVED_WORDS.has(node.callee.name) || this.userFunctionCollisions.has(node.callee.name)) {
                     node.callee.name = renameMap.get(node.callee.name)!;
                 }
                 // else: skip callee

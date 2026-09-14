@@ -36,6 +36,7 @@ import {
     SwitchCase,
     VariableDeclarationKind,
 } from './ast';
+import { NAMESPACE_COLLISION_NAMES } from '../settings';
 
 export class Parser {
     private tokens: Token[];
@@ -1748,7 +1749,12 @@ export class Parser {
             if (
                 this.functionNames.has(name) &&
                 this.peek().type !== TokenType.LPAREN &&
-                !this.isCurrentFunctionParam(name)
+                !this.isCurrentFunctionParam(name) &&
+                // `position.top_right` after a user function `position(x) => ...`
+                // is the constants namespace, not a variable sharing the
+                // function's name — leave the base identifier untouched so the
+                // codegen collision pass can treat it as a namespace access.
+                !(this.peek().type === TokenType.DOT && NAMESPACE_COLLISION_NAMES.has(name))
             ) {
                 name = name + '_var';
             }
