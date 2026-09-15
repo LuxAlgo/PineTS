@@ -54,7 +54,7 @@ import { normalizeNativeImports } from './transformers/NormalizationTransformer'
 import { wrapInContextFunction } from './transformers/WrapperTransformer';
 import { transformNestedArrowFunctions, preProcessContextBoundVars, preProcessUdtRegistry, runAnalysisPass } from './analysis/AnalysisPass';
 import { runTypeInferencePass } from './analysis/TypeInferencePass';
-import { runTransformationPass, transformEqualityChecks, propagateAsyncAwait } from './transformers/MainTransformer';
+import { runTransformationPass, transformEqualityChecks, transformDisplayArithmetic, propagateAsyncAwait } from './transformers/MainTransformer';
 import { extractPineScriptVersion, pineToJS } from './pineToJS/pineToJS.index';
 import { buildLtfSlices } from './slicing/buildLtfSlices';
 
@@ -152,6 +152,9 @@ export function transpile(source: string | Function, options: { debug: boolean; 
 
     // Post-process: transform equality checks to math.__eq calls
     transformEqualityChecks(ast);
+
+    // Post-process: `+` / `-` between display constants → display.__union / display.__minus
+    transformDisplayArithmetic(ast);
 
     // Post-process: propagate async/await through user-defined function call chains
     // Functions containing await (e.g., from request.security) must be async,

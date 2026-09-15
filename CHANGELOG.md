@@ -1,5 +1,13 @@
 # Change Log
 
+## [Unreleased]
+
+### Fixed
+
+- **`display.a - display.b` produced `NaN`, and `display.a + display.b` a raw concatenation**: Pine's `display.*` constants are a set type — `+` unions two displays and `-` removes one's surfaces from the other (`display.all - display.price_scale` is the reference manual's own example). The runtime kept them as member-name strings, so native `-` yielded `NaN` (hosts then fell back to their default, typically showing the plot everywhere) and `+` glued names in source order (`display.all + display.none` → `'allnone'`). A new transpiler post-process (`transformDisplayArithmetic`) routes `+` / `-` with a `display.*` operand — literal members, chained expressions, or a variable combined with a member — to `display.__union` / `display.__minus`, which compute the set and report it as the canonical concatenation of member names in the order pane, data_window, status_line, price_scale (`'all'` / `'none'` for the full / empty set — the shape hosts already parse). So `display.all - display.none` → `'all'`, `display.none - display.all` → `'none'`, `display.all - display.price_scale` → `'panedata_windowstatus_line'`, `display.pane + display.pane` → `'pane'`. Plain member values and the `display.*` enum are unchanged. Test: `tests/namespaces/plot/display-arithmetic.test.ts`.
+
+---
+
 ## [v0.9.33]
 
 ### Fixed

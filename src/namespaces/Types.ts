@@ -81,6 +81,51 @@ export enum display {
     status_line = 'status_line',
 }
 
+/**
+ * A Pine display value is a SET of surfaces: `display.all - display.price_scale` and
+ * `display.pane + display.data_window` are valid Pine. PineTS represents a display as
+ * the concatenation of its member names in this canonical order ('all' / 'none' for the
+ * full / empty set) — the shape `+` on the string enum has always produced, so hosts
+ * parsing member names keep working. The transpiler routes `+` / `-` between display
+ * operands to `display.__union` / `display.__minus` (native `-` on strings is NaN).
+ */
+const DISPLAY_SURFACES = [display.pane, display.data_window, display.status_line, display.price_scale] as const;
+const DISPLAY_TOKENS = [...DISPLAY_SURFACES, display.all, display.none];
+
+function displaySurfaces(value: unknown): Set<string> {
+    const out = new Set<string>();
+    if (typeof value !== 'string') return out; // `na` or a non-display operand contributes nothing
+    // Greedy scan of the concatenated names; a `+` the transpiler could not attribute
+    // to display operands still concatenates in source order, which this reads as well.
+    for (let i = 0; i < value.length; ) {
+        const tok = DISPLAY_TOKENS.find((t) => value.startsWith(t, i));
+        if (!tok) break; // unknown residue: keep what was recognized
+        if (tok === display.all) return new Set(DISPLAY_SURFACES);
+        if (tok !== display.none) out.add(tok);
+        i += tok.length;
+    }
+    return out;
+}
+
+function displayFromSurfaces(surfaces: Set<string>): string {
+    const kept = DISPLAY_SURFACES.filter((s) => surfaces.has(s));
+    if (kept.length === DISPLAY_SURFACES.length) return display.all;
+    if (kept.length === 0) return display.none;
+    return kept.join('');
+}
+
+/** `a + b` on display values — the union of both surface sets. */
+export function displayUnion(a: unknown, b: unknown): string {
+    return displayFromSurfaces(new Set([...displaySurfaces(a), ...displaySurfaces(b)]));
+}
+
+/** `a - b` on display values — the surfaces of `a` without those of `b`. */
+export function displayMinus(a: unknown, b: unknown): string {
+    const out = displaySurfaces(a);
+    for (const s of displaySurfaces(b)) out.delete(s);
+    return displayFromSurfaces(out);
+}
+
 export enum shape {
     flag = 'shape_flag',
     arrowdown = 'shape_arrow_down',
@@ -243,7 +288,8 @@ const types = {
     order,
     currency,
     dayofweek,
-    display,
+    // The runtime `display` carries the set operators the transpiler emits for `+` / `-`.
+    display: { ...display, __union: displayUnion, __minus: displayMinus },
     shape,
     location,
     size,
