@@ -80,6 +80,7 @@ export interface Trade {
      * before an older lot's (TV ledger convention).
      */
     _bracket_entry?: number;
+    _entry_fill_path?: number; // Entry location on its historical bar path.
 }
 
 /**
@@ -101,6 +102,7 @@ export interface Order {
     oca_name?: string;
     oca_type?: 'cancel' | 'reduce' | 'none';
     comment?: string;
+    _fill_path?: number; // Position along the historical OHLC path, before slippage.
     fill_price?: number;
     fill_bar?: number;
     fill_time?: number;
@@ -190,6 +192,8 @@ export interface Order {
  * also indexable for the per-trade getter equivalents.
  */
 export interface StrategyState {
+    _excursion_bar?: number;
+    _excursion_path?: number;
     config: StrategyConfig;
 
     // Trade collections (arrays — `.length` is the Pine count)
