@@ -21,6 +21,7 @@ export class LabelObject {
     public tooltip: string;
     public text_font_family: string;
     public force_overlay: boolean;
+    public text_formatting: string;
     public _deleted: boolean;
     public _helper: any;
     /** Bar index at which this object was created (for streaming rollback) */
@@ -40,6 +41,7 @@ export class LabelObject {
         tooltip: string = '',
         text_font_family: string = 'default',
         force_overlay: boolean = false,
+        text_formatting: string = 'none',
     ) {
         this.id = _labelIdCounter++;
         this.x = x;
@@ -55,6 +57,7 @@ export class LabelObject {
         this.tooltip = tooltip;
         this.text_font_family = text_font_family;
         this.force_overlay = force_overlay;
+        this.text_formatting = text_formatting;
         this._deleted = false;
         this._helper = null;
     }
@@ -74,7 +77,8 @@ export class LabelObject {
     set_xloc(xloc: string): void { if (this._helper) this._helper.set_xloc(this, xloc); else if (!this._deleted) this.xloc = xloc; }
     set_yloc(yloc: string): void { if (this._helper) this._helper.set_yloc(this, yloc); else if (!this._deleted) this.yloc = yloc; }
     set_point(point: any): void { if (this._helper) this._helper.set_point(this, point); }
-    set_text_font_family(family: string): void { if (!this._deleted) this.text_font_family = family; }
+    set_text_font_family(family: string): void { if (this._helper) this._helper.set_text_font_family(this, family); else if (!this._deleted) this.text_font_family = family; }
+    set_text_formatting(formatting: string): void { if (this._helper) this._helper.set_text_formatting(this, formatting); else if (!this._deleted) this.text_formatting = formatting; }
 
     get_x(): number { return this.x; }
     get_y(): number { return this.y; }
@@ -99,6 +103,7 @@ export class LabelObject {
             this.tooltip,
             this.text_font_family,
             this.force_overlay,
+            this.text_formatting,
         );
         return lbl;
     }
@@ -119,6 +124,7 @@ export class LabelObject {
             tooltip: this.tooltip,
             text_font_family: this.text_font_family,
             force_overlay: this.force_overlay,
+            text_formatting: this.text_formatting,
             _deleted: this._deleted,
         };
     }

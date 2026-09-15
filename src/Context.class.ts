@@ -367,6 +367,8 @@ export class Context {
                 'set_style',
                 'set_textalign',
                 'set_tooltip',
+                'set_text_font_family',
+                'set_text_formatting',
                 'set_point',
                 'set_xloc',
                 'set_yloc',

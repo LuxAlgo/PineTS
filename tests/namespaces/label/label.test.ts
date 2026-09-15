@@ -320,4 +320,50 @@ describe('LABEL Namespace', () => {
         expect(lbl.text).toBe('After');
         expect(lbl.color).toBe('#00ff00');
     });
+
+    it('label.set_text_font_family() and label.set_text_formatting() update text styling', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-11-20').getTime());
+
+        const { result } = await pineTS.run((context) => {
+            var myLabel = label.new(bar_index, close, 'Styled');
+            var family_before = myLabel.text_font_family;
+            var formatting_before = myLabel.text_formatting;
+            label.set_text_font_family(myLabel, font.family_monospace);
+            label.set_text_formatting(myLabel, text.format_bold);
+            var family_after = myLabel.text_font_family;
+            var formatting_after = myLabel.text_formatting;
+            return { family_before, formatting_before, family_after, formatting_after };
+        });
+
+        expect(result.family_before[0]).toBe('default');
+        expect(result.formatting_before[0]).toBe('none');
+        expect(result.family_after[0]).toBe('monospace');
+        expect(result.formatting_after[0]).toBe('bold');
+    });
+
+    // Script compiles on TradingView (pine-facade translate_light).
+    it('native Pine: text_formatting in label.new(), text setters and copy() reach plot data', async () => {
+        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-01-10').getTime());
+
+        const { plots } = await pineTS.run(`
+//@version=6
+indicator("label text styling", overlay = true)
+if barstate.islast
+    a = label.new(bar_index, high, "a", text_formatting = text.format_bold)
+    b = label.new(bar_index, low, "b")
+    label.set_text_font_family(b, font.family_monospace)
+    b.set_text_formatting(text.format_italic)
+    c = label.copy(a)
+    label.set_text(c, "c")
+plot(close)
+`);
+
+        const labels = plots['__labels__'].data[0].value;
+        const byText = (t: string) => labels.find((l: any) => l.text === t);
+        expect(byText('a').text_formatting).toBe('bold');
+        expect(byText('a').text_font_family).toBe('default');
+        expect(byText('b').text_font_family).toBe('monospace');
+        expect(byText('b').text_formatting).toBe('italic');
+        expect(byText('c').text_formatting).toBe('bold');
+    });
 });
