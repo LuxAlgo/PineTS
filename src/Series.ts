@@ -35,7 +35,16 @@ export class Series {
     static from(source: any): Series {
         if (source instanceof Series) return source;
         if (Array.isArray(source)) return new Series(source);
-        if (source != null && typeof source === 'object' && '__value' in source && source.__value instanceof Series) return source.__value;
+        if (source != null && typeof source === 'object' && '__value' in source) {
+            const inner = source.__value;
+            // Dual-use helpers (time, time_close, ...) expose their backing Series.
+            if (inner instanceof Series) return inner;
+            // The `na` helper (NAHelper) exposes a scalar NaN. Resolve it so that
+            // `nz(na)`, UDT field defaults like `float x = na`, and any other
+            // consumer that goes through Series.from() see a real NaN instead of
+            // the helper object itself.
+            if (inner === null || typeof inner !== 'object') return new Series([inner]);
+        }
         return new Series([source]); // Treat scalar as single-element array? Or handle differently?
         // Ideally, scalar should be treated as a series where get(0) returns the value, and get(>0) might be undefined or NaN?
         // But for now, let's wrap in array.

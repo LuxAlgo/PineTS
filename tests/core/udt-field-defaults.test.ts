@@ -29,6 +29,38 @@ plot(na(obj.output) ? 1 : 0, "output_is_na")
         expect(plots['output_is_na'].data[0].value).toBe(1);
     });
 
+    // ---- Explicit `= na` defaults ------------------------------------------
+    // `float x = na` used to store the runtime `na` helper object in the field
+    // instead of NaN. `na(obj.x)` masked it, but `nz(obj.x, v)` returned the
+    // helper untouched, and pushing it into a typed array then threw
+    // "An argument of 'literal object' type was used but a 'float' is expected".
+    it('explicit `= na` defaults resolve to a real na (NaN), not the na helper object', async () => {
+        const code = `
+//@version=6
+indicator("UDT na Defaults")
+
+type mytype
+    float x = na
+    int   i = na
+
+var mytype obj = mytype.new()
+var array<float> arr = array.new<float>()
+arr.unshift(nz(obj.x, 50))
+plot(arr.get(0), "nz_x")
+plot(na(obj.x) ? 1 : 0, "x_is_na")
+plot(nz(obj.i, 7), "nz_i")
+plot(obj.x + 1, "x_plus_1")
+`;
+        const { plots } = await pineTS.run(code);
+
+        // nz() must see the field as na and return the replacement.
+        expect(plots['nz_x'].data[0].value).toBe(50);
+        expect(plots['nz_i'].data[0].value).toBe(7);
+        expect(plots['x_is_na'].data[0].value).toBe(1);
+        // Arithmetic on the field must yield NaN, not "[object Object]1".
+        expect(plots['x_plus_1'].data[0].value).toBeNaN();
+    });
+
     it('series defaults are applied', async () => {
         const code = `
 //@version=5
