@@ -127,3 +127,99 @@ plot(dayofweek, "p")
         expect(v).toBeLessThanOrEqual(7);
     });
 });
+
+// Pine also allows a user-defined FUNCTION to share its name with a constant
+// namespace (`position(x) => close + x` is a valid, working script).
+// The codegen rename pass renamed the declaration to `position_$N` but left
+// the bare call site `position(14)` alone (it assumed a bare callee is always
+// the namespace), so the call resolved to the constants object →
+// `TypeError: position is not a function`. Separately, the parser's
+// `name → name_var` rewrite (a variable sharing a UDF's name) fired on the
+// namespace base of `position.top_right` → `ReferenceError: position_var`.
+describe('user-defined FUNCTION named after a constant namespace (valid Pine)', () => {
+    it('position(x) => ...: bare call resolves to the user function', async () => {
+        const { plots } = await newPineTS().run(`
+//@version=6
+indicator("udf position")
+position(x)=>close+x
+plot(position(14), "p")
+plot(close, "c")
+`);
+        expect(lastValue(plots, 'p')).toBeCloseTo(lastValue(plots, 'c') + 14, 8);
+    });
+
+    it('position(x) => ... coexists with position.top_right member access', async () => {
+        const { plots } = await newPineTS().run(`
+//@version=6
+indicator("udf position + namespace", overlay = true)
+position(x)=>close+x
+var table t = table.new(position.top_right, 1, 1)
+plot(position(2), "p")
+plot(close, "c")
+`);
+        expect(lastValue(plots, 'p')).toBeCloseTo(lastValue(plots, 'c') + 2, 8);
+    });
+
+    it('font(x) => ... coexists with font.family_monospace passed as an argument', async () => {
+        const { plots } = await newPineTS().run(`
+//@version=6
+indicator("udf font", overlay = true)
+font(x)=>x*2
+if barstate.islast
+    label.new(bar_index, close, "x", text_font_family = font.family_monospace)
+plot(font(21), "p")
+`);
+        expect(lastValue(plots, 'p')).toBe(42);
+    });
+
+    it('UDF call nested inside another expression and used as a named argument', async () => {
+        const { plots } = await newPineTS().run(`
+//@version=6
+indicator("udf nested")
+order(x)=>x+1
+plot(math.max(order(1), order(2)) + order(0), "p")
+`);
+        // max(2, 3) + 1
+        expect(lastValue(plots, 'p')).toBe(4);
+    });
+
+    it('UDF calling itself by name from inside another UDF', async () => {
+        const { plots } = await newPineTS().run(`
+//@version=6
+indicator("udf indirect")
+currency(x)=>x*10
+wrap(y)=>currency(y)+1
+plot(wrap(3), "p")
+`);
+        expect(lastValue(plots, 'p')).toBe(31);
+    });
+
+    it('a variable named after a namespace is still renamed without touching namespace calls', async () => {
+        // Guard: the callee-rename must only apply when the user declared a
+        // FUNCTION. Here `fill` is a user variable; the built-in `fill(...)`
+        // must still reach the namespace.
+        const { plots } = await newPineTS().run(`
+//@version=6
+indicator("var fill + builtin fill")
+fill = 3
+p1 = plot(close, "a")
+p2 = plot(close + fill, "b")
+fill(p1, p2, color.new(color.blue, 90))
+plot(fill, "p")
+`);
+        expect(lastValue(plots, 'p')).toBe(3);
+    });
+
+    // `scale` is not yet a collision name (see PR #305). This must keep working
+    // both before and after it becomes one.
+    it('scale(x) => ... works as a user function', async () => {
+        const { plots } = await newPineTS().run(`
+//@version=6
+indicator("udf scale")
+scale(x)=>close+x
+plot(scale(14), "p")
+plot(close, "c")
+`);
+        expect(lastValue(plots, 'p')).toBeCloseTo(lastValue(plots, 'c') + 14, 8);
+    });
+});
