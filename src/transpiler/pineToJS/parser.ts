@@ -36,6 +36,7 @@ import {
     SwitchCase,
     VariableDeclarationKind,
 } from './ast';
+import { NAMESPACE_COLLISION_NAMES } from '../settings';
 
 export class Parser {
     private tokens: Token[];
@@ -194,11 +195,13 @@ export class Parser {
         return token.value;
     }
 
+    // Newline and comment tokens carry no syntax of their own.
+    isLayoutToken() {
+        return this.match(TokenType.NEWLINE) || this.match(TokenType.COMMENT);
+    }
+
     skipNewlines(allowIndent = false) {
-        // while (this.match(TokenType.NEWLINE)) {
-        while (this.match(TokenType.NEWLINE) || this.match(TokenType.COMMENT)) {
-            this.advance();
-        }
+        while (this.isLayoutToken()) this.advance();
         if (allowIndent && this.match(TokenType.INDENT)) {
             this.advance();
         }
@@ -1207,7 +1210,7 @@ export class Parser {
         const consequent = this.parseBlock();
         let alternate = null;
 
-        // Skip newlines/comments between block end and potential 'else'
+        // An 'else' may follow the block after blank or comment-only lines.
         this.skipNewlines();
 
         if (this.match(TokenType.KEYWORD, 'else')) {
@@ -1746,7 +1749,12 @@ export class Parser {
             if (
                 this.functionNames.has(name) &&
                 this.peek().type !== TokenType.LPAREN &&
-                !this.isCurrentFunctionParam(name)
+                !this.isCurrentFunctionParam(name) &&
+                // `position.top_right` after a user function `position(x) => ...`
+                // is the constants namespace, not a variable sharing the
+                // function's name — leave the base identifier untouched so the
+                // codegen collision pass can treat it as a namespace access.
+                !(this.peek().type === TokenType.DOT && NAMESPACE_COLLISION_NAMES.has(name))
             ) {
                 name = name + '_var';
             }

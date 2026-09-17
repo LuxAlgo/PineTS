@@ -162,6 +162,8 @@ export const NAMESPACE_COLLISION_NAMES = new Set([
     'dayofweek',
     'adjustment',
     'barmerge',
+    'scale',
+    'settlement_as_close',
 ]);
 
 // JavaScript reserved keywords that ARE valid Pine identifiers but invalid as
@@ -293,12 +295,16 @@ export const CONTEXT_PINE_VARS = [
     'extend',
     'position',
 
+    // Price scale constants (indicator(scale = scale.right))
+    'scale',
+
     // Merge constants (request.security)
     'barmerge',
 
     // Adjustment constants
     'adjustment',
     'backadjustment',
+    'settlement_as_close',
 
     // Financial data constants
     'earnings',
