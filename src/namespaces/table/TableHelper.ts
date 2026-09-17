@@ -17,7 +17,7 @@ const TABLE_NEW_PARAMS = [
 //prettier-ignore
 const TABLE_CELL_PARAMS = [
     'column', 'row', 'text', 'width', 'height', 'text_color', 'text_halign',
-    'text_valign', 'text_size', 'bgcolor', 'tooltip', 'text_font_family',
+    'text_valign', 'text_size', 'bgcolor', 'tooltip', 'text_font_family', 'text_formatting',
 ];
 const TABLE_RANGE_PARAMS = ['start_column', 'start_row', 'end_column', 'end_row'];
 
@@ -169,6 +169,7 @@ export class TableHelper {
         let bgcolor: any = '';
         let tooltip: any = '';
         let text_font_family: any = 'default';
+        let text_formatting: any = 'none';
 
         // Detect trailing options object from transpiler's named-args pattern
         // e.g. table.cell(t1, 0, 0, {text: "X", text_color: "#fff", ...})
@@ -193,6 +194,7 @@ export class TableHelper {
             bgcolor = posArgs[10] ?? opts.bgcolor ?? bgcolor;
             tooltip = posArgs[11] ?? opts.tooltip ?? tooltip;
             text_font_family = posArgs[12] ?? opts.text_font_family ?? text_font_family;
+            text_formatting = posArgs[13] ?? opts.text_formatting ?? text_formatting;
         } else {
             table_id = args[0];
             column = args[1] ?? 0;
@@ -207,6 +209,7 @@ export class TableHelper {
             bgcolor = args[10] ?? bgcolor;
             tooltip = args[11] ?? tooltip;
             text_font_family = args[12] ?? text_font_family;
+            text_formatting = args[13] ?? text_formatting;
         }
 
         const tbl = this._resolve(table_id) as TableObject;
@@ -226,6 +229,7 @@ export class TableHelper {
             bgcolor: this._resolve(bgcolor) || '',
             tooltip: this._resolveText(this._resolve(tooltip)),
             text_font_family: this._resolve(text_font_family) || 'default',
+            text_formatting: this._resolve(text_formatting) || 'none',
         });
     }
 
@@ -382,6 +386,11 @@ export class TableHelper {
     @silentInSecondary
     cell_set_text_font_family(table_id: any, column: any, row: any, text_font_family: any): void {
         this._setCellProp(table_id, column, row, 'text_font_family', text_font_family);
+    }
+
+    @silentInSecondary
+    cell_set_text_formatting(table_id: any, column: any, row: any, text_formatting: any): void {
+        this._setCellProp(table_id, column, row, 'text_formatting', text_formatting);
     }
 
     // ── Table setter methods ───────────────────────────────────
