@@ -666,7 +666,10 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
             const tempVarRef = createScopedVariableReference(tempVarName, scopeManager);
             const arrayIndex = decl.init.property.value;
 
-            // Create $.get(tempVar, 0)[index]
+            // Create $.get(tempVar, 0)?.[index]
+            // Optional chaining keeps an unmatched switch arm (whose value is
+            // `na`, not an array) from crashing on the element read: the
+            // element resolves to undefined instead.
             const getCall = ASTFactory.createGetCall(tempVarRef, 0);
             const arrayAccess = {
                 type: 'MemberExpression',
@@ -676,6 +679,7 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                     value: arrayIndex,
                 },
                 computed: true,
+                optional: true,
             };
 
             // Wrap in $.init(targetVar, $.get(tempVar, 0)[index])

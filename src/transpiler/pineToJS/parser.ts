@@ -1033,6 +1033,14 @@ export class Parser {
         const last = statements[statements.length - 1];
         if (last.type === 'ExpressionStatement') {
             statements[statements.length - 1] = new ReturnStatement(last.expression);
+        } else if (last.type === 'VariableDeclaration' && last.declarations && last.declarations.length > 0) {
+            // A trailing declaration (`var fibs = array.from(...)`) is the
+            // function's return value on the platform: keep the declaration so
+            // the variable still registers, then return its current value.
+            const declarator = last.declarations[last.declarations.length - 1];
+            if (declarator.id && declarator.id.type === 'Identifier' && declarator.id.name) {
+                statements.push(new ReturnStatement(new Identifier(declarator.id.name)));
+            }
         } else if (last.type === 'IfStatement') {
             this._addImplicitReturnToIf(last);
         }

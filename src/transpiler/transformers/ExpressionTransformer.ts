@@ -715,6 +715,19 @@ function transformOperand(node: any, scopeManager: ScopeManager, namespace: stri
                 }
             }
 
+            // Computed access on a USER variable (`h[2]`): this is a history
+            // read of the stored series, so lower it to `$.get(obj, offset)`.
+            // Leaving the raw bracket (`$$.let.fn1_h[2]`) indexes the Series
+            // wrapper object itself and yields `undefined` at runtime
+            // (`undefined.get(...)` → TypeError).
+            if (node.computed && node.object.type === 'Identifier' && !isNamespacePropAccess) {
+                const [scopedName] = scopeManager.getVariable(node.object.name);
+                const isUserVariable = scopedName !== node.object.name;
+                if (isUserVariable && !scopeManager.isLoopVariable(node.object.name)) {
+                    return ASTFactory.createGetCall(transformedObject, node.property);
+                }
+            }
+
             // Don't add [0] if this is already an array access
             return {
                 type: 'MemberExpression',
@@ -1407,6 +1420,14 @@ function resolveCalleeObject(node: any, parentNode: any, scopeManager: ScopeMana
         transformIdentifier(node, scopeManager);
     } else if (node.type === 'MemberExpression') {
         resolveCalleeObject(node.object, node, scopeManager);
+        if (node.computed) {
+            // History read on a receiver chain (`(arr[2]).get(i)`): lower it to
+            // `$.get(arr, 2)` so the stored series is read. Leaving the raw
+            // bracket indexes the Series wrapper object itself → undefined at
+            // runtime (`undefined.get(...)` → TypeError).
+            const getCall = ASTFactory.createGetCall(node.object, node.property);
+            Object.assign(node, getCall);
+        }
     } else if (node.type === 'CallExpression') {
         if (node.callee && node.callee.type === 'MemberExpression') {
             resolveCalleeObject(node.callee.object, node.callee, scopeManager);

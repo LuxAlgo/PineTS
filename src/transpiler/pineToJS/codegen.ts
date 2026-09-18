@@ -1973,6 +1973,14 @@ export class CodeGenerator {
         this.write(this.indentStr.repeat(this.indent));
         this.write('}\n'); // end switch
 
+        // No matching case falls through → the switch value is `na`, not
+        // undefined (Pine semantics). Without this the IIFE returns undefined
+        // and a tuple destructure (`[a, b] = switch ...`) crashes on `[0]`.
+        if (!node.cases.some((c: any) => !c.test)) {
+            this.write(this.indentStr.repeat(this.indent));
+            this.write('return na;\n');
+        }
+
         this.indent--;
         this.write(this.indentStr.repeat(this.indent));
         this.write('})()');
@@ -2045,6 +2053,12 @@ export class CodeGenerator {
             if (i >= node.cases.length - 1) {
                 this.write('\n');
             }
+        }
+
+        // Same no-match fallback as generateSwitchExpression: value is `na`.
+        if (!node.cases.some((c: any) => !c.test)) {
+            this.write(this.indentStr.repeat(this.indent));
+            this.write('return na;\n');
         }
 
         this.indent--;
