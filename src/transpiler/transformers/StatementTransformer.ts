@@ -5,6 +5,7 @@ import * as walk from 'acorn-walk';
 import ScopeManager from '../analysis/ScopeManager';
 import { ASTFactory, CONTEXT_NAME } from '../utils/ASTFactory';
 import { NAMESPACES_LIKE, FACTORY_METHODS } from '../settings';
+import { findInputCallInExpression, memberExpressionPath } from '../utils/inputExpression';
 import {
     transformIdentifier,
     transformCallExpression,
@@ -68,6 +69,18 @@ export function createLoopGuardNodes(guardName: string): { counterDecl: any; gua
 }
 
 export function transformAssignmentExpression(node: any, scopeManager: ScopeManager): void {
+    // Tag `cfg.show := input.*(…)` so the input call gets the `{ __varId }`
+    // sentinel — the runtime override key matching scanInputs' meta varId for
+    // the member path (e.g. `htf1.settings.show`). Must read the ORIGINAL LHS
+    // path before it's rewritten to `$.get(..., 0).show` below.
+    if (node.left && node.right) {
+        const memberLhsPath = memberExpressionPath(node.left);
+        if (memberLhsPath !== undefined) {
+            const inputCall = findInputCallInExpression(node.right);
+            if (inputCall) inputCall._varId = memberLhsPath;
+        }
+    }
+
     let targetVarRef = null;
     // Transform assignment expressions to use the context object
     if (node.left.type === 'Identifier') {
@@ -258,12 +271,13 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
         // inject it as a `{ __varId }` sentinel on the input call. This is the
         // runtime handle that lets `.input[varId]` overrides target a specific
         // input even when titles are empty or duplicated.
-        if (decl.init?.type === 'CallExpression' && decl.id?.type === 'Identifier') {
-            const c = decl.init.callee;
-            const isInputCall =
-                (c?.type === 'MemberExpression' && c.object?.type === 'Identifier' && c.object.name === 'input') ||
-                (c?.type === 'Identifier' && c.name === 'input');
-            if (isInputCall) decl.init._varId = decl.id.name;
+        //
+        // The init may be the input call itself OR a pure expression tree
+        // wrapping one (`width = input.int(1) * 2`); findInputCallInExpression
+        // handles both — scanningInputs' meta varId covers the same shapes.
+        if (decl.init && decl.id?.type === 'Identifier') {
+            const inputCall = findInputCallInExpression(decl.init);
+            if (inputCall) inputCall._varId = decl.id.name;
         }
 
         // Rewrite NAMESPACES_LIKE entries (na, time, etc.) to .__value in variable initializers

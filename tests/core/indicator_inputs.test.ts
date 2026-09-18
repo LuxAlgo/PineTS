@@ -222,6 +222,91 @@ plot(close)`);
     });
 });
 
+describe('Settings-object (member-assignment) inputs', () => {
+    const ind = (code: string) => new Indicator(code);
+
+    it('scans `s.show := input.bool(...)` under the dotted member path as varId', () => {
+        const metas = ind(`//@version=6
+indicator("T")
+type S
+    bool show
+    int  n
+var S s = S.new()
+s.show := input.bool(true,   "Show", inline = "grp", group = "Main")
+s.n    := input.int(7, "N", inline = "grp", group = "Main")
+plot(close)`).getInputsMeta();
+        expect(metas).toHaveLength(2);
+        expect(metas[0]).toMatchObject({ varId: 's.show', type: 'bool', title: 'Show', defval: true, inline: 'grp', group: 'Main' });
+        expect(metas[1]).toMatchObject({ varId: 's.n', type: 'int', title: 'N', defval: 7, inline: 'grp' });
+    });
+
+    it('harvests an input nested in an expression on a member path', () => {
+        const metas = ind(`//@version=6
+indicator("T")
+type S
+    int w
+var S s = S.new()
+s.w := input.int(1, "Width") * 2
+plot(close)`).getInputsMeta();
+        expect(metas).toHaveLength(1);
+        expect(metas[0]).toMatchObject({ varId: 's.w', type: 'int', title: 'Width', defval: 1 });
+    });
+
+    it('harvests a plain-variable init wrapped in an expression', () => {
+        const metas = ind(`//@version=6
+indicator("T")
+width = input.int(1, "W", inline = "x") * 2
+plot(close)`).getInputsMeta();
+        expect(metas).toHaveLength(1);
+        expect(metas[0]).toMatchObject({ varId: 'width', type: 'int', title: 'W', defval: 1, inline: 'x' });
+    });
+
+    it('overrides a member-path input by its dotted varId', () => {
+        const i = ind(`//@version=6
+indicator("T")
+type S
+    bool show
+    int  n
+var S s = S.new()
+s.show := input.bool(true, "Show")
+s.n    := input.int(7, "N")
+plot(close)`);
+        i.input['s.show'] = false;
+        i.input['s.n'] = 21;
+        const rt = i.getRuntimeInputs();
+        expect(rt['s.show']).toBe(false);
+        expect(rt['s.n']).toBe(21);
+    });
+
+    it('resolves a member-path override at runtime (sentinel matches scanner varId)', async () => {
+        const code = `//@version=6
+indicator("T")
+type S
+    bool show
+    int  n
+var S s = S.new()
+s.show := input.bool(true,  "Show")
+s.n    := input.int(7, "N")
+v = s.show ? s.n : 0
+plot(v, "v")`;
+
+        const def = new Indicator(code);
+        const defaultCtx = await new PineTS(Provider.Mock, 'BTCUSDC', '1h').run(def);
+        expect(defaultCtx.plots['v'].data[0].value).toBe(7);
+
+        const off = new Indicator(code);
+        off.input['s.show'] = false;
+        const offCtx = await new PineTS(Provider.Mock, 'BTCUSDC', '1h').run(off);
+        expect(offCtx.plots['v'].data[0].value).toBe(0);
+
+        const n = new Indicator(code);
+        n.input['s.show'] = true;
+        n.input['s.n'] = 21;
+        const nCtx = await new PineTS(Provider.Mock, 'BTCUSDC', '1h').run(n);
+        expect(nCtx.plots['v'].data[0].value).toBe(21);
+    });
+});
+
 import { normalizeColorToRgbaHex } from '../../src/namespaces/color/PineColor';
 
 describe('Color input defval normalization (getInputsMeta)', () => {
