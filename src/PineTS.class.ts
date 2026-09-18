@@ -1190,9 +1190,8 @@ export class PineTS {
                 if (adverseFirst) processMarginCall(context, 'extreme');
                 processExitOrders(context, 'intrabar');
                 if (!adverseFirst) processMarginCall(context, 'extreme');
-                // Latch max_drawdown / max_runup ONCE at the end of the bar so
-                // trades closed mid-bar by TP / SL contribute their realized
-                // P&L (not phantom intra-bar excursions against the raw H/L).
+                // Record the remaining price path for positions still open.
+                // Closed positions were recorded up to their exit fill.
                 finalizeStrategyBar(context);
             }
 
