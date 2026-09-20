@@ -4,6 +4,7 @@ import { Series } from '../Series';
 import { parseArgsForPineParams } from './utils';
 import { parseSessionSpec, isInSessionSpec } from './sessionSpec';
 import { PineRuntimeError } from '../errors/PineRuntimeError';
+import { timezoneOffsetMs } from './tzOffset';
 
 // ── Timeframe alignment utilities ───────────────────────────────────
 
@@ -128,36 +129,20 @@ export function getDatePartsInTimezone(timestamp: number, timezone: string): Dat
         };
     }
 
-    // IANA timezone name — use Intl.DateTimeFormat
+    // IANA timezone name — resolve the offset (cached per UTC day; see
+    // tzOffset.ts) and read the parts arithmetically. This is the same
+    // shape as the fixed-offset branch above, and ~32x cheaper than a
+    // per-call Intl.formatToParts — these run ONCE PER BAR.
     try {
-        const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: timezone,
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: 'numeric',
-            second: 'numeric',
-            weekday: 'short',
-            hour12: false,
-        });
-        const parts = formatter.formatToParts(new Date(timestamp));
-        const get = (type: string) => parseInt(parts.find((p) => p.type === type)?.value || '0', 10);
-
-        let hour = get('hour');
-        if (hour === 24) hour = 0;
-
-        const weekdayStr = parts.find((p) => p.type === 'weekday')?.value || 'Sun';
-        const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-
+        const d = new Date(timestamp + timezoneOffsetMs(timezone, timestamp));
         return {
-            year: get('year'),
-            month: get('month'),
-            day: get('day'),
-            hour,
-            minute: get('minute'),
-            second: get('second'),
-            dayOfWeek: dayMap[weekdayStr] ?? 0,
+            year: d.getUTCFullYear(),
+            month: d.getUTCMonth() + 1,
+            day: d.getUTCDate(),
+            hour: d.getUTCHours(),
+            minute: d.getUTCMinutes(),
+            second: d.getUTCSeconds(),
+            dayOfWeek: d.getUTCDay(),
         };
     } catch {
         // Fallback to UTC on error

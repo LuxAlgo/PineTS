@@ -5,6 +5,7 @@ import { PineTypeObject } from './PineTypeObject';
 import { parseArgsForPineParams } from './utils';
 import type { IndicatorOptions, PlotCharOptions } from '../types/PineTypes';
 import { silentInSecondary } from './silentInSecondary';
+import { timezoneOffsetMs } from './tzOffset';
 
 //prettier-ignore
 const TIMESTAMP_SIGNATURES = [
@@ -421,37 +422,17 @@ export class Core {
      * Uses Intl.DateTimeFormat to determine the timezone offset.
      */
     private _timestampFromIANA(timezone: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
-        // Build a rough UTC estimate, then use Intl to find the actual offset
+        // Build a rough UTC estimate, then shift it by the zone's offset at
+        // that instant. Single-pass by design (matching the pre-cache
+        // behaviour): a wall-clock time inside a DST gap or fold is
+        // genuinely ambiguous, and Pine resolves it this way.
         const utcEstimate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
         if (year >= 0 && year < 100) utcEstimate.setUTCFullYear(year);
 
-        // Format the estimate in the target timezone to extract its parts
-        const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: timezone,
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: 'numeric',
-            second: 'numeric',
-            hour12: false,
-        });
-
-        const parts = formatter.formatToParts(utcEstimate);
-        const get = (type: string) => parseInt(parts.find((p) => p.type === type)?.value || '0', 10);
-
-        const tzYear = get('year');
-        const tzMonth = get('month');
-        const tzDay = get('day');
-        let tzHour = get('hour');
-        if (tzHour === 24) tzHour = 0; // Intl may return 24 for midnight
-        const tzMinute = get('minute');
-        const tzSecond = get('second');
-
-        // Offset = what Intl says the time is minus what UTC says
-        const tzDate = new Date(Date.UTC(tzYear, tzMonth - 1, tzDay, tzHour, tzMinute, tzSecond));
-        if (tzYear >= 0 && tzYear < 100) tzDate.setUTCFullYear(tzYear);
-        const offsetMs = tzDate.getTime() - utcEstimate.getTime();
+        // Offset resolution is cached per UTC day — the per-call
+        // Intl.formatToParts it replaces was 26% of a profiled 10k-bar
+        // execute. See tzOffset.ts for why the cache stays exact.
+        const offsetMs = timezoneOffsetMs(timezone, utcEstimate.getTime());
 
         // The user's components are local to the timezone, so subtract the offset
         return utcEstimate.getTime() - offsetMs;
