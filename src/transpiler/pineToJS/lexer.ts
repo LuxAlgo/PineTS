@@ -7,6 +7,9 @@
 import { TokenType, Keywords, MultiCharOperators, Token } from './tokens';
 
 export class Lexer {
+    // TradingView counts a tab as four columns when measuring indentation.
+    static readonly TAB_WIDTH = 4;
+
     private source: string;
     private pos: number;
     private line: number;
@@ -17,6 +20,9 @@ export class Lexer {
     private parenDepth: number;
     private bracketDepth: number;
     private braceDepth: number;
+    // Set when the line being lexed was joined onto the previous one; attached
+    // to the next token emitted (see joinWithPreviousLine).
+    private pendingWrap: { width: number; fromLine: number | null; column: number } | null = null;
     constructor(source: string) {
         this.source = source;
         this.pos = 0;
@@ -130,93 +136,127 @@ export class Lexer {
         this.column = 1;
     }
 
-    // Handle indentation at start of line
+    /**
+     * Handle indentation at start of line.
+     *
+     * TradingView measures a line's indentation in columns, a tab counting as
+     * four (verified: `  \t` and `\t  ` both behave as six columns, not as a
+     * tab stop). What the width means:
+     *
+     *   - A multiple of four is a block level. One level deeper than the
+     *     enclosing block opens a local block; the same level is a sibling
+     *     statement; shallower closes blocks. Jumping more than one level
+     *     deeper is a compile error on TradingView ("Mismatched input ...
+     *     expecting 'end of line without line continuation'").
+     *   - Anything else is LINE WRAPPING: the line continues the previous
+     *     logical line, whatever it starts with (`- r2`, `.size()`, `2`,
+     *     `? a`). Whether the joined line parses is then the parser's call —
+     *     `if x` + `  y := 1` is rejected by TradingView as a syntax error,
+     *     not as an indentation error.
+     *
+     * Wrapped lines are joined here by dropping the NEWLINE (and trailing
+     * comment) tokens that separated them from the previous line, so the
+     * parser only ever sees NEWLINE between real statements and never has to
+     * guess whether a leading `-` is a binary continuation or a new unary
+     * statement (TradingView: new statement).
+     */
     handleIndentation() {
-        let indent = 0;
-        let spaceCount = 0;
-        const startPos = this.pos;
+        let width = 0;
 
-        // Count spaces (4 spaces = 1 indent level, 1 tab = 1 indent level)
         while (this.pos < this.source.length) {
             const ch = this.peek();
             if (ch === ' ') {
-                spaceCount++;
+                width += 1;
                 this.advance();
             } else if (ch === '\t') {
-                indent++;
+                width += Lexer.TAB_WIDTH;
                 this.advance();
             } else {
                 break;
             }
         }
 
-        // Check if this is a blank line (only whitespace followed by newline or EOF)
-        // If so, skip indentation processing and keep position at whitespace
+        // Blank line: no block structure. The whitespace was consumed; the
+        // newline is handled by the main loop.
         if (this.peek() === '\n' || this.peek() === '\r' || this.peek() === '\0') {
-            // Don't process indentation for blank lines
-            // The whitespace will be skipped in the main loop
             return;
         }
 
-        // A comment-only line carries no block structure. TradingView
-        // ignores it for indentation entirely, and a commented-out
-        // statement left a column or two off the block it sits in is
-        // ordinary in real scripts. Without this guard such a line
-        // DEDENTs out of the surrounding block, and the next real
-        // statement - back at the block's own indent - re-INDENTs where
-        // the parser expects a statement ("Unexpected token INDENT"), or
-        // silently closes the block early when the indent happens to
-        // match an enclosing level. Treat it like a blank line: no
-        // INDENT, no DEDENT, no misaligned-dedent error.
+        // A comment-only line carries no block structure either. TradingView
+        // ignores it for indentation entirely, and a commented-out statement
+        // left a column or two off the block it sits in is ordinary in real
+        // scripts. Treat it like a blank line: no INDENT, no DEDENT, no
+        // misaligned-dedent error.
         if (this.peek() === '/' && this.peek(1) === '/') {
             return;
         }
 
-        // Convert spaces to indent levels (4 spaces = 1 level)
-        indent += Math.floor(spaceCount / 4);
-
-        // Pine allows binary-operator (and comma / ternary `:` / logical
-        // and|or) line continuation. The continuation line is typically
-        // visually aligned past the operand of the previous line, which
-        // looks like a deeper indent — but it must NOT push a new block
-        // onto the indent stack. Without this guard, the lexer emits an
-        // INDENT for the continuation line and a matching DEDENT when
-        // the next real statement returns to the original block indent;
-        // the block parser sees that DEDENT and prematurely closes the
-        // surrounding function/if/for body, dropping subsequent
-        // statements (which then reference now-out-of-scope parameters).
-        if (this.isContinuationFromPrevToken()) {
+        // Line wrapping: indentation that is not a multiple of four continues
+        // the previous line. Also accepted (leniently — TradingView rejects
+        // this one) is a continuation onto a multiple-of-four column when the
+        // previous line cannot be complete because it ends in a binary /
+        // assignment / ternary operator, a comma, or `and` / `or`: the intent
+        // is unambiguous and real scripts do it.
+        if (width % Lexer.TAB_WIDTH !== 0 || this.isContinuationFromPrevToken()) {
+            this.joinWithPreviousLine(width);
             return;
         }
 
-        const currentIndent = this.indentStack[this.indentStack.length - 1];
+        const level = width / Lexer.TAB_WIDTH;
+        const currentLevel = this.indentStack[this.indentStack.length - 1];
 
-        // Increased indentation - emit INDENT
-        if (indent > currentIndent) {
-            this.indentStack.push(indent);
-            this.addToken(TokenType.INDENT, '', indent);
-        }
-        // Decreased indentation - emit DEDENT(s)
-        else if (indent < currentIndent) {
-            while (this.indentStack.length > 1 && this.indentStack[this.indentStack.length - 1] > indent) {
+        if (level > currentLevel) {
+            if (level > currentLevel + 1) {
+                const expected = (currentLevel + 1) * Lexer.TAB_WIDTH;
+                throw new Error(
+                    `Indentation error at ${this.line}:${this.column} - line is indented by ${width} columns, ` +
+                        `but a local block must be indented by exactly one level (${expected} columns: four spaces or one tab) ` +
+                        `deeper than the enclosing block`
+                );
+            }
+            this.indentStack.push(level);
+            this.addToken(TokenType.INDENT, '', level);
+        } else if (level < currentLevel) {
+            while (this.indentStack.length > 1 && this.indentStack[this.indentStack.length - 1] > level) {
                 this.indentStack.pop();
                 this.addToken(TokenType.DEDENT, '', this.indentStack[this.indentStack.length - 1]);
             }
-
-            // Check for misaligned dedent
-            if (this.indentStack[this.indentStack.length - 1] !== indent) {
+            if (this.indentStack[this.indentStack.length - 1] !== level) {
                 throw new Error(`Indentation error at ${this.line}:${this.column} - misaligned dedent`);
             }
         }
-        // Same indentation - no INDENT/DEDENT
+        // Same level: sibling statement, nothing to emit.
+    }
+
+    /**
+     * Splice the line about to be lexed onto the previous logical line by
+     * removing the NEWLINE / COMMENT tokens that separate them. Blank and
+     * comment-only lines in between are layout and go too. INDENT / DEDENT
+     * tokens are never removed: they belong to the previous real statement.
+     *
+     * The first token of the wrapped line is tagged with `wrapped` so the
+     * parser can explain a syntax error caused by the join (TradingView says
+     * "Syntax error at input 'v'" for `    v := 1` + `      v := 2`, which is
+     * baffling without knowing the second line was treated as wrapping).
+     */
+    private joinWithPreviousLine(width: number) {
+        let fromLine: number | null = null;
+        while (this.tokens.length > 0) {
+            const last = this.tokens[this.tokens.length - 1];
+            if (last.type !== TokenType.NEWLINE && last.type !== TokenType.COMMENT) break;
+            this.tokens.pop();
+        }
+        if (this.tokens.length === 0) return; // first line of the file: nothing to join to
+        fromLine = this.tokens[this.tokens.length - 1].line;
+        // this.column is the column of the first non-blank character.
+        this.pendingWrap = { width, fromLine, column: this.column };
     }
 
     /**
      * True when the most recently emitted token (skipping NEWLINE / COMMENT
      * — those are layout, not content) is a token that requires a right-
      * hand-side and therefore implies the next non-blank line is a
-     * continuation, not a new block. Mirrors the set the parser's
-     * `peekOperatorEx` already crosses NEWLINE for.
+     * continuation, not a new block.
      */
     private isContinuationFromPrevToken(): boolean {
         for (let i = this.tokens.length - 1; i >= 0; i--) {
@@ -255,34 +295,18 @@ export class Lexer {
 
     // Read string literal
     readString() {
+        if (this.peek(1) === this.peek() && this.peek(2) === this.peek()) {
+            this.readMultilineString();
+            return;
+        }
+
         const quote = this.advance();
         const startCol = this.column - 1;
         let value = '';
 
         while (this.pos < this.source.length && this.peek() !== quote) {
             if (this.peek() === '\\') {
-                this.advance(); // skip backslash
-                const escaped = this.advance();
-                // Handle escape sequences
-                switch (escaped) {
-                    case 'n':
-                        value += '\n';
-                        break;
-                    case 't':
-                        value += '\t';
-                        break;
-                    case 'r':
-                        value += '\r';
-                        break;
-                    case '\\':
-                        value += '\\';
-                        break;
-                    case quote:
-                        value += quote;
-                        break;
-                    default:
-                        value += escaped;
-                }
+                value += this.readEscape(quote);
             } else {
                 value += this.advance();
             }
@@ -294,6 +318,73 @@ export class Lexer {
 
         this.advance(); // closing quote
         this.addToken(TokenType.STRING, value);
+    }
+
+    // Consume a backslash escape sequence and return the character it denotes.
+    private readEscape(quote: string): string {
+        this.advance(); // backslash
+        const escaped = this.advance();
+        switch (escaped) {
+            case 'n':
+                return '\n';
+            case 't':
+                return '\t';
+            case 'r':
+                return '\r';
+            case '\\':
+                return '\\';
+            case quote:
+                return quote;
+            default:
+                return escaped;
+        }
+    }
+
+    /**
+     * Triple-quoted multiline string (`"""..."""` or `'''...'''`). The text
+     * keeps its layout — newlines and the leading spaces of each line are part
+     * of the value — while backslash escapes are processed as in a normal
+     * string (verified against TradingView with str.length: `"""a\nb"""` is 3
+     * characters). The lines inside the string never reach handleIndentation,
+     * so their indentation carries no block structure.
+     */
+    private readMultilineString() {
+        const quote = this.peek();
+        const startLine = this.line;
+        const startCol = this.column;
+        this.advance();
+        this.advance();
+        this.advance();
+
+        let value = '';
+        while (this.pos < this.source.length) {
+            const ch = this.peek();
+            if (ch === quote && this.peek(1) === quote && this.peek(2) === quote) {
+                this.advance();
+                this.advance();
+                this.advance();
+                this.addToken(TokenType.STRING, value);
+                return;
+            }
+            if (ch === '\r') {
+                this.advance();
+                continue;
+            }
+            if (ch === '\n') {
+                this.advance();
+                this.line++;
+                this.column = 1;
+                value += '\n';
+                continue;
+            }
+            if (ch === '\\') {
+                value += this.readEscape(quote);
+                continue;
+            }
+            value += this.advance();
+        }
+
+        throw new Error(`Unterminated multiline string at ${startLine}:${startCol}`);
     }
 
     // Read color literal (#RRGGBB or #RRGGBBAA)
@@ -526,6 +617,10 @@ export class Lexer {
 
     addToken(type, value, indent = null, raw = null) {
         const token = new Token(type, value, this.line, this.column, indent !== null ? indent : this.getCurrentIndent(), raw);
+        if (this.pendingWrap) {
+            token.wrapped = this.pendingWrap;
+            this.pendingWrap = null;
+        }
         this.tokens.push(token);
     }
 }
