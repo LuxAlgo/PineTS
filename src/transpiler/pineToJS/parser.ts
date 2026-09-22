@@ -129,10 +129,14 @@ export class Parser {
      * this one (indentation not a multiple of four) and the statement did not
      * absorb it: `    v := 1` followed by `      v := 2`. TradingView rejects
      * that ("Syntax error at input 'v'"); so do we, with the reason.
+     *
+     * A wrapped COMMA is left alone: `a = 0, b = 1` ⏎ ` , c = 2` continues the
+     * statement sequence, which the caller consumes. Where a comma is not
+     * valid it fails on its own, with the same layout hint.
      */
     private rejectDanglingWrappedLine() {
         const token = this.peek();
-        if (token.wrapped) throw this.unexpected(token);
+        if (token.wrapped && token.type !== TokenType.COMMA) throw this.unexpected(token);
     }
 
     /**

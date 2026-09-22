@@ -290,6 +290,13 @@ export class Lexer {
             comment += this.advance();
         }
 
+        // Inside ( ) / [ ] / { } newlines are already suppressed, so a comment
+        // there is pure layout: `f(a, 8 // note` ⏎ `  , b)` must read as
+        // `f(a, 8, b)`. Emitting a token would put COMMENT between `8` and `,`.
+        if (this.parenDepth > 0 || this.bracketDepth > 0 || this.braceDepth > 0) {
+            return;
+        }
+
         this.addToken(TokenType.COMMENT, comment.trim());
     }
 
