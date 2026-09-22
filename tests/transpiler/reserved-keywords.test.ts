@@ -101,9 +101,9 @@ describe('Reserved words are rejected as names (TradingView parity)', () => {
     });
 
     for (const word of SYNTAX_KEYWORDS) {
-        it(`rejects the keyword "${word}" as a variable, function, parameter, field and type name`, () => {
-            for (const position of ['variable', 'function name', 'parameter', 'UDT field', 'method name', 'type name']) {
-                expect(() => transpile(script(DECLARATION_POSITIONS[position](word))), `${word} as ${position}`).toThrow();
+        it(`rejects the keyword "${word}" in every declaration position`, () => {
+            for (const [position, build] of Object.entries(DECLARATION_POSITIONS)) {
+                expect(() => transpile(script(build(word))), `${word} as ${position}`).toThrow();
             }
         });
     }
@@ -148,6 +148,20 @@ f() => [close * 3, open]
 [catch, b] = f()
 plot(catch, "T")`);
         expectSeriesClose(values(plots, 'T'), values(plots, 'C').map((c) => c * 3));
+    });
+
+    const tuple = (w: string) => `f() => [close, open]\n[${w}, b] = f()\nplot(${w} + b)`;
+
+    it('every reserved word, contextual keyword and JS-only word is accepted as a tuple target', () => {
+        for (const word of [...RESERVED.filter((w) => w !== 'in'), ...CONTEXTUAL, ...JS_ONLY]) {
+            expect(() => transpile(script(tuple(word))), `[${word}, b] = f()`).not.toThrow();
+        }
+    });
+
+    it('syntax keywords are still rejected as tuple targets', () => {
+        for (const word of ['in', ...SYNTAX_KEYWORDS, ...RESERVED_KEYWORDS]) {
+            expect(() => transpile(script(tuple(word))), `[${word}, b] = f()`).toThrow();
+        }
     });
 });
 
