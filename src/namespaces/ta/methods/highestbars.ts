@@ -26,7 +26,10 @@ export function highestbars(context: any) {
         for (let i = 0; i < length; i++) {
             const val = series.get(i);
 
-            if (isNaN(val)) continue;
+            // TradingView resets the window at na: only the bars since the most recent
+            // na take part, and an na on the current bar yields offset 0
+            // (tests/namespaces/ta/na-window-semantics.test.ts).
+            if (val === undefined || isNaN(val)) break;
 
             if (isNaN(maxOffset) || val > maxVal) {
                 maxVal = val;
@@ -34,6 +37,6 @@ export function highestbars(context: any) {
             }
         }
 
-        return maxOffset;
+        return isNaN(maxOffset) ? 0 : maxOffset;
     };
 }
