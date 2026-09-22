@@ -10,9 +10,9 @@ import { silentInSecondary } from '../silentInSecondary';
 //prettier-ignore
 const LABEL_NEW_SIGNATURES = [
     ['x', 'y', 'text', 'xloc', 'yloc', 'color', 'style', 'textcolor',
-     'size', 'textalign', 'tooltip', 'text_font_family', 'force_overlay'],
+     'size', 'textalign', 'tooltip', 'text_font_family', 'force_overlay', 'text_formatting'],
     ['point', 'text', 'xloc', 'yloc', 'color', 'style', 'textcolor',
-     'size', 'textalign', 'tooltip', 'text_font_family', 'force_overlay'],
+     'size', 'textalign', 'tooltip', 'text_font_family', 'force_overlay', 'text_formatting'],
 ];
 
 //prettier-ignore
@@ -20,7 +20,7 @@ const LABEL_NEW_ARGS_TYPES = {
     x: 'number', y: 'number', text: 'string', xloc: 'string', yloc: 'string',
     color: 'color', style: 'string', textcolor: 'color', size: 'string',
     textalign: 'string', tooltip: 'string', text_font_family: 'string',
-    force_overlay: 'boolean', point: 'point',
+    force_overlay: 'boolean', point: 'point', text_formatting: 'string',
 };
 
 export class LabelHelper {
@@ -112,6 +112,7 @@ export class LabelHelper {
         tooltip: string = '',
         text_font_family: string = 'default',
         force_overlay: boolean = false,
+        text_formatting: string = 'none',
     ): LabelObject {
         // Resolve any Series/function values to scalars for label properties
         const lbl = new LabelObject(
@@ -127,6 +128,7 @@ export class LabelHelper {
             this._resolve(tooltip),
             this._resolve(text_font_family),
             force_overlay,
+            this._resolve(text_formatting) || 'none',
         );
         lbl._helper = this;
         lbl._createdAtBar = this.context.idx;
@@ -153,8 +155,8 @@ export class LabelHelper {
 
     // label.new() — explicit Pine Script factory method
     // Supports two signatures:
-    //   label.new(x, y, text, xloc, yloc, color, style, textcolor, size, textalign, tooltip, text_font_family, force_overlay)
-    //   label.new(point, text, xloc, yloc, color, style, textcolor, size, textalign, tooltip, text_font_family, force_overlay)
+    //   label.new(x, y, text, xloc, yloc, color, style, textcolor, size, textalign, tooltip, text_font_family, force_overlay, text_formatting)
+    //   label.new(point, text, xloc, yloc, color, style, textcolor, size, textalign, tooltip, text_font_family, force_overlay, text_formatting)
     @silentInSecondary
     new(...args: any[]): LabelObject {
         const parsed = parseArgsForPineParams<any>(args, LABEL_NEW_SIGNATURES, LABEL_NEW_ARGS_TYPES);
@@ -193,6 +195,7 @@ export class LabelHelper {
             x, y, parsed.text, xloc, parsed.yloc,
             parsed.color, parsed.style, parsed.textcolor, parsed.size,
             parsed.textalign, parsed.tooltip, parsed.text_font_family, parsed.force_overlay,
+            parsed.text_formatting,
         );
     }
 
@@ -268,6 +271,16 @@ export class LabelHelper {
     @silentInSecondary
     set_tooltip(id: LabelObject, tooltip: string): void {
         if (id && !id._deleted) id.tooltip = tooltip;
+    }
+
+    @silentInSecondary
+    set_text_font_family(id: LabelObject, family: string): void {
+        if (id && !id._deleted) id.text_font_family = this._resolve(family);
+    }
+
+    @silentInSecondary
+    set_text_formatting(id: LabelObject, formatting: string): void {
+        if (id && !id._deleted) id.text_formatting = this._resolve(formatting);
     }
 
     @silentInSecondary

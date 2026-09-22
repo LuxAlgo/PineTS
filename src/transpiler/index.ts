@@ -55,7 +55,13 @@ import { wrapInContextFunction } from './transformers/WrapperTransformer';
 import { transformNestedArrowFunctions, preProcessContextBoundVars, preProcessUdtRegistry, runAnalysisPass } from './analysis/AnalysisPass';
 import { runTypeInferencePass } from './analysis/TypeInferencePass';
 import { markLazyOperands } from './analysis/LazyOperandPass';
-import { runTransformationPass, transformEqualityChecks, transformStrictLogicalOperators, propagateAsyncAwait } from './transformers/MainTransformer';
+import {
+    runTransformationPass,
+    transformEqualityChecks,
+    transformStrictLogicalOperators,
+    transformDisplayArithmetic,
+    propagateAsyncAwait,
+} from './transformers/MainTransformer';
 import { extractPineScriptVersion, pineToJS } from './pineToJS/pineToJS.index';
 import { buildLtfSlices } from './slicing/buildLtfSlices';
 
@@ -166,6 +172,9 @@ export function transpile(source: string | Function, options: { debug: boolean; 
     // so both operands are evaluated (v5 strictness) without hoisting them out
     // of the branch.
     transformStrictLogicalOperators(ast);
+
+    // Post-process: `+` / `-` between display constants → display.__union / display.__minus
+    transformDisplayArithmetic(ast);
 
     // Post-process: propagate async/await through user-defined function call chains
     // Functions containing await (e.g., from request.security) must be async,

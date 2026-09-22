@@ -23,6 +23,12 @@ export class CodeGenerator {
     // Maps user-defined function names to their ordered parameter names.
     // Used to resolve named arguments to correct positional slots.
     private functionParams: Map<string, string[]>;
+    // Collision names (NAMESPACE_COLLISION_NAMES) that the user declared as a
+    // FUNCTION. A bare call `name(...)` to one of these can only be the user
+    // function (a constants namespace is not callable), so its callees must
+    // follow the `_$N` rename — unlike variable collisions, where `fill(...)`
+    // still means the built-in.
+    private userFunctionCollisions: Set<string>;
     constructor(options: { indentStr?: string; sourceCode?: string; includeSourceComments?: boolean } = {}) {
         this.indent = 0;
         this.indentStr = options.indentStr || '  ';
@@ -33,6 +39,36 @@ export class CodeGenerator {
         this.includeSourceComments = options.includeSourceComments || false; // default false
         this.paramRenameCounter = 0;
         this.functionParams = new Map();
+        this.userFunctionCollisions = new Set();
+    }
+
+    /**
+     * Pine Script treats `_` as a write-only discard identifier: it may be
+     * declared any number of times, in any scope, including several times in
+     * the same scope (`[_, s, _] = ...` followed by `[_, t, _] = ...`, or a
+     * plain `_ = expr` repeated). JavaScript forbids re-declaring a `let`/`var`
+     * binding in one scope, so every `_` declaration target is renamed to a
+     * fresh `_$N` placeholder. `$` is not a legal Pine identifier character,
+     * so the placeholders can never collide with user variables.
+     *
+     * Non-`_` duplicates inside one tuple (invalid Pine, but tolerated) fall
+     * back to a numeric suffix so the generated destructuring stays valid JS.
+     */
+    private renameDiscardTargets(elements: any[]) {
+        const seen = new Set<string>();
+        for (const el of elements) {
+            if (!el || el.type !== 'Identifier') continue;
+            if (el.name === '_') {
+                el.name = this.freshDiscardName();
+            } else if (seen.has(el.name)) {
+                el.name = `${el.name}${this.paramRenameCounter++}`;
+            }
+            seen.add(el.name);
+        }
+    }
+
+    private freshDiscardName(): string {
+        return `_$${this.paramRenameCounter++}`;
     }
 
     generate(ast) {
@@ -40,6 +76,7 @@ export class CodeGenerator {
         this.indent = 0;
         this.lastCommentedLine = -1;
         this.functionParams = new Map();
+        this.userFunctionCollisions = new Set();
 
         if (ast.type === 'Program') {
             // Pre-scan: collect user-defined function parameter lists and
@@ -70,7 +107,11 @@ export class CodeGenerator {
      *  1. Pine namespace collisions (NAMESPACE_COLLISION_NAMES — e.g. `fill`,
      *     `size`, `color`, `line`): user variable would shadow the namespace
      *     destructured from `$.pine`. The CALL SITE `fill(...)` is the
-     *     namespace, NOT the renamed variable, so callees are NOT renamed.
+     *     namespace, NOT the renamed variable, so callees are NOT renamed —
+     *     UNLESS the user declared a FUNCTION with that name
+     *     (`position(x) => close + x`, valid Pine): then a bare call
+     *     `position(14)` can only be the user function and its callees ARE
+     *     renamed (tracked in `userFunctionCollisions`).
      *
      *  2. JS reserved keyword collisions (JS_RESERVED_WORDS — e.g. `delete`,
      *     `super`, `static`): the generated JS would fail to parse
@@ -148,11 +189,16 @@ export class CodeGenerator {
         // name visible at the call site (`obj.delete()` looks up `delete`,
         // not `delete_$0`), breaking UFCS retargeting in ExpressionTransformer.
         if (node.type === 'FunctionDeclaration') {
-            if (node.id?.type === 'Identifier' &&
-                !node.id.isMethod &&
-                this.isReservedName(node.id.name) &&
-                !renameMap.has(node.id.name)) {
-                renameMap.set(node.id.name, `${node.id.name}_$${this.paramRenameCounter++}`);
+            if (node.id?.type === 'Identifier' && !node.id.isMethod && this.isReservedName(node.id.name)) {
+                if (!renameMap.has(node.id.name)) {
+                    renameMap.set(node.id.name, `${node.id.name}_$${this.paramRenameCounter++}`);
+                }
+                // Remember that this collision name is a user FUNCTION so that
+                // bare call sites `name(...)` follow the rename (see
+                // renameVariableRefsInAST). Overloads share one entry.
+                if (NAMESPACE_COLLISION_NAMES.has(node.id.name)) {
+                    this.userFunctionCollisions.add(node.id.name);
+                }
             }
         }
 
@@ -188,10 +234,14 @@ export class CodeGenerator {
                 // Two cases:
                 //   - JS_RESERVED_WORDS rename (e.g. user `method delete` → `delete_$N`):
                 //     the callee IS the user function — must be renamed.
-                //   - NAMESPACE_COLLISION_NAMES rename (e.g. user `var fill = ...` while
-                //     also calling the built-in `fill(...)`): the callee here refers to
-                //     the namespace, not the renamed user variable — leave it alone.
-                if (JS_RESERVED_WORDS.has(node.callee.name)) {
+                //   - NAMESPACE_COLLISION_NAMES rename of a user VARIABLE (e.g.
+                //     `var fill = ...` while also calling the built-in `fill(...)`):
+                //     the callee here refers to the namespace, not the renamed
+                //     variable — leave it alone.
+                //   - NAMESPACE_COLLISION_NAMES rename of a user FUNCTION
+                //     (`position(x) => ...` then `position(14)`): the callee IS the
+                //     user function — must be renamed.
+                if (JS_RESERVED_WORDS.has(node.callee.name) || this.userFunctionCollisions.has(node.callee.name)) {
                     node.callee.name = renameMap.get(node.callee.name)!;
                 }
                 // else: skip callee
@@ -657,6 +707,14 @@ export class CodeGenerator {
         for (let i = 0; i < node.declarations.length; i++) {
             const decl = node.declarations[i];
 
+            // Pine's `_` discard identifier may be re-declared freely; give each
+            // occurrence a unique JS name before any path below reads `decl.id`.
+            if (decl.id?.type === 'Identifier' && decl.id.name === '_') {
+                decl.id.name = this.freshDiscardName();
+            } else if (decl.id?.type === 'ArrayPattern') {
+                this.renameDiscardTargets(decl.id.elements);
+            }
+
             // Check if init is a complex if expression that needs statement-based generation
             if (decl.init && decl.init.type === 'ConditionalExpression' && decl.init.needsIIFE) {
                 // Generate: let varName;\n if (...) { varName = ... } else { varName = ... }
@@ -684,23 +742,9 @@ export class CodeGenerator {
             if (decl.id.type === 'Identifier') {
                 this.write(decl.id.name);
             } else if (decl.id.type === 'ArrayPattern') {
-                // Tuple destructuring — deduplicate discard placeholders like `_`
-                // Pine Script allows [a, _, _] but JS forbids duplicate names in destructuring
-                const seen = new Set<string>();
+                // Tuple destructuring (`_` targets already renamed above)
                 this.write('[');
-                for (let j = 0; j < decl.id.elements.length; j++) {
-                    let name = decl.id.elements[j].name;
-                    if (seen.has(name)) {
-                        const unique = `${name}${this.paramRenameCounter++}`;
-                        decl.id.elements[j].name = unique;
-                        name = unique;
-                    }
-                    seen.add(name);
-                    this.write(name);
-                    if (j < decl.id.elements.length - 1) {
-                        this.write(', ');
-                    }
-                }
+                this.write(decl.id.elements.map((el) => el.name).join(', '));
                 this.write(']');
             }
 
@@ -1096,22 +1140,10 @@ export class CodeGenerator {
                 if (decl.id.type === 'Identifier') {
                     this.write(decl.id.name);
                 } else if (decl.id.type === 'ArrayPattern') {
-                    // Destructuring: [a, b] — deduplicate discard placeholders
-                    const seen = new Set<string>();
+                    // Destructuring: [a, b] — rename `_` discard placeholders
+                    this.renameDiscardTargets(decl.id.elements);
                     this.write('[');
-                    for (let i = 0; i < decl.id.elements.length; i++) {
-                        let name = decl.id.elements[i].name;
-                        if (seen.has(name)) {
-                            const unique = `${name}${this.paramRenameCounter++}`;
-                            decl.id.elements[i].name = unique;
-                            name = unique;
-                        }
-                        seen.add(name);
-                        this.write(name);
-                        if (i < decl.id.elements.length - 1) {
-                            this.write(', ');
-                        }
-                    }
+                    this.write(decl.id.elements.map((el) => el.name).join(', '));
                     this.write(']');
                 }
 

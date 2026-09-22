@@ -59,8 +59,8 @@ parent: API Coverage
 | `label.set_size()`             | ✅     | Set label size          |
 | `label.set_style()`            | ✅     | Set label style         |
 | `label.set_text()`             | ✅     | Set label text          |
-| `label.set_text_font_family()` |        | Set text font family    |
-| `label.set_text_formatting()`  |        | Set text formatting     |
+| `label.set_text_font_family()` | ✅     | Set text font family    |
+| `label.set_text_formatting()`  | ✅     | Set text formatting     |
 | `label.set_textalign()`        | ✅     | Set text alignment      |
 | `label.set_textcolor()`        | ✅     | Set text color          |
 | `label.set_tooltip()`          | ✅     | Set tooltip             |

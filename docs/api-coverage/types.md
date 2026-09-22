@@ -91,6 +91,8 @@ parent: API Coverage
 | `display.price_scale`   | ✅     | Display in price scale   |
 | `display.status_line`   | ✅     | Display in status line   |
 
+`display` values combine as sets, as in Pine: `+` is the union (`display.pane + display.data_window`) and `-` removes surfaces (`display.all - display.price_scale`, `display.none - display.all` → `display.none`). A combined value is reported as the concatenation of its member names in the order pane, data_window, status_line, price_scale (`'all'` / `'none'` for the full / empty set).
+
 ### Extend
 
 | Function       | Status | Description  |
