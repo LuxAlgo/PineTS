@@ -166,38 +166,59 @@ export const NAMESPACE_COLLISION_NAMES = new Set([
     'settlement_as_close',
 ]);
 
-// JavaScript reserved keywords that ARE valid Pine identifiers but invalid as
-// JS identifiers. When a user names a function/method/variable using one of
-// these, we must rename it during codegen — otherwise the generated JS fails
-// to parse (e.g. `function delete() {}` → `Unexpected keyword 'delete'`).
+// JavaScript reserved words (and unsafe-to-shadow globals) that ARE valid Pine
+// identifiers — TradingView accepts `new = close`, `f(delete) => ...`,
+// `type function`, `case = 1`. When a user names a variable, function,
+// parameter or UDT with one of these, codegen renames it (`name_$N`) —
+// otherwise the generated JS fails to parse (`function delete() {}` →
+// `Unexpected keyword 'delete'`) or silently shadows a global the runtime
+// relies on (`NaN`, `undefined`).
 //
-// Excludes words reserved in BOTH languages (break, case, class, const, continue,
-// do, else, enum, export, for, if, import, in, return, switch, try, var, while)
-// — those can't be Pine identifiers in the first place.
+// Pine syntax keywords that are also JS keywords (break, continue, else,
+// export, for, if, import, in, switch, var, while) never reach codegen as
+// names — the lexer tokenizes them as KEYWORD. Pine's reserved-but-syntax-free
+// words that are JS keywords (catch, class, do, return, throw, try) ARE listed:
+// the parser rejects them at declaration sites, but TradingView accepts them
+// as tuple-destructuring targets (`[catch, b] = f()`), and so do we.
 //
-// Excludes `this` — special-cased elsewhere as the implicit first parameter
-// of Pine `method` declarations.
+// `this` is included: TradingView allows it as an ordinary name. The method
+// receiver named `this` (`method f(T this)`) is handled separately (→ `self`)
+// and is excluded from this rename.
 export const JS_RESERVED_WORDS = new Set([
+    'arguments',
     'await',
+    'case',
+    'catch',
+    'class',
+    'const',
     'debugger',
     'default',
     'delete',
+    'do',
+    'enum',
+    'eval',
     'extends',
     'finally',
     'function',
     'implements',
+    'Infinity',
     'instanceof',
     'interface',
     'let',
+    'NaN',
     'new',
     'package',
     'private',
     'protected',
     'public',
+    'return',
     'static',
     'super',
+    'this',
     'throw',
+    'try',
     'typeof',
+    'undefined',
     'void',
     'with',
     'yield',

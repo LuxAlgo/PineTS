@@ -211,10 +211,10 @@ describe('Transpiler Scope Edge Cases', () => {
 indicator("Tuple Scope Test")
 
 calcLevels(float highVal, float lowVal) =>
-    float range = highVal - lowVal
-    float level1 = lowVal + range * 0.236
-    float level2 = lowVal + range * 0.382
-    float level3 = lowVal + range * 0.500
+    float rng = highVal - lowVal
+    float level1 = lowVal + rng * 0.236
+    float level2 = lowVal + rng * 0.382
+    float level3 = lowVal + rng * 0.500
     [level1, level2, level3]
 
 float h = ta.highest(high, 10)
