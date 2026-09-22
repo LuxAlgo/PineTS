@@ -182,6 +182,90 @@ describe('Line wrapping: indentation that is not a multiple of four continues th
     });
 });
 
+describe('Docs examples, whitespace verbatim (script-structure/#line-wrapping)', () => {
+    // Only the price built-ins are swapped for bar_index-based values so that
+    // TradingView and PineTS compute on identical data.
+    it('wrapped sum with trailing comments at 2 / 5 / 10 spaces', async () => {
+        expect(
+            await firstValues([
+                'float x = bar_index +',
+                '  1 +              // Indented by 2 spaces.',
+                '     2 +           // Indented by 5 spaces.',
+                '          3        // Indented by 10 spaces.',
+                'v = x',
+            ])
+        ).toEqual([6, 7, 8, 9, 10]);
+    });
+
+    it('"Line wrapping within parentheses demo"', async () => {
+        expect(
+            await firstValues([
+                'float x = (bar_index +',
+                '    1 +              ',
+                '    2 +          ',
+                '    3)',
+                '',
+                'plot(ta.sma(bar_index, 14), title = "Avg close", color = color.new(color.purple, 70), style = plot.style_area,',
+                ' force_overlay = true, display = display.all - display.status_line)     // Indented by one space.',
+                '',
+                'plot(',
+                ' series = x, title = "Sum OHLC",                              // Indented by one space.',
+                '   color = (x >= x[1] ? color.green : color.red),             // Indented by three spaces.',
+                '    linewidth = 4,                                            // Indented by four spaces.',
+                '        style = plot.style_stepline                           // Indented by eight spaces.',
+                ')                                                             // No indentation.',
+                'v = x',
+            ])
+        ).toEqual([6, 7, 8, 9, 10]);
+    });
+
+    it('upDown(): nested ternary wrapped at 11 / 15 / 20 columns inside a local block', async () => {
+        // The docs' body ends with the `ud := ...` reassignment; returning a
+        // reassignment's value is the subject of the UDF return-semantics fix,
+        // so the body is terminated with `ud` here to test only the wrapping.
+        expect(
+            await firstValues([
+                'upDown(float s) =>',
+                '    // These lines are indented by four spaces relative to the `upDown()` function header to belong to its local scope.',
+                '    var int ud = 0',
+                '    bool isEqual   = s == s[1]',
+                '    bool isGrowing = s > s[1]',
+                '    // Within the local block, this statement wraps across multiple lines, where each line uses   ',
+                "    // an indentation length that is larger than the indentation that signifies the local block's scope.  ",
+                '    ud := isEqual ?',
+                '           0 :',
+                '           isGrowing ?',
+                '               (ud <= 0 ?',
+                '                    1 :',
+                '                    ud + 1) :',
+                '               (ud >= 0 ?',
+                '                    -1 :',
+                '                    ud - 1)',
+                '    ud',
+                'v = upDown(bar_index % 3 == 0 ? 1 : 2)',
+            ])
+        ).toEqual([-1, 1, 0, -1, 1]);
+    });
+
+    it('"Line wrapping with multiline strings demo"', async () => {
+        // "\nBar is neutral.\n" and "\nBar is falling.\n" are 17 characters, "\nBar is rising.\n" is 16.
+        expect(
+            await firstValues([
+                'string labelText = bar_index > 2 ? """',
+                'Bar is rising.',
+                '""" : bar_index < 1 ? """',
+                'Bar is falling.',
+                '""" : """',
+                'Bar is neutral.',
+                '"""',
+                '',
+                'label.new(bar_index, close, labelText)',
+                'v = str.length(labelText)',
+            ])
+        ).toEqual([17, 17, 17, 16, 16]);
+    });
+});
+
 describe('A line at the block indent is a new statement', () => {
     it('`-x` after `x = 1` is a unary statement (was folded into `x = 1 - x` → NaN)', async () => {
         expect(
