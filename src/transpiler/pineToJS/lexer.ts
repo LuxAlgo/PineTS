@@ -158,6 +158,20 @@ export class Lexer {
             return;
         }
 
+        // A comment-only line carries no block structure. TradingView
+        // ignores it for indentation entirely, and a commented-out
+        // statement left a column or two off the block it sits in is
+        // ordinary in real scripts. Without this guard such a line
+        // DEDENTs out of the surrounding block, and the next real
+        // statement - back at the block's own indent - re-INDENTs where
+        // the parser expects a statement ("Unexpected token INDENT"), or
+        // silently closes the block early when the indent happens to
+        // match an enclosing level. Treat it like a blank line: no
+        // INDENT, no DEDENT, no misaligned-dedent error.
+        if (this.peek() === '/' && this.peek(1) === '/') {
+            return;
+        }
+
         // Convert spaces to indent levels (4 spaces = 1 level)
         indent += Math.floor(spaceCount / 4);
 
