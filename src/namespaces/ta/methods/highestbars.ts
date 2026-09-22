@@ -31,7 +31,9 @@ export function highestbars(context: any) {
             // (tests/namespaces/ta/na-window-semantics.test.ts).
             if (val === undefined || isNaN(val)) break;
 
-            if (isNaN(maxOffset) || val > maxVal) {
+            // `>=` so that, scanning newest → oldest, an older bar with the same value
+            // overwrites: TradingView returns the offset of the OLDEST bar among ties.
+            if (isNaN(maxOffset) || val >= maxVal) {
                 maxVal = val;
                 maxOffset = -i;
             }
