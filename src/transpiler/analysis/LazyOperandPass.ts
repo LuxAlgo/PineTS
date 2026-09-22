@@ -29,6 +29,12 @@
  * Function bodies (IIFEs generated for Pine `if`/`switch` expressions) reset
  * the flag: statements inside them get their own hoisting scope, which is
  * already lazy because the IIFE itself only runs when its branch is taken.
+ *
+ * Two refinements, both verified against TradingView output:
+ *   - `request.*` calls are never lazy (see `isRequestCall` below).
+ *   - For Pine v5 sources, an `and` / `or` sitting inside a lazy operand is
+ *     tagged `_strictLogical` so that both of its operands still run when the
+ *     branch is taken (v5 `and`/`or` are strict in every position).
  */
 export interface LazyOperandOptions {
     /** Treat the right operand of `&&` / `||` / `??` as lazy. */
@@ -40,6 +46,15 @@ const LAZY_LOGICAL_OPERATORS = new Set(['&&', '||', '??']);
 
 function isNode(value: any): boolean {
     return value !== null && typeof value === 'object' && typeof value.type === 'string';
+}
+
+function isRequestCall(node: any): boolean {
+    return (
+        node.type === 'CallExpression' &&
+        node.callee?.type === 'MemberExpression' &&
+        node.callee.object?.type === 'Identifier' &&
+        node.callee.object.name === 'request'
+    );
 }
 
 function visit(node: any, lazy: boolean, opts: LazyOperandOptions): void {
@@ -55,6 +70,21 @@ function visit(node: any, lazy: boolean, opts: LazyOperandOptions): void {
         return;
     }
 
+    if (isRequestCall(node)) {
+        // `request.*` is never lazy on TradingView: the requested expression is
+        // computed on every bar of the *other* context whatever chart-side
+        // condition wraps the call, and the chart context merely reads the
+        // value. It must stay hoisted here too — the secondary context runs
+        // this same script, so an inlined `cond ? request.security(s, tf, expr)
+        // : na` would evaluate `expr`'s request.param only on secondary bars
+        // where the *secondary's* `cond` holds, misaligning the values the
+        // main context reads back. Arguments restart as eager; a `?:` inside
+        // `expr` still gets its own lazy branches below.
+        node._lazyOperand = false;
+        node.arguments.forEach((a: any) => visit(a, false, opts));
+        return;
+    }
+
     if (node.type === 'ConditionalExpression') {
         visit(node.test, lazy, opts);
         visit(node.consequent, true, opts);
@@ -62,10 +92,20 @@ function visit(node: any, lazy: boolean, opts: LazyOperandOptions): void {
         return;
     }
 
-    if (node.type === 'LogicalExpression' && opts.lazyLogical && LAZY_LOGICAL_OPERATORS.has(node.operator)) {
-        visit(node.left, lazy, opts);
-        visit(node.right, true, opts);
-        return;
+    if (node.type === 'LogicalExpression' && LAZY_LOGICAL_OPERATORS.has(node.operator)) {
+        if (opts.lazyLogical) {
+            visit(node.left, lazy, opts);
+            visit(node.right, true, opts);
+            return;
+        }
+        // Pine v5: `and` / `or` evaluate BOTH operands. In an eager position the
+        // right operand's calls are hoisted ahead of the statement, which is
+        // strict by construction. Inside a lazy operand hoisting is suppressed
+        // and native `&&` / `||` would short-circuit, so the expression is
+        // rewritten to `$.pine.math.__and/__or(left, right)` afterwards
+        // (transformStrictLogicalOperators): both operands run, but only when
+        // the enclosing branch does.
+        if (lazy && node.operator !== '??') node._strictLogical = true;
     }
 
     for (const key of Object.keys(node)) {

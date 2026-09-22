@@ -928,7 +928,13 @@ function getParamFromConditionalExpression(node: any, scopeManager: ScopeManager
                 // First transform the call expression itself
                 transformCallExpression(node, scopeManager);
 
-                if (isInlinedLazyCall(node)) return;
+                // A hoisted call was replaced in place by its `temp_N` identifier
+                // but keeps a stale `arguments` array that is SHARED with the
+                // hoisted declaration. Walking it here would wrap the shared
+                // `pN` param identifiers in `$.get(pN, 0)`, turning the hoisted
+                // `ta.crossover(p5, p6, ...)` into a scalar call (#304). Same
+                // guard the statement walkers use.
+                if (node.type !== 'CallExpression' || isInlinedLazyCall(node)) return;
 
                 // Then transform its arguments with the correct context
                 node.arguments.forEach((arg: any) => c(arg, { parent: node, inNamespaceCall: isNamespaceCall || state.inNamespaceCall }));

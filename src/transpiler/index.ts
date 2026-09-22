@@ -55,7 +55,7 @@ import { wrapInContextFunction } from './transformers/WrapperTransformer';
 import { transformNestedArrowFunctions, preProcessContextBoundVars, preProcessUdtRegistry, runAnalysisPass } from './analysis/AnalysisPass';
 import { runTypeInferencePass } from './analysis/TypeInferencePass';
 import { markLazyOperands } from './analysis/LazyOperandPass';
-import { runTransformationPass, transformEqualityChecks, propagateAsyncAwait } from './transformers/MainTransformer';
+import { runTransformationPass, transformEqualityChecks, transformStrictLogicalOperators, propagateAsyncAwait } from './transformers/MainTransformer';
 import { extractPineScriptVersion, pineToJS } from './pineToJS/pineToJS.index';
 import { buildLtfSlices } from './slicing/buildLtfSlices';
 
@@ -161,6 +161,11 @@ export function transpile(source: string | Function, options: { debug: boolean; 
 
     // Post-process: transform equality checks to math.__eq calls
     transformEqualityChecks(ast);
+
+    // Post-process: Pine v5 `and`/`or` inside a lazy `?:` branch → math.__and/__or
+    // so both operands are evaluated (v5 strictness) without hoisting them out
+    // of the branch.
+    transformStrictLogicalOperators(ast);
 
     // Post-process: propagate async/await through user-defined function call chains
     // Functions containing await (e.g., from request.security) must be async,

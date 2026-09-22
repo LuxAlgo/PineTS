@@ -180,6 +180,141 @@ plot(y ? 1 : 0, "y")`)
     });
 });
 
+describe('v5 and / or nested inside a taken ?: branch stay strict', () => {
+    // TradingView (verified with a side-effecting right operand on BINANCE:BTCUSDT
+    // 60): in v5 the right operand of `and` / `or` runs on every bar where the
+    // enclosing ternary branch is taken, even when the left operand already
+    // decides the result. In v6 it is skipped. The branch itself is lazy in
+    // both versions, so nothing runs on bars where the branch is not taken.
+    //
+    // Probe: push one element per bar, and let the right operand pop it. The
+    // array size on bar i is therefore
+    //   v5 (strict): pops on even bars -> size grows on odd bars only -> floor((i + 1) / 2)
+    //   v6 (lazy):   never pops                                        -> i + 1
+    const POP_AND = `var arr = array.new_int()
+array.push(arr, 0)
+z = bar_index % 2 == 0 ? (bar_index < 0 and array.pop(arr) == 0) : false
+plot(array.size(arr), "n")`;
+    const POP_OR = `var arr = array.new_int()
+array.push(arr, 0)
+z = bar_index % 2 == 0 ? (bar_index >= 0 or array.pop(arr) == 0) : false
+plot(array.size(arr), "n")`;
+
+    for (const [op, body] of [['and', POP_AND], ['or', POP_OR]] as const) {
+        it(`v5: right operand of \`${op}\` inside a taken branch is evaluated (strict)`, async () => {
+            const { plots } = await mk().run(pine(5, body));
+            const n = plots['n'].data.map((p) => p.value);
+            expect(n.slice(0, 6)).toEqual([0, 1, 1, 2, 2, 3]);
+            expect(n[20]).toBe(10);
+            expect(n[21]).toBe(11);
+        });
+
+        it(`v6: right operand of \`${op}\` inside a taken branch is short-circuited (lazy)`, async () => {
+            const { plots } = await mk().run(pine(6, body));
+            const n = plots['n'].data.map((p) => p.value);
+            expect(n.slice(0, 6)).toEqual([1, 2, 3, 4, 5, 6]);
+            expect(n[20]).toBe(21);
+        });
+    }
+
+    it('v5: strict logical in a branch is lowered to math.__and / __or; v6 keeps native && / ||', async () => {
+        const { transpile } = await import('../../src/transpiler');
+        const src5 = transpile(pine(5, POP_AND)).toString();
+        const src6 = transpile(pine(6, POP_AND)).toString();
+        expect(src5).toMatch(/\$\.pine\.math\.__and\(/);
+        expect(src6).not.toMatch(/__and\(/);
+        // eager position (not inside a branch) keeps hoisting in both versions
+        const eager5 = transpile(pine(5, 'y = bar_index < 0 and ta.cum(1) > 0\nplot(y ? 1 : 0, "y")')).toString();
+        expect(eager5).not.toMatch(/__and\(/);
+        expect(eager5).toMatch(/const temp_\d+ = ta\.cum\(/);
+    });
+});
+
+describe('history-reading ta.* in the ternary TEST passed as a call argument (#304)', () => {
+    // `plot(ta.crossover(f, s) ? 1 : 0)` used to be transpiled to a scalar call
+    // `ta.crossover($.get(p5, 0), $.get(p6, 0))` because the conditional-argument
+    // walker re-visited the hoisted call's (shared) argument nodes, so `[1]`
+    // lookups inside the function saw NaN and it was always false. Reference:
+    // the same predicate written out by hand with the history operator.
+    const HEADER = `f = ta.ema(close, 3)
+s = ta.ema(close, 8)
+`;
+    const cases: Array<[string, string, string]> = [
+        ['ta.crossover', 'plot(ta.crossover(f, s) ? 1 : 0, "x")', 'plot(f > s and f[1] <= s[1] ? 1 : 0, "ref")'],
+        ['ta.crossunder', 'plot(ta.crossunder(f, s) ? 1 : 0, "x")', 'plot(f < s and f[1] >= s[1] ? 1 : 0, "ref")'],
+        ['ta.cross', 'plot(ta.cross(f, s) ? 1 : 0, "x")', 'plot((f > s and f[1] <= s[1]) or (f < s and f[1] >= s[1]) ? 1 : 0, "ref")'],
+        ['ta.rising', 'plot(ta.rising(f, 2) ? 1 : 0, "x")', 'plot(f > f[1] and f[1] > f[2] ? 1 : 0, "ref")'],
+        ['ta.falling', 'plot(ta.falling(f, 2) ? 1 : 0, "x")', 'plot(f < f[1] and f[1] < f[2] ? 1 : 0, "ref")'],
+        ['nested in math.max(...)', 'plot(math.max(ta.crossover(f, s) ? 1 : 0, 0), "x")', 'plot(f > s and f[1] <= s[1] ? 1 : 0, "ref")'],
+        ['left operand of and in the test', 'plot(ta.crossover(f, s) and close > 0 ? 1 : 0, "x")', 'plot(f > s and f[1] <= s[1] ? 1 : 0, "ref")'],
+    ];
+    for (const [name, inline, reference] of cases) {
+        it(`${name}: inline form equals the hand-written predicate`, async () => {
+            const { plots } = await mk().run(pine(6, HEADER + inline + '\n' + reference));
+            const x = plots['x'].data.map((p) => p.value);
+            const ref = plots['ref'].data.map((p) => p.value);
+            // skip the warm-up bars where the reference's `[2]` lookups are na
+            const from = 3;
+            expect(x.slice(from)).toEqual(ref.slice(from));
+            expect(ref.filter((v) => v === 1).length).toBeGreaterThan(0);
+        });
+    }
+});
+
+describe('request.* is never lazy (TradingView computes the requested expression on every bar)', () => {
+    // On TradingView `cond ? request.security(sym, tf, expr) : na` equals the
+    // unconditional `request.security(sym, tf, expr)` on every bar where cond
+    // holds (verified on BINANCE:BTCUSDT 60 / "240": 817/817 bars). Inlining the
+    // call lazily broke this: the secondary context runs the same script, so
+    // `expr`'s request.param was only recorded on secondary bars where the
+    // SECONDARY's cond held, misaligning what the main context reads back.
+    it('request.security inside a ternary branch returns the same values as the unconditional call', async () => {
+        const { plots } = await mk().run(
+            pine(6, `cond = close > open
+ref = request.security(syminfo.tickerid, "240", ta.sma(close, 5))
+inb = cond ? request.security(syminfo.tickerid, "240", ta.sma(close, 5)) : na
+plot(ref, "ref")
+plot(inb, "inb")
+plot(cond ? 1 : 0, "cond")`)
+        );
+        const ref = plots['ref'].data.map((p) => p.value);
+        const inb = plots['inb'].data.map((p) => p.value);
+        const cond = plots['cond'].data.map((p) => p.value);
+        let compared = 0;
+        for (let i = 40; i < ref.length; i++) {
+            if (cond[i] === 1) {
+                expect(inb[i]).toBeCloseTo(ref[i], 8);
+                compared++;
+            } else {
+                expect(Number.isNaN(inb[i])).toBe(true);
+            }
+        }
+        expect(compared).toBeGreaterThan(10);
+    });
+
+    it('a ternary INSIDE the request.security expression is still lazy in the secondary context', async () => {
+        // `(cond ? ta.cum(1) : na) - ta.cum(cond ? 1 : 0)` is 0 on every HTF bar iff
+        // the branch's ta.cum only ran on HTF bars where cond held.
+        const { plots } = await mk().run(
+            pine(6, `cond = close > open
+d = request.security(syminfo.tickerid, "240", (cond ? ta.cum(1) : na) - ta.cum(cond ? 1 : 0))
+plot(d, "d")`)
+        );
+        const d = plots['d'].data.map((p) => p.value).filter((v) => !Number.isNaN(v));
+        expect(d.length).toBeGreaterThan(10);
+        expect(d.every((v) => v === 0)).toBe(true);
+    });
+
+    it('request.security on the right of a v6 `and` is hoisted, not inlined', async () => {
+        const { transpile } = await import('../../src/transpiler');
+        const code = transpile(
+            pine(6, `x = close > open and request.security(syminfo.tickerid, "240", close) > 0 ? 1 : 0
+plot(x, "x")`)
+        ).toString();
+        expect(code).toMatch(/const temp_\d+ = await request\.security\(/);
+    });
+});
+
 describe('switch expression arms are lazy (compiled to an IIFE with if/else)', () => {
     // A Pine `switch` used as an expression compiles to an IIFE whose arms are
     // `if (...) { return <arm> }` blocks. Calls inside those blocks used to be
