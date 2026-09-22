@@ -263,6 +263,61 @@ describe('Layout that carries no block structure', () => {
         ).toEqual([0, 1, 2, 3, 4]);
     });
 
+    it('comment lines inside a block at column 0, deeper than the block, or shallower', async () => {
+        const body = ['f(a) =>', '    b = a * 2', '%COMMENT%', '    b + 1', 'v = f(bar_index)'];
+        for (const comment of ['//comment at column 0', '        // eight columns deep', '          // ten columns deep', '  // two columns']) {
+            expect(await firstValues(body.map((l) => (l === '%COMMENT%' ? comment : l)))).toEqual([1, 3, 5, 7, 9]);
+        }
+        // Directly after the `=>` header, before the first body line.
+        expect(await firstValues(['f(a) =>', '// comment', '    b = a * 2', '    b + 1', 'v = f(bar_index)'])).toEqual([1, 3, 5, 7, 9]);
+        expect(await firstValues(['f(a) =>', '        // comment', '    b = a * 2', '    b + 1', 'v = f(bar_index)'])).toEqual([1, 3, 5, 7, 9]);
+        // As the last lines of a block, before a dedented statement.
+        expect(
+            await firstValues(['v = 0', 'if bar_index > 0', '    v := 1', '//comment', '        // deeper comment', 'v := v + 10'])
+        ).toEqual([10, 11, 11, 11, 11]);
+        // Shallower than a nested body, between its header and its first statement.
+        expect(
+            await firstValues(['v = 0', 'if bar_index > 0', '    if bar_index > 1', '  // shallow comment', '        v := 2', '    else', '        v := 1'])
+        ).toEqual([0, 1, 2, 2, 2]);
+    });
+
+    it('a statement-sequence comma after a call that spans lines (transpile-error-samples/unexpected-comma)', async () => {
+        expect(await firstValues(['a = math.max(bar_index,', '    1), b = 2', 'v = a + b'])).toEqual([3, 3, 4, 5, 6]);
+        expect(
+            await firstValues(['v = n'], ['//@version=6', "indicator(    'indent parity'", " , shorttitle='ip'", ' , overlay=true', ' ),n=bar_index'])
+        ).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it('a tuple on the line after a switch is a new statement, not an index (transpile-error-samples/expected-rbracket-got-comma)', async () => {
+        expect(
+            await firstValues([
+                'f() =>',
+                '    float a = switch bar_index',
+                '        0 => 1',
+                '        => 2',
+                '    float b = switch bar_index',
+                '        1 => 10',
+                '        => 20',
+                '    [a, b]',
+                '[x, y] = f()',
+                'v = x + y',
+            ])
+        ).toEqual([21, 12, 22, 22, 22]);
+        expect(
+            await firstValues([
+                'f() =>',
+                '    float up = 0.0',
+                '    float dn = 0.0',
+                '    switch',
+                '        bar_index % 2 == 0 => up += 1',
+                '        => dn -= 1',
+                '    [up, dn]',
+                '[x, y] = f()',
+                'v = x * 10 + y',
+            ])
+        ).toEqual([10, -1, 10, -1, 10]);
+    });
+
     it('inside parentheses any indentation is allowed, including multiples of four and `)` at column 0', async () => {
         expect(await firstValues(['float v = (bar_index + 1', '    + 2', '    + 3)'])).toEqual([6, 7, 8, 9, 10]);
         expect(await firstValues(['v = math.max(bar_index,', '    2,', '        3)'])).toEqual([3, 3, 3, 3, 4]);
