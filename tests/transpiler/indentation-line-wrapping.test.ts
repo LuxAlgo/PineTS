@@ -373,6 +373,8 @@ describe('Layout that carries no block structure', () => {
 
     it('a statement-sequence comma after a call that spans lines (transpile-error-samples/unexpected-comma)', async () => {
         expect(await firstValues(['a = math.max(bar_index,', '    1), b = 2', 'v = a + b'])).toEqual([3, 3, 4, 5, 6]);
+        // A wrapped line that starts with the sequence comma.
+        expect(await firstValues(['a = 0, b = 1', ' , c = 2', 'v = a + b * 10 + c * 100 + bar_index'])).toEqual([210, 211, 212, 213, 214]);
         expect(
             await firstValues(['v = n'], ['//@version=6', "indicator(    'indent parity'", " , shorttitle='ip'", ' , overlay=true', ' ),n=bar_index'])
         ).toEqual([0, 1, 2, 3, 4]);
@@ -406,6 +408,18 @@ describe('Layout that carries no block structure', () => {
                 'v = x * 10 + y',
             ])
         ).toEqual([10, -1, 10, -1, 10]);
+    });
+
+    it('a trailing comment inside an argument list, followed by a wrapped line starting with `,`', async () => {
+        expect(
+            await firstValues([
+                'var tb = table.new(position.top_right, 3, 8 // comment',
+                '  , bgcolor = #1e222d)',
+                'x = math.max(bar_index, 2 // comment',
+                '  , 3)',
+                'v = x',
+            ])
+        ).toEqual([3, 3, 3, 3, 4]);
     });
 
     it('inside parentheses any indentation is allowed, including multiples of four and `)` at column 0', async () => {
