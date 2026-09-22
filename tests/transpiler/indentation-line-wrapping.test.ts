@@ -83,6 +83,12 @@ describe('Line wrapping: indentation that is not a multiple of four continues th
         ).toEqual([-1, 0, 1, 2, 3]);
     });
 
+    it('global scope: `rss = aY.variance()` then `      - r2` at 6 columns', async () => {
+        const lines = ['aY = array.from(1.0, 2.0, 3.0, 4.0 + bar_index)', 'r2 = 0.5 * bar_index', 'rss = aY.variance()', '      - r2'];
+        expect(await firstValues([...lines, 'v = rss'])).toEqual([1.25, 1.6875, 2.5, 3.6875, 5.25]);
+        expect(await firstValues([...lines, 'rss := rss * 2', 'v = rss'])).toEqual([2.5, 3.375, 5, 7.375, 10.5]);
+    });
+
     it('a 2-space continuation inside a 4-space block stays in the statement (was silently 1 instead of 3)', async () => {
         expect(
             await firstValues([
