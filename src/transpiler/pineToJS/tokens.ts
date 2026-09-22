@@ -73,6 +73,14 @@ export const Keywords = new Set([
 export const MultiCharOperators = ['==', '!=', '<=', '>=', ':=', '+=', '-=', '*=', '/=', '%=', '=>', '//', 'and', 'or', 'not'];
 
 export class Token {
+    /**
+     * Present on the first token of a line that the lexer joined onto the
+     * previous line because its indentation is not a multiple of four
+     * (Pine line wrapping). `width` is the measured indentation in columns,
+     * `fromLine` the line it was joined to, `column` where the token starts.
+     */
+    public wrapped: { width: number; fromLine: number | null; column: number } | null = null;
+
     constructor(public type: string, public value: any, public line: number, public column: number, public indent = 0, public raw: string = null) {}
 
     // toString() {

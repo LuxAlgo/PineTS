@@ -48,10 +48,6 @@ export class Parser {
     // really parameters of the enclosing function and just happen to share a
     // name with some other user function.
     private paramScopes: Set<string>[] = [];
-    // When true, peekOperatorEx does NOT cross NEWLINE boundaries at all.
-    // Used inside single-line switch case bodies to prevent binary operator
-    // continuation from absorbing the next case's negative test value.
-    private noLineContinuation: boolean = false;
     constructor(tokens: Token[]) {
         this.tokens = tokens;
         this.pos = 0;
@@ -86,12 +82,57 @@ export class Parser {
     expect(type, value = null) {
         const token = this.peek();
         if (token.type !== type) {
-            throw new Error(`Expected ${type} but got ${token.type} at ${token.line}:${token.column}`);
+            throw new Error(`Expected ${type} but got ${token.type} at ${token.line}:${token.column}${this.layoutHint(token)}`);
         }
         if (value !== null && token.value !== value) {
-            throw new Error(`Expected '${value}' but got '${token.value}' at ${token.line}:${token.column}`);
+            throw new Error(`Expected '${value}' but got '${token.value}' at ${token.line}:${token.column}${this.layoutHint(token)}`);
         }
         return this.advance();
+    }
+
+    /**
+     * Error for a token that cannot start / continue what is being parsed.
+     * Two layout situations are baffling without context and get a specific
+     * message: an INDENT where a statement was expected (the line is indented
+     * as a local block, but nothing opened one), and a token the lexer joined
+     * onto the previous line because of Pine's line-wrapping rule.
+     */
+    private unexpected(token: Token): Error {
+        if (token.type === TokenType.INDENT) {
+            // The INDENT token itself sits at the first non-blank column of the line.
+            const first = this.tokens[this.tokens.indexOf(token) + 1] ?? token;
+            return new Error(
+                `Unexpected indentation at ${token.line}:${token.column} - '${first.value}' is indented as a local block, ` +
+                    `but the previous statement does not open one. A line indented by a multiple of four columns starts a new ` +
+                    `statement; to wrap a long line, indent the continuation by a number of columns that is not a multiple of four`
+            );
+        }
+        const value = token.type === TokenType.NEWLINE ? 'end of line' : token.value;
+        const column = token.wrapped ? token.wrapped.column : token.column;
+        return new Error(`Unexpected token ${token.type} '${value}' at ${token.line}:${column}${this.layoutHint(token)}`);
+    }
+
+    /** Suffix explaining that `token` starts a line the lexer joined onto the previous one. */
+    private layoutHint(token: Token): string {
+        const w = token.wrapped;
+        if (!w) return '';
+        const why =
+            w.width % 4 !== 0
+                ? `is indented by ${w.width} columns, which is not a multiple of four, so it continues line ${w.fromLine} (Pine line wrapping)`
+                : `continues line ${w.fromLine}, which ends with an operator`;
+        return ` - line ${token.line} ${why}. A statement inside a local block must be indented by four spaces or one tab per level`;
+    }
+
+    /**
+     * After a complete statement, the next token must start a new line. The
+     * only way it cannot is when the lexer joined the following line onto
+     * this one (indentation not a multiple of four) and the statement did not
+     * absorb it: `    v := 1` followed by `      v := 2`. TradingView rejects
+     * that ("Syntax error at input 'v'"); so do we, with the reason.
+     */
+    private rejectDanglingWrappedLine() {
+        const token = this.peek();
+        if (token.wrapped) throw this.unexpected(token);
     }
 
     // Pine v5/v6 contextual keywords — reserved only in their declaration-introducing
@@ -117,81 +158,19 @@ export class Parser {
         throw new Error(`Expected ${TokenType.IDENTIFIER} but got ${token.type} at ${token.line}:${token.column}`);
     }
 
-    // Match a token, optionally ignoring NEWLINE and INDENT (for line continuation)
-    matchEx(type, value = null, allowLineContinuation = false) {
-        if (!allowLineContinuation) {
-            return this.match(type, value);
-        }
-
-        let offset = 0;
-        let token = this.peek(offset);
-
-        // In single-line switch case bodies, do NOT cross newlines
-        if (token.type === TokenType.NEWLINE && this.noLineContinuation) {
-            return false;
-        }
-
-        // Skip NEWLINE and subsequent INDENT
-        if (token.type === TokenType.NEWLINE) {
-            offset++;
-            token = this.peek(offset);
-
-            // Optional INDENT after NEWLINE
-            if (token.type === TokenType.INDENT) {
-                offset++;
-                token = this.peek(offset);
-            }
-        }
-
-        if (token.type !== type) return false;
-        if (value !== null && token.value !== value) return false;
-
-        // Consume skipped tokens
-        for (let i = 0; i < offset; i++) {
-            this.advance();
-        }
-
-        return true;
-    }
-
-    // Peek ahead for an operator, optionally ignoring NEWLINE and INDENT (non-consuming unless matched)
-    // Returns the operator value if found, null otherwise
-    // IMPORTANT: Does NOT match across NEWLINE+INDENT for ambiguous operators (+, -)
-    // that could be unary, since NEWLINE+INDENT indicates a new indented block
+    // Peek for a binary operator at the current position (non-consuming).
+    // Returns the operator value if found, null otherwise.
+    //
+    // Line wrapping is resolved by the lexer: a wrapped line (indentation that
+    // is not a multiple of four, or one that follows a trailing operator) is
+    // joined onto the previous line and never produces a NEWLINE token. So a
+    // NEWLINE here always ends the expression — `x = 1` / `-x` on the next
+    // line at the block indent is a unary statement, exactly as on TradingView,
+    // not `x = 1 - x`.
     peekOperatorEx(validOps: string[]) {
-        let offset = 0;
-        let token = this.peek(offset);
-        let crossedIndent = false;
-
-        // Skip NEWLINE and subsequent INDENT
-        if (token.type === TokenType.NEWLINE) {
-            // In single-line switch case bodies, do NOT cross newlines at all
-            if (this.noLineContinuation) return null;
-
-            offset++;
-            token = this.peek(offset);
-
-            // Optional INDENT after NEWLINE
-            if (token.type === TokenType.INDENT) {
-                crossedIndent = true;
-                offset++;
-                token = this.peek(offset);
-            }
-        }
-
+        const token = this.peek();
         if (token.type !== TokenType.OPERATOR) return null;
         if (!validOps.includes(token.value)) return null;
-
-        // If we crossed an INDENT boundary and the operator is ambiguous (could be unary),
-        // do NOT treat it as a binary operator continuation
-        if (crossedIndent && (token.value === '+' || token.value === '-')) {
-            return null;
-        }
-
-        // Only now consume the skipped NEWLINE/INDENT tokens
-        for (let i = 0; i < offset; i++) {
-            this.advance();
-        }
         return token.value;
     }
 
@@ -343,10 +322,12 @@ export class Parser {
                 }
                 
                 // Return a BlockStatement containing all comma-separated statements
+                this.rejectDanglingWrappedLine();
                 return new BlockStatement(statements);
             }
         }
 
+        this.rejectDanglingWrappedLine();
         return stmt;
     }
 
@@ -1339,6 +1320,10 @@ export class Parser {
     // Parse indented block
     parseBlock() {
         if (!this.match(TokenType.INDENT)) {
+            // `if cond` followed by a body line at 2 or 6 columns: the lexer
+            // joined that line onto the header (not a multiple of four), so
+            // there is no INDENT. TradingView rejects it as a syntax error.
+            this.rejectDanglingWrappedLine();
             // Single statement without indent (shouldn't happen in proper PineScript)
             const stmt = this.parseStatement();
             return new BlockStatement(stmt ? [stmt] : []);
@@ -1453,18 +1438,11 @@ export class Parser {
     parseTernary() {
         let expr = this.parseLogicalOr();
 
-        if (this.matchEx(TokenType.OPERATOR, '?', true)) {
+        if (this.match(TokenType.OPERATOR, '?')) {
             this.advance();
             this.skipNewlines(true);
             const consequent = this.parseExpression();
-            
-            // Handle : with line continuation
-            if (this.matchEx(TokenType.COLON, null, true)) {
-                this.advance(); // Consume :
-            } else {
-                this.expect(TokenType.COLON);
-            }
-            
+            this.expect(TokenType.COLON);
             this.skipNewlines(true);
             const alternate = this.parseExpression();
             return new ConditionalExpression(expr, consequent, alternate);
@@ -1476,7 +1454,7 @@ export class Parser {
     parseLogicalOr() {
         let left = this.parseLogicalAnd();
 
-        while (this.matchEx(TokenType.KEYWORD, 'or', true) || this.peekOperatorEx(['||'])) {
+        while (this.match(TokenType.KEYWORD, 'or') || this.peekOperatorEx(['||'])) {
             this.advance();
             this.skipNewlines(true);
             const right = this.parseLogicalAnd();
@@ -1489,7 +1467,7 @@ export class Parser {
     parseLogicalAnd() {
         let left = this.parseEquality();
 
-        while (this.matchEx(TokenType.KEYWORD, 'and', true) || this.peekOperatorEx(['&&'])) {
+        while (this.match(TokenType.KEYWORD, 'and') || this.peekOperatorEx(['&&'])) {
             this.advance();
             this.skipNewlines(true);
             const right = this.parseEquality();
@@ -1796,7 +1774,7 @@ export class Parser {
             return this.parseWhileExpression();
         }
 
-        throw new Error(`Unexpected token ${token.type} '${token.value}' at ${token.line}:${token.column}`);
+        throw this.unexpected(token);
     }
 
     parseArrayLiteral() {
@@ -1942,12 +1920,7 @@ export class Parser {
                 this.advance(); // DEDENT
             } else {
                 // Single line: may be an expression or a statement (e.g., col := value)
-                // Disable line continuation to prevent the expression parser from
-                // absorbing the next case's negative test value (e.g., -1 =>) as
-                // binary subtraction from the current case's body.
-                this.noLineContinuation = true;
                 const stmt = this.parseStatement();
-                this.noLineContinuation = false;
                 if (stmt) consequentStmts.push(stmt);
             }
 
