@@ -30,7 +30,9 @@ export function lowestbars(context: any) {
             // (tests/namespaces/ta/na-window-semantics.test.ts).
             if (val === undefined || isNaN(val)) break;
 
-            if (isNaN(minOffset) || val < minVal) {
+            // `<=` so that, scanning newest → oldest, an older bar with the same value
+            // overwrites: TradingView returns the offset of the OLDEST bar among ties.
+            if (isNaN(minOffset) || val <= minVal) {
                 minVal = val;
                 minOffset = -i;
             }
