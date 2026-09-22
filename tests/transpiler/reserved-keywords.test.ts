@@ -167,6 +167,18 @@ plot(type * 2, "D")`);
         expectSeriesClose(values(plots, 'D'), values(plots, 'C').map((c) => c * 2));
     });
 
+    it('`method = 2` / `plot(method)` — every contextual keyword works as a plain variable', async () => {
+        const plots = await run(`
+method = 2
+enum = 3
+once = 4
+plot(method, "M")
+plot(method + enum + once, "S")`);
+        const c = values(plots, 'C');
+        expectSeriesClose(values(plots, 'M'), c.map(() => 2));
+        expectSeriesClose(values(plots, 'S'), c.map(() => 9));
+    });
+
     it('`method(x) => ...` at the start of a line is a function named method', async () => {
         const plots = await run(`
 method(x) => x * 2
