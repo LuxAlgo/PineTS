@@ -913,7 +913,10 @@ export class Context {
     public call(fn: Function, id: string, ...args: any[]) {
         this.pushId(id);
         try {
-            return fn(...args);
+            const result = fn(...args);
+            // Falling off the end of a Pine function (e.g. an `if` with no `else` whose
+            // test was false) yields `na`, not an absent value.
+            return result === undefined ? NaN : result;
         } finally {
             this.popId();
         }
