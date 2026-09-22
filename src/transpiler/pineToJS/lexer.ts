@@ -4,7 +4,7 @@
 // PineScript Lexer with Indentation Tracking
 // Generates INDENT/DEDENT tokens like Python
 
-import { TokenType, Keywords, MultiCharOperators, Token } from './tokens';
+import { TokenType, Keywords, ContextualKeywords, MultiCharOperators, Token } from './tokens';
 
 export class Lexer {
     private source: string;
@@ -114,7 +114,45 @@ export class Lexer {
         }
 
         this.addToken(TokenType.EOF, '');
+        this.resolveContextualKeywords();
         return this.tokens;
+    }
+
+    /**
+     * `type`, `method` and `enum` are keywords only where they introduce a
+     * declaration: first token of a logical line (optionally after `export`)
+     * and followed by a name — `type Foo`, `method float f(`, `enum E`.
+     * Anywhere else TradingView treats them as plain identifiers:
+     * `type = close`, `method(x) => x`, `var enum = 0`, `int type = 0`,
+     * `t.type`, `switch method`. Downgrade those occurrences to IDENTIFIER so
+     * the parser only ever sees the keyword form in declaration position.
+     *
+     * NEWLINE/INDENT/DEDENT and comment-only lines are layout. A wrapped
+     * continuation line also follows a NEWLINE, but it can never carry
+     * `type <Name>` — the previous line ends in an operator — so the
+     * "followed by a name" test keeps it an identifier there too.
+     */
+    private resolveContextualKeywords() {
+        const isLayout = (t: Token) =>
+            t.type === TokenType.NEWLINE || t.type === TokenType.INDENT || t.type === TokenType.DEDENT || t.type === TokenType.COMMENT;
+        // Any word can follow as the declared name — including another
+        // keyword (`type type`, `method in(...)`): the parser then reports
+        // the reserved name, exactly as TradingView does.
+        const isName = (t: Token | undefined) => !!t && (t.type === TokenType.IDENTIFIER || t.type === TokenType.KEYWORD);
+
+        for (let i = 0; i < this.tokens.length; i++) {
+            const t = this.tokens[i];
+            if (t.type !== TokenType.KEYWORD || !ContextualKeywords.has(t.value)) continue;
+
+            let j = i - 1;
+            while (j >= 0 && this.tokens[j].type === TokenType.COMMENT) j--;
+            const prev = j >= 0 ? this.tokens[j] : null;
+            const atLineStart = prev === null || isLayout(prev) || (prev.type === TokenType.KEYWORD && prev.value === 'export');
+
+            if (!(atLineStart && isName(this.tokens[i + 1]))) {
+                t.type = TokenType.IDENTIFIER;
+            }
+        }
     }
 
     // Handle newline and emit NEWLINE token
