@@ -135,6 +135,22 @@ export class Parser {
         if (token.wrapped) throw this.unexpected(token);
     }
 
+    /**
+     * True when the current token is the first token of a new logical line:
+     * the previous token (looking past DEDENTs) is a NEWLINE, or sits on an
+     * earlier physical line without the current token being a lexer-joined
+     * wrapped line.
+     */
+    private startsNewLine(): boolean {
+        const token = this.peek();
+        if (token.wrapped) return false;
+        let i = this.pos - 1;
+        while (i >= 0 && this.tokens[i].type === TokenType.DEDENT) i--;
+        if (i < 0) return true;
+        const prev = this.tokens[i];
+        return prev.type === TokenType.NEWLINE || prev.line !== token.line;
+    }
+
     // Pine v5/v6 contextual keywords — reserved only in their declaration-introducing
     // position (e.g. `type Foo`, `method bar(...)`, `enum E`), but valid as identifiers
     // anywhere else (e.g. as a UDT field name, function parameter, variable).
@@ -305,12 +321,16 @@ export class Parser {
         if (stmt) {
             stmt._line = startLine;
             
-            // Handle comma-separated statements on the same line: a = high, b = low
-            // Only handle commas at the top level (not in recursive calls)
-            if (handleCommas && this.match(TokenType.COMMA) && this.peek().line === startLine) {
+            // Handle comma-separated statements on the same logical line: a = high, b = low
+            // Only handle commas at the top level (not in recursive calls).
+            // A COMMA directly after a complete statement is on the same logical
+            // line by construction (a NEWLINE token would otherwise sit between
+            // them), even if the statement spanned wrapped lines or a multi-line
+            // call: `x = f(a,` ⏎ `    b), y = 2`.
+            if (handleCommas && this.match(TokenType.COMMA)) {
                 const statements = [stmt];
                 
-                while (this.match(TokenType.COMMA) && this.peek().line === startLine) {
+                while (this.match(TokenType.COMMA)) {
                     this.advance(); // consume comma
                     this.skipNewlines(true); // skip any whitespace after comma
                     
@@ -1636,11 +1656,12 @@ export class Parser {
             }
             // Index/history operator
             else if (this.match(TokenType.LBRACKET)) {
-                // If this looks like tuple destructuring [a, b, c] = ..., it's a new
-                // statement, not a postfix index on the previous expression.
-                // This happens after block expressions like switch where DEDENT is
-                // immediately followed by LBRACKET with no intervening NEWLINE.
-                if (this.isTupleDestructuring()) {
+                // A `[` that opens a new line is a new statement (`[a, b] = f()`
+                // or a tuple `[a, b]` returned after a switch/if expression), not
+                // an index on the previous expression. A block expression's
+                // closing DEDENT swallows the NEWLINE that would otherwise end
+                // the expression, so check the line structure directly.
+                if (this.startsNewLine()) {
                     break;
                 }
                 this.advance();
