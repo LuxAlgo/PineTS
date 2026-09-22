@@ -74,7 +74,12 @@ export function highest(context: any) {
             return NaN;
         }
 
-        const validValues = window.filter((v) => !isNaN(v) && v !== undefined);
+        // TradingView resets the window at na: only the bars since the most recent na
+        // take part (the window is newest → oldest, so that is the prefix before the
+        // first na), and an na on the current bar yields na
+        // (tests/namespaces/ta/na-window-semantics.test.ts).
+        const firstNa = window.findIndex((v) => v === undefined || isNaN(v));
+        const validValues = firstNa === -1 ? window : window.slice(0, firstNa);
         if (validValues.length === 0) {
             return NaN;
         }
