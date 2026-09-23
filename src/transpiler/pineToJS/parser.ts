@@ -309,6 +309,8 @@ export class Parser {
     parse() {
         const body = [];
 
+        this.collectTopLevelFunctionNames();
+
         while (!this.match(TokenType.EOF)) {
             this.skipNewlines();
             
@@ -327,6 +329,24 @@ export class Parser {
         }
 
         return new Program(body);
+    }
+
+    // Pine keeps functions and variables in separate namespaces, so a variable may
+    // share a function's name even when it is declared before the function.
+    private collectTopLevelFunctionNames() {
+        let depth = 0;
+        for (let i = 0; i < this.tokens.length; i++) {
+            const t = this.tokens[i];
+            if (t.type === TokenType.INDENT) depth++;
+            else if (t.type === TokenType.DEDENT) depth--;
+            const atLineStart = i === 0 || this.tokens[i - 1].type === TokenType.NEWLINE || this.tokens[i - 1].type === TokenType.DEDENT;
+            if (depth !== 0 || !atLineStart || t.type !== TokenType.IDENTIFIER) continue;
+            this.pos = i;
+            if (!this.isFunctionDeclaration()) continue;
+            const hasReturnType = this.peek(1).type !== TokenType.LPAREN;
+            this.functionNames.add(this.peek(hasReturnType ? 1 : 0).value);
+        }
+        this.pos = 0;
     }
 
     // Parse statement
@@ -493,10 +513,6 @@ export class Parser {
                 i++;
             }
 
-            // Skip newlines
-            while (this.peek(i).type === TokenType.NEWLINE) i++;
-
-            // Check for =>
             return this.peek(i).type === TokenType.OPERATOR && this.peek(i).value === '=>';
         } finally {
             this.pos = saved;
@@ -649,6 +665,15 @@ export class Parser {
 
         let varType = null;
         let name = null;
+
+        // `var const int x = 1` — a type qualifier may sit between the keyword and the type.
+        if (
+            this.peek().type === TokenType.IDENTIFIER &&
+            ['const', 'simple', 'series'].includes(this.peek().value) &&
+            this.peek(1).type === TokenType.IDENTIFIER
+        ) {
+            this.advance();
+        }
 
         // Check for type: var type name = ... or var name = ...
         // Pattern 1: var IDENTIFIER IDENTIFIER = ... (typed)
