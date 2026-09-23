@@ -62,11 +62,37 @@ export const Keywords = new Set([
     'to',
     'by',
     'in',
+    'as',
     'import',
     'export',
     'method',
-    'extends',
     'enum',
+]);
+
+// Keywords that TradingView treats as reserved only where they introduce a
+// declaration (`type Foo`, `method bar(...)`, `enum E`) — everywhere else they
+// are ordinary identifiers: `type = close`, `method(x) => x`, `int type = 0`.
+// The lexer downgrades them to IDENTIFIER outside the declaration position.
+export const ContextualKeywords = new Set(['type', 'method', 'enum']);
+
+// Words TradingView rejects as variable / function / parameter / field / type
+// names with `"X" cannot be used as a variable or function name.` even though
+// they carry no syntax of their own (v5 migration guide "reserved words" list).
+// They lex as IDENTIFIER — `text` is still a valid named argument
+// (`label.new(..., text="...")`) — and are rejected at declaration sites only.
+export const ReservedWords = new Set([
+    'catch',
+    'class',
+    'do',
+    'ellipse',
+    'is',
+    'polygon',
+    'range',
+    'return',
+    'struct',
+    'text',
+    'throw',
+    'try',
 ]);
 
 // Multi-character operators
