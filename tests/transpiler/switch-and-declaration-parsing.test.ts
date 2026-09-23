@@ -8,7 +8,7 @@
  *   - `var const` / `varip const` declarations
  *   - a variable declared before a user function with the same name
  *
- * Expected values are computed by hand from the Pine semantics. The scripts only
+ * Every expected value below matches TradingView (Sep 2026). The scripts only
  * depend on `bar_index`, so the values are feed-independent.
  */
 
