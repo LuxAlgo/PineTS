@@ -4,7 +4,7 @@
 /**
  * Indentation and line-wrapping parity with TradingView.
  *
- * Every script below was run on TradingView (tv-extractor, Sep 2026) and the
+ * Every script below was run on TradingView (Sep 2026) and the
  * expected values / accept-reject verdicts come from there. The rules the
  * probes established:
  *

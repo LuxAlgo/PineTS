@@ -4,7 +4,7 @@
  * `na` handling in the window functions `ta.highest` / `ta.lowest` /
  * `ta.highestbars` / `ta.lowestbars` and in `ta.pivothigh` / `ta.pivotlow`.
  *
- * Expected values come from TradingView (tv-extractor, Sep 2026): the periodic
+ * Expected values come from TradingView (Sep 2026): the periodic
  * series below was evaluated on BINANCE:BTCUSDT 60 and every one of ~78 periods
  * agreed. Two rules explain every cell:
  *

@@ -3,7 +3,7 @@
 /**
  * Tie handling in `ta.pivothigh` / `ta.pivotlow` and `ta.highestbars` / `ta.lowestbars`.
  *
- * Expected values come from TradingView (tv-extractor, Sep 2026): the periodic series
+ * Expected values come from TradingView (Sep 2026): the periodic series
  * below was evaluated on BINANCE:BTCUSDT 60 and every one of ~89 periods agreed.
  *
  *   - Pivots are ASYMMETRIC. A bar equal to the candidate on the LEFT does not

@@ -64,7 +64,7 @@ The Stage 1 transpiler follows a standard 3-stage compiler pipeline:
 
 The Lexer tokenizes the input string. Its most critical role is handling **Python-style significant indentation**, which is fundamental to Pine Script scopes.
 
--   **Indentation Tracking**: Maintains an indentation stack to emit virtual `INDENT` and `DEDENT` tokens. The rules mirror TradingView (verified with `tv-extractor`):
+-   **Indentation Tracking**: Maintains an indentation stack to emit virtual `INDENT` and `DEDENT` tokens. The rules mirror TradingView (verified against it):
     -   Indentation is measured in columns; a tab is four columns, fixed (not a tab stop).
     -   A width that is a multiple of four is a block level. One level deeper than the enclosing block emits `INDENT`; more than one is an error, as on TradingView.
     -   Any other width is **line wrapping**: the line is spliced onto the previous logical line (the separating `NEWLINE` / comment tokens are dropped), whatever it starts with — `- r2`, `.size()`, `2`. Its first token is tagged `wrapped` so the parser can explain a resulting syntax error.
