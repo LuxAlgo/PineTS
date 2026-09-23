@@ -4,7 +4,7 @@
 import * as walk from 'acorn-walk';
 import ScopeManager, { normalizePineBaseType } from '../analysis/ScopeManager';
 import { ASTFactory, CONTEXT_NAME } from '../utils/ASTFactory';
-import { KNOWN_NAMESPACES, NAMESPACES_LIKE, ASYNC_METHODS, CALLSITE_ID_NAMESPACES } from '../settings';
+import { KNOWN_NAMESPACES, NAMESPACES_LIKE, ASYNC_METHODS, CALLSITE_ID_NAMESPACES, BUILTIN_METHOD_NAMES } from '../settings';
 
 const UNDEFINED_ARG = {
     type: 'Identifier',
@@ -1701,7 +1701,22 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         // `someLine.delete()`.
         const isReceiverUdtInstance = !!_obj.name && scopeManager.isUdtInstance(_obj.name);
 
-        if (isUserFunction && isUserMethod && !scopeManager.isContextBound(methodName) && (receiverTypeMatches || isReceiverUdtInstance)) {
+        // Receivers whose static type cannot be inferred: an untyped local
+        // (`x = bar_index * 1.0`), a parenthesized expression, or the result of a
+        // previous call in a chain (`p.next().next()`). TradingView resolves these
+        // fine, so falling through to the built-in leaves the call unbound. The
+        // dispatch is only safe for a method name Pine does not also expose as a
+        // built-in member — with a colliding name (`delete`, `get`, `size`, …) an
+        // unknown receiver stays genuinely ambiguous and must keep requiring a
+        // positive type match.
+        const dispatchOnUnknownReceiver = receiverBaseType === undefined && !BUILTIN_METHOD_NAMES.has(methodName);
+
+        if (
+            isUserFunction &&
+            isUserMethod &&
+            !scopeManager.isContextBound(methodName) &&
+            (receiverTypeMatches || isReceiverUdtInstance || dispatchOnUnknownReceiver)
+        ) {
             // It's a user variable/function.
             // Transform obj.method(args) -> method(obj, args)
             // 1. Get the object (first arg)
@@ -1718,19 +1733,14 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
             // 4. Transform the object (it becomes the first argument)
             // We need to ensure it's properly scoped/wrapped if it's a variable
             // transformIdentifierForParam might be needed if it's an identifier
-            let transformedObj = obj;
-            if (obj.type === 'Identifier') {
-                 // Use transformIdentifier logic but we need it as an argument
-                 // transformFunctionArgument handles identifiers correctly
-                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
-            } else if (obj.type === 'CallExpression') {
-                 // If object is a call expression, transform it first
+            // A call receiver (`x.twice().twice()`) is transformed first so the
+            // inner dispatch resolves before it is wrapped as an argument. Every
+            // receiver shape — identifier, UDT field chain, call result, or any
+            // other expression like `(bar_index + 0.0)` — is then wrapped the same way.
+            if (obj.type === 'CallExpression') {
                  transformCallExpression(obj, scopeManager);
-                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
-            } else if (obj.type === 'MemberExpression') {
-                 // UDT field chain receiver (e.g. `bs.is_equity.to_sparkline()`)
-                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
             }
+            const transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
 
             // 5. Construct the new call: method(obj, ...args)
             // We need to use $.call(method, id, obj, ...args) pattern because it's a user function

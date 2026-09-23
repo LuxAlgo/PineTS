@@ -48,6 +48,8 @@ export class Parser {
     // really parameters of the enclosing function and just happen to share a
     // name with some other user function.
     private paramScopes: Set<string>[] = [];
+    // Counter for the temps that carry a trailing loop's value out of a function body.
+    private loopValueCounter: number = 0;
     constructor(tokens: Token[]) {
         this.tokens = tokens;
         this.pos = 0;
@@ -1058,10 +1060,14 @@ export class Parser {
     parseFunctionBody() {
         const statements = [];
 
-        // Check if it's a single expression (no INDENT)
+        // Single-line body (no INDENT). It is not necessarily a bare expression:
+        // `f(a) => b = a * 2` and `f(a) => b = a * 2, c = b + 1, b + c` are both valid
+        // Pine, so route it through the same statement/sequence parser as a block body.
         if (!this.match(TokenType.INDENT)) {
-            const expr = this.parseExpression();
-            return new BlockStatement([new ReturnStatement(expr)]);
+            const stmts = this.parseStatementOrSequence();
+            const body = Array.isArray(stmts) ? stmts : stmts ? [stmts] : [];
+            if (body.length > 0) this._addImplicitReturn(body);
+            return new BlockStatement(body);
         }
 
         this.advance(); // consume INDENT
@@ -1094,33 +1100,77 @@ export class Parser {
     }
 
     /**
-     * Recursively convert the last expression in a statement list to a ReturnStatement.
-     * Handles if/else chains by adding return to each branch's last expression.
+     * Recursively convert the last statement in a statement list to a ReturnStatement.
+     *
+     * A Pine function evaluates to the value of its last statement, whatever kind of
+     * statement that is — not just a bare expression. `f(a) =>\n    b = a * 2` returns
+     * `a * 2` on TradingView, and a trailing loop returns whatever its body produced on
+     * the final iteration. Handles if/else chains by adding a return to each branch.
      */
     private _addImplicitReturn(statements: any[]): void {
         const last = statements[statements.length - 1];
-        if (last.type === 'ExpressionStatement') {
-            statements[statements.length - 1] = new ReturnStatement(last.expression);
-        } else if (last.type === 'IfStatement') {
-            this._addImplicitReturnToIf(last);
+        if (last.type === 'ForStatement' || last.type === 'WhileStatement') {
+            this._addImplicitReturnToLoop(statements);
+        } else {
+            this._emitLastValue(statements, (value) => new ReturnStatement(value));
         }
     }
 
-    private _addImplicitReturnToIf(node: any): void {
-        // Add return to the consequent branch
-        if (node.consequent && node.consequent.type === 'BlockStatement' && node.consequent.body.length > 0) {
-            this._addImplicitReturn(node.consequent.body);
-        }
-        // Add return to the alternate branch (else / else if)
-        if (node.alternate) {
-            if (node.alternate.type === 'IfStatement') {
-                // else if — recurse
-                this._addImplicitReturnToIf(node.alternate);
-            } else if (node.alternate.type === 'BlockStatement' && node.alternate.body.length > 0) {
-                // else block
-                this._addImplicitReturn(node.alternate.body);
+    /**
+     * Give a trailing loop a value: Pine yields whatever the loop body's last statement
+     * produced on its final iteration, or na when the body never ran (or the final
+     * iteration skipped it). Captures that into a temp reset at the top of each iteration.
+     */
+    private _addImplicitReturnToLoop(statements: any[]): void {
+        const loop = statements[statements.length - 1];
+        if (loop.body?.type !== 'BlockStatement' || loop.body.body.length === 0) return;
+
+        const tmp = `__loopValue_${this.loopValueCounter++}`;
+        const na = () => new Identifier('na');
+        const assignTmp = (value: any) => new ExpressionStatement(new AssignmentExpression('=', new Identifier(tmp), value));
+
+        if (!this._emitLastValue(loop.body.body, assignTmp)) return;
+        loop.body.body.unshift(assignTmp(na()));
+        statements.splice(statements.length - 1, 0, new VariableDeclaration([new VariableDeclarator(new Identifier(tmp), na())], VariableDeclarationKind.LET));
+        statements.push(new ReturnStatement(new Identifier(tmp)));
+    }
+
+    /**
+     * Rewrite the last statement of `statements` so its value flows into `emit`
+     * (a `return`, or an assignment to a temp). Recurses into if/else branches.
+     * Returns false when the last statement has no usable value (`break`, a loop, …).
+     */
+    private _emitLastValue(statements: any[], emit: (value: any) => any): boolean {
+        const last = statements[statements.length - 1];
+        if (last.type === 'ExpressionStatement') {
+            const expr = last.expression;
+            if (expr?.type === 'Identifier' && (expr.name === 'break' || expr.name === 'continue')) return false;
+            // An assignment's value is the assigned variable; read it back rather than
+            // nesting the assignment inside the emitted statement.
+            if (expr?.type === 'AssignmentExpression' && expr.left?.type === 'Identifier') {
+                statements.push(emit(new Identifier(expr.left.name)));
+            } else {
+                statements[statements.length - 1] = emit(expr);
             }
+            return true;
         }
+        if (last.type === 'VariableDeclaration') {
+            const declarator = last.declarations[last.declarations.length - 1];
+            if (declarator?.id?.type !== 'Identifier') return false;
+            statements.push(emit(new Identifier(declarator.id.name)));
+            return true;
+        }
+        if (last.type === 'IfStatement') {
+            let emitted = false;
+            for (let branch = last; branch; branch = branch.alternate?.type === 'IfStatement' ? branch.alternate : null) {
+                const blocks = [branch.consequent, branch.alternate?.type === 'BlockStatement' ? branch.alternate : null];
+                for (const block of blocks) {
+                    if (block?.body?.length > 0) emitted = this._emitLastValue(block.body, emit) || emitted;
+                }
+            }
+            return emitted;
+        }
+        return false;
     }
 
     // Parse statement or comma-separated sequence
