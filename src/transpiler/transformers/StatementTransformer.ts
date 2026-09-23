@@ -1136,6 +1136,15 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                         return ASTFactory.createGetCall(element, 0);
                     }
 
+                    // Function parameters stay plain JS locals — scoping them to
+                    // `$.let.<param>` resolves to nothing, so a bare parameter in a
+                    // returned tuple (`f(a) => [a, a * 2]`) came back as undefined.
+                    if (scopeManager.isLocalSeriesVar(element.name)) {
+                        const plainIdentifier = ASTFactory.createIdentifier(element.name);
+                        plainIdentifier._skipTransformation = true;
+                        return ASTFactory.createGetCall(plainIdentifier, 0);
+                    }
+
                     // Transform non-context-bound variables
                     return createScopedVariableAccess(element.name, scopeManager);
                 } else if (element.type === 'MemberExpression') {
