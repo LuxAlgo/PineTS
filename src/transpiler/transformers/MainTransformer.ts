@@ -222,6 +222,38 @@ export function transformEqualityChecks(ast: any): void {
     );
 }
 
+// Pine v5 `and` / `or` inside a lazy operand (tagged `_strictLogical` by
+// LazyOperandPass) → `$.pine.math.__and(l, r)` / `__or(l, r)`. A call evaluates
+// both arguments, so the right operand is not short-circuited away as native
+// `&&` / `||` would, while the whole expression still only runs when the
+// enclosing `?:` branch is taken. Must run after the transformation pass so
+// the operands are already lowered.
+const STRICT_LOGICAL_METHODS: Record<string, string> = {
+    '&&': '__and',
+    '||': '__or',
+};
+
+export function transformStrictLogicalOperators(ast: any): void {
+    const baseVisitor = { ...walk.base, LineComment: () => {} };
+    walk.simple(
+        ast,
+        {
+            LogicalExpression(node: any) {
+                if (!node._strictLogical) return;
+                const method = STRICT_LOGICAL_METHODS[node.operator];
+                if (!method) return;
+                const callExpr = ASTFactory.createMathCompareCall(method, node.left, node.right);
+                callExpr._transformed = true;
+                Object.assign(node, callExpr);
+                delete node.operator;
+                delete node.left;
+                delete node.right;
+            },
+        },
+        baseVisitor
+    );
+}
+
 // Pine's `display.*` values form a SET type: `+` is a union and `-` a difference
 // (`display.all - display.price_scale`). The runtime keeps them as member-name strings,
 // so native `-` would yield NaN and `+` a raw concatenation; route both to the set
