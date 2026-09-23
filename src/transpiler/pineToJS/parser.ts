@@ -50,6 +50,14 @@ export class Parser {
     private paramScopes: Set<string>[] = [];
     // Counter for the temps that carry a trailing loop's value out of a function body.
     private loopValueCounter: number = 0;
+    // Tuple size returned by user functions whose last statement is a tuple
+    // (`f(a) => [a, a * 2]`); null when the name is overloaded with other shapes.
+    private functionTupleArity: Map<string, number | null> = new Map();
+    // Parameter names of user functions, for TradingView's tuple-argument error;
+    // null when the name is overloaded.
+    private functionParamNames: Map<string, string[] | null> = new Map();
+    // Opening `[` of each tuple literal, for errors reported at the literal.
+    private tupleLiteralStart: WeakMap<object, Token> = new WeakMap();
     constructor(tokens: Token[]) {
         this.tokens = tokens;
         this.pos = 0;
@@ -149,7 +157,7 @@ export class Parser {
      */
     private startsNewLine(): boolean {
         const token = this.peek();
-        if (token.wrapped) return false;
+        if (token.wrapped || token.grouped) return false;
         let i = this.pos - 1;
         while (i >= 0 && this.tokens[i].type === TokenType.DEDENT) i--;
         if (i < 0) return true;
@@ -203,6 +211,43 @@ export class Parser {
     private assertDeclarableName(id: any, startToken: Token): void {
         if (id?.type === 'Identifier' && ReservedWords.has(id.name)) {
             throw this.reservedNameError(startToken);
+        }
+    }
+
+    /** `line:column` of a token's first character (tokens carry the column just past their end). */
+    private startOf(token: Token): string {
+        return `${token.line}:${token.column - String(token.value).length}`;
+    }
+
+    /** `ta.sma` for a callee built from identifiers only, otherwise null. */
+    private dottedName(node: any): string | null {
+        if (node?.type === 'Identifier') return node.name;
+        if (node?.type === 'MemberExpression' && !node.computed && node.property?.type === 'Identifier') {
+            const object = this.dottedName(node.object);
+            return object === null ? null : `${object}.${node.property.name}`;
+        }
+        return null;
+    }
+
+    /** Tuple size returned by a call to a user function, when statically known. */
+    private tupleArityOf(init: any): number | undefined {
+        if (init?.type !== 'CallExpression' || init.callee?.type !== 'Identifier') return undefined;
+        return this.functionTupleArity.get(init.callee.name) ?? undefined;
+    }
+
+    /** Pine has no tuple literals outside a local block's return value: `u = [a, b]`, `[u, v] = [a, b]`. */
+    private assertNotTupleLiteral(init: any): void {
+        if (init?.type === 'ArrayExpression') {
+            const open = this.tupleLiteralStart.get(init);
+            throw new Error(`Syntax error at input "["${open ? ` at ${this.startOf(open)}` : ''}`);
+        }
+    }
+
+    /** `u = f()` where `f` returns a tuple, or `u = [a, b]`: TradingView rejects the declaration. */
+    private assertNotTupleAssignment(id: any, init: any, startToken: Token): void {
+        this.assertNotTupleLiteral(init);
+        if (id?.type === 'Identifier' && this.tupleArityOf(init) !== undefined) {
+            throw new Error(`Invalid assignment. Cannot assign a tuple to a variable "${id.name}". at ${this.startOf(startToken)}`);
         }
     }
 
@@ -365,6 +410,7 @@ export class Parser {
                     // Simple assignment with = creates variable declaration
                     if (op === '=' && expr.type === 'Identifier') {
                         this.assertDeclarableName(expr, startToken);
+                        this.assertNotTupleAssignment(expr, right, startToken);
                         stmt = new VariableDeclaration([new VariableDeclarator(expr, right)], VariableDeclarationKind.LET);
                     } else {
                         // Other assignments
@@ -960,6 +1006,12 @@ export class Parser {
         const id = new Identifier(name);
         if (returnType) id.returnType = returnType;
 
+        const last = body.body[body.body.length - 1];
+        const returned = last?.type === 'ReturnStatement' ? last.argument : null;
+        const arity = returned?.type === 'ArrayExpression' ? returned.elements.length : this.tupleArityOf(returned) ?? null;
+        this.functionTupleArity.set(name, this.functionTupleArity.has(name) && this.functionTupleArity.get(name) !== arity ? null : arity);
+        this.functionParamNames.set(name, this.functionParamNames.has(name) ? null : [...paramFrame]);
+
         return new FunctionDeclaration(id, params, body, returnType);
     }
 
@@ -1235,6 +1287,7 @@ export class Parser {
                                 const right = this.parseExpression();
                                 if (op === '=' && expr.type === 'Identifier') {
                                     this.assertDeclarableName(expr, startToken);
+                                    this.assertNotTupleAssignment(expr, right, startToken);
                                     declarations.push(new VariableDeclaration([new VariableDeclarator(expr, right)], VariableDeclarationKind.LET));
                                 } else {
                                     declarations.push(new ExpressionStatement(new AssignmentExpression(op === ':=' ? '=' : op, expr, right)));
@@ -1271,6 +1324,7 @@ export class Parser {
                     // Simple assignment with = creates variable declaration
                     if (op === '=' && expr.type === 'Identifier') {
                         this.assertDeclarableName(expr, startToken);
+                        this.assertNotTupleAssignment(expr, right, startToken);
                         sequenceItems.push(new VariableDeclaration([new VariableDeclarator(expr, right)], VariableDeclarationKind.LET));
                     } else {
                         sequenceItems.push(new ExpressionStatement(new AssignmentExpression(op === ':=' ? '=' : op, expr, right)));
@@ -1509,7 +1563,9 @@ export class Parser {
         return new BlockStatement(statements);
     }
 
-    // Check if current position looks like tuple destructuring
+    // Check if current position looks like tuple destructuring.
+    // Also matches the shapes TradingView rejects — a type keyword before a name
+    // (`[int a, b] = ...`) and `:=` — so parseTupleDestructuring reports them.
     isTupleDestructuring() {
         if (!this.match(TokenType.LBRACKET)) return false;
 
@@ -1523,6 +1579,7 @@ export class Parser {
             // Expect identifier
             if (this.peek(i).type !== TokenType.IDENTIFIER) return false;
             i++;
+            if (this.peek(i).type === TokenType.IDENTIFIER) i++;
 
             // Skip newlines
             while (this.peek(i).type === TokenType.NEWLINE) i++;
@@ -1542,20 +1599,30 @@ export class Parser {
         // Skip newlines after ]
         while (this.peek(i).type === TokenType.NEWLINE) i++;
 
-        // Check for =
-        return this.peek(i).type === TokenType.OPERATOR && this.peek(i).value === '=';
+        // Check for = (or := , rejected by parseTupleDestructuring)
+        return this.peek(i).type === TokenType.OPERATOR && (this.peek(i).value === '=' || this.peek(i).value === ':=');
     }
 
     // Parse tuple destructuring
     parseTupleDestructuring() {
-        this.expect(TokenType.LBRACKET);
+        const open = this.expect(TokenType.LBRACKET);
         const elements = [];
+        const declared = new Set<string>();
 
         while (!this.match(TokenType.RBRACKET)) {
             this.skipNewlines();
             // TradingView does not apply the reserved-word check to tuple
             // targets: `[text, b] = f()` compiles. Mirror that.
-            let name = this.expect(TokenType.IDENTIFIER).value;
+            const nameToken = this.expect(TokenType.IDENTIFIER);
+            if (this.match(TokenType.IDENTIFIER)) {
+                // Tuple declarations take no type keywords: `[int a, int b] = f()`.
+                throw new Error(`Mismatched input "${this.peek().value}" expecting set "]" at ${this.startOf(this.peek())}`);
+            }
+            let name = nameToken.value;
+            if (name !== '_') {
+                if (declared.has(name)) throw new Error(`"${name}" is already defined at ${this.startOf(open)}`);
+                declared.add(name);
+            }
             if (this.functionNames.has(name)) {
                 name = name + '_var';
             }
@@ -1568,9 +1635,21 @@ export class Parser {
 
         this.expect(TokenType.RBRACKET);
         this.skipNewlines();
+        if (this.match(TokenType.OPERATOR, ':=')) {
+            throw new Error(`Mismatched input ":=" expecting set "=" at ${this.startOf(this.peek())}`);
+        }
         this.expect(TokenType.OPERATOR, '=');
         this.skipNewlines(true);
         const init = this.parseExpression();
+
+        this.assertNotTupleLiteral(init);
+        const arity = this.tupleArityOf(init);
+        if (arity !== undefined && arity !== elements.length) {
+            throw new Error(
+                `Syntax error: The quantities of tuple elements on each side of the assignment operator do not match. ` +
+                    `The right side has ${arity} but the left side has ${elements.length}. at ${this.startOf(open)}`
+            );
+        }
 
         return new VariableDeclaration([new VariableDeclarator(new ArrayPattern(elements), init)], VariableDeclarationKind.CONST);
     }
@@ -1584,12 +1663,20 @@ export class Parser {
         let expr = this.parseLogicalOr();
 
         if (this.match(TokenType.OPERATOR, '?')) {
-            this.advance();
+            const question = this.advance();
             this.skipNewlines(true);
             const consequent = this.parseExpression();
             this.expect(TokenType.COLON);
             this.skipNewlines(true);
             const alternate = this.parseExpression();
+            // Only local blocks (functions, if/switch, loops) return tuples.
+            const tuple = [consequent, alternate].find((branch) => branch.type === 'ArrayExpression');
+            if (tuple) {
+                throw new Error(
+                    'Ternary operations cannot return tuples. Convert the expression into an `if` or `switch` conditional structure ' +
+                        `to return a tuple. at ${this.startOf(this.tupleLiteralStart.get(tuple) ?? question)}`
+                );
+            }
             return new ConditionalExpression(expr, consequent, alternate);
         }
 
@@ -1803,13 +1890,33 @@ export class Parser {
     }
 
     parseCallExpression(callee) {
+        const calleeToken = this.tokens[this.pos - 1];
         this.expect(TokenType.LPAREN);
         const args = [];
         const namedArgs = [];
 
+        // Only request.*() expression and input.*() options arguments accept a tuple.
+        const calleeName = this.dottedName(callee);
+        const acceptsTuple = calleeName !== null && (calleeName === 'input' || /^(request|input)\./.test(calleeName));
+        const rejectTupleArg = (value: any, token: Token, paramName: string | undefined) => {
+            if (value.type !== 'ArrayExpression' || acceptsTuple) return;
+            if (paramName !== undefined) {
+                throw new Error(
+                    `The "${paramName}" parameter of the "${calleeName}()" function cannot accept a tuple as an argument. ` +
+                        `Pass a single argument to this parameter. at ${this.startOf(calleeToken)}`
+                );
+            }
+            throw new Error(
+                `Cannot call "${calleeName ?? 'function'}" with a tuple argument. Only the expression parameter of request.*() ` +
+                    `functions and the options parameter of input.*() functions accept tuples. at ${this.startOf(token)}`
+            );
+        };
+        const userParams = calleeName !== null ? this.functionParamNames.get(calleeName) : undefined;
+
         while (!this.match(TokenType.RPAREN)) {
             this.skipNewlines();
             if (this.match(TokenType.RPAREN)) break;
+            const argToken = this.peek();
 
             // Check for named argument (name = value)
             // Note: 'name' can be an IDENTIFIER or KEYWORD (like 'type')
@@ -1821,10 +1928,14 @@ export class Parser {
                 const name = this.advance().value;
                 this.advance(); // =
                 this.skipNewlines();
+                const valueToken = this.peek();
                 const value = this.parseExpression();
+                rejectTupleArg(value, valueToken, userParams ? name : undefined);
                 namedArgs.push(new Property(new Identifier(name), value));
             } else {
-                args.push(this.parseExpression());
+                const value = this.parseExpression();
+                rejectTupleArg(value, argToken, userParams?.[args.length]);
+                args.push(value);
             }
 
             if (this.match(TokenType.COMMA)) {
@@ -1922,7 +2033,7 @@ export class Parser {
     }
 
     parseArrayLiteral() {
-        this.expect(TokenType.LBRACKET);
+        const open = this.expect(TokenType.LBRACKET);
         const elements = [];
 
         while (!this.match(TokenType.RBRACKET)) {
@@ -1938,7 +2049,9 @@ export class Parser {
         }
 
         this.expect(TokenType.RBRACKET);
-        return new ArrayExpression(elements);
+        const tuple = new ArrayExpression(elements);
+        this.tupleLiteralStart.set(tuple, open);
+        return tuple;
     }
 
     parseIfExpression() {

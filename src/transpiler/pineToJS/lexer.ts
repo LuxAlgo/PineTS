@@ -576,11 +576,14 @@ export class Lexer {
                 this.advance();
                 this.addToken(TokenType.RPAREN, ch);
                 return true;
-            case '[':
+            case '[': {
+                const grouped = this.parenDepth > 0 || this.bracketDepth > 0 || this.braceDepth > 0;
                 this.bracketDepth++;
                 this.advance();
                 this.addToken(TokenType.LBRACKET, ch);
+                this.tokens[this.tokens.length - 1].grouped = grouped;
                 return true;
+            }
             case ']':
                 this.bracketDepth--;
                 this.advance();

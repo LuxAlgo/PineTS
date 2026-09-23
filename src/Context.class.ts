@@ -606,6 +606,24 @@ export class Context {
     //#region [Runtime functions] ===========================
 
     /**
+     * Normalizes the right-hand side of a tuple declaration (`[a, b] = ...`) to the
+     * double-bracket tuple convention `[[a, b]]` expected by `init()`.
+     *
+     * Function returns and request.* results are already double-bracketed, but a
+     * tuple produced by an if / switch / loop expression arrives flat (`[a, b]`),
+     * and a local block that returned nothing (an `if` without `else`, a loop that
+     * never ran) arrives as na: Pine yields na for every item in that case.
+     * No Pine value is a JS array (Pine arrays, maps, UDTs are objects), so a flat
+     * array here is always a single-bracket tuple, never a series.
+     */
+    toTuple(value: any, arity: number): any[][] {
+        if (Array.isArray(value)) {
+            return Array.isArray(value[0]) ? value : [value];
+        }
+        return [new Array(arity).fill(NaN)];
+    }
+
+    /**
      * this function is used to initialize the target variable with the source array
      * this array will represent a time series and its values will be shifted at runtime in order to mimic Pine script behavior
      * @param trg - the target variable name : used internally to maintain the series in the execution context

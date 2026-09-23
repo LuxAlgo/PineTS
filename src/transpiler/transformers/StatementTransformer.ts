@@ -662,6 +662,12 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                 rightSide = decl.init;
             } else if (kind === 'var') {
                 rightSide = ASTFactory.createInitVarCall(targetVarRef, decl.init);
+            } else if (decl._tupleArity !== undefined) {
+                const toTuple = ASTFactory.createCallExpression(
+                    ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('toTuple')),
+                    [decl.init, ASTFactory.createLiteral(decl._tupleArity)]
+                );
+                rightSide = ASTFactory.createInitCall(targetVarRef, toTuple);
             } else {
                 rightSide = ASTFactory.createInitCall(
                     targetVarRef,
