@@ -1168,7 +1168,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     return $.precision([[$.get($$.const.fn1_oo, 0), $.get($$.const.fn1_cc, 0)]]);
   }
   {
-    $.const.glb1_temp_1 = $.init($.const.glb1_temp_1, $.call(foo, "_fn0"));
+    $.const.glb1_temp_1 = $.init($.const.glb1_temp_1, $.toTuple($.call(foo, "_fn0"), 2));
     $.const.glb1_res = $.init($.const.glb1_res, $.get($.const.glb1_temp_1, 0)[0]);
     $.const.glb1_data = $.init($.const.glb1_data, $.get($.const.glb1_temp_1, 0)[1]);
   }

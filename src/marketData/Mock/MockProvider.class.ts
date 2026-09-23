@@ -230,8 +230,9 @@ export class MockProvider extends BaseProvider<MockProviderConfig> {
             // Load data from file
             const allData = this.loadDataFromFile(dataFile);
 
-            // Filter and limit data
-            const filteredData = this.filterData(allData, sDate, eDate, limit);
+            // Filter and limit data. Copy the candles: normalizeCloseTime() mutates them,
+            // and the originals are shared with the file cache and every earlier caller.
+            const filteredData = this.filterData(allData, sDate, eDate, limit).map((kline) => ({ ...kline }));
 
             // Normalize closeTime to TV convention (nextBar.openTime)
             this.normalizeCloseTime(filteredData);

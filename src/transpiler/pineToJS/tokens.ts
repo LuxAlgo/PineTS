@@ -107,6 +107,12 @@ export class Token {
      */
     public wrapped: { width: number; fromLine: number | null; column: number } | null = null;
 
+    /**
+     * Set on a `[` lexed inside ( ) / [ ] / { }, where newlines are not
+     * emitted: whatever line it sits on, it cannot open a new statement.
+     */
+    public grouped = false;
+
     constructor(public type: string, public value: any, public line: number, public column: number, public indent = 0, public raw: string = null) {}
 
     // toString() {
