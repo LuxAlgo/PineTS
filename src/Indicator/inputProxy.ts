@@ -8,11 +8,12 @@ import { buildKeyedProxy, type KeyedSchemaEntry } from './keyedProxy';
  * Build the live `.input` view exposed on an `Indicator` instance.
  *
  * Keyed by **varId** (the assigned variable name) as the canonical, primary
- * override key, with the input's **title** registered as a secondary alias.
- * This makes every input overridable by a stable, unique handle — robust to
- * empty or duplicated titles — while `.input['Title']` keeps working for the
- * common case (unique, non-empty titles). When two inputs share a title, the
- * title aliases the first; the second is reachable only by its varId.
+ * override key, with the input's **title** and declaration **id** (`in_N`)
+ * registered as aliases. `.input['Title']` keeps working for the common case
+ * (unique, non-empty titles). When two inputs share a title, the title
+ * aliases the first. An input without a free varId or title (untitled
+ * argument inputs, a variable assigned from several inputs) is keyed by its
+ * id, which is always unique.
  *
  * Backing machinery lives in `keyedProxy.ts` and is shared with `.prop`.
  */
@@ -26,10 +27,11 @@ export function buildInputProxy(
 } {
     const metaByKey = new Map<string, IPineInput>();
     const entries: KeyedSchemaEntry[] = [];
+    const ids = new Set(metas.map((m) => m.id));
     for (const m of metas) {
-        const key = m.varId ?? m.title; // prefer varId; fall back to title
-        if (!key) continue;             // no handle at all → not overridable
-        const aliases = m.title && m.title !== key ? [m.title] : undefined;
+        // prefer varId, then title, then the always-unique id
+        const key = [m.varId, m.title].find((k) => k && !metaByKey.has(k) && !ids.has(k)) ?? m.id;
+        const aliases = [m.title, m.id].filter((a): a is string => !!a && a !== key);
         metaByKey.set(key, m);
         entries.push({
             key,
@@ -38,7 +40,7 @@ export function buildInputProxy(
             options: m.options,
             minval: m.minval,
             maxval: m.maxval,
-            aliases,
+            aliases: aliases.length ? aliases : undefined,
         });
     }
     const { proxy, values } = buildKeyedProxy(entries, 'Indicator.input', onSet, undefined, 'input key');

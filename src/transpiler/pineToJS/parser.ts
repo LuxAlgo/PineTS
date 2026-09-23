@@ -214,6 +214,23 @@ export class Parser {
         }
     }
 
+    /**
+     * A function parameter's default must be a literal or a built-in variable:
+     * TradingView rejects calls (`a = input(14)`, `a = math.max(1, 2)`) and
+     * calculations (`a = 2 + 2`). `startToken` is the parameter's first token,
+     * where TradingView reports the error.
+     */
+    private assertParamDefault(value: any, startToken: Token): void {
+        if (value?.type === 'CallExpression') {
+            throw new Error(`The default value cannot be a function, variable or calculation. at ${this.startOf(startToken)}`);
+        }
+        if (value?.type === 'BinaryExpression' || value?.type === 'LogicalExpression' || value?.type === 'ConditionalExpression') {
+            throw new Error(
+                `The default value assigned to a parameter must be either a literal value (e.g., "5") or a built-in variable (e.g., "close"). at ${this.startOf(startToken)}`
+            );
+        }
+    }
+
     /** `line:column` of a token's first character (tokens carry the column just past their end). */
     private startOf(token: Token): string {
         return `${token.line}:${token.column - String(token.value).length}`;
@@ -959,6 +976,7 @@ export class Parser {
             this.skipNewlines();
             if (this.match(TokenType.RPAREN)) break;
 
+            const paramStart = this.peek();
             let paramType = null;
 
             // Handle type qualifiers (can be multiple: series float, simple int, etc.)
@@ -1001,6 +1019,7 @@ export class Parser {
                 this.advance();
                 this.skipNewlines();
                 const defaultValue = this.parseExpression();
+                this.assertParamDefault(defaultValue, paramStart);
                 params.push(new AssignmentPattern(param, defaultValue));
             } else {
                 params.push(param);
@@ -1057,6 +1076,7 @@ export class Parser {
             this.skipNewlines();
             if (this.match(TokenType.RPAREN)) break;
 
+            const paramStart = this.peek();
             let paramType = null;
 
             // Handle type qualifiers (can be multiple: series float, simple int, etc.)
@@ -1099,6 +1119,7 @@ export class Parser {
                 this.advance();
                 this.skipNewlines();
                 const defaultValue = this.parseExpression();
+                this.assertParamDefault(defaultValue, paramStart);
                 params.push(new AssignmentPattern(param, defaultValue));
             } else {
                 params.push(param);
@@ -2016,7 +2037,9 @@ export class Parser {
             ) {
                 name = name + '_var';
             }
-            return new Identifier(name);
+            const node = new Identifier(name);
+            (node as any)._pos = this.startOf(id);
+            return node;
         }
 
         // Array literal

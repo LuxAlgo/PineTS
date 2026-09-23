@@ -139,7 +139,7 @@ See **[Initialization and Usage → Host Environment (Visible Range)](initializa
 
 ### Reading and writing values
 
-`.input` is a Proxy keyed primarily by **`varId`** — the variable each input is assigned to (`length = input.int(…)` → `"length"`). **Keying by varId is the recommended way to read and override inputs**: the variable name is always present and always unique, so it works even when titles are empty or duplicated. The input's **`title`** also resolves as a *secondary alias* for the common case. The container is frozen — you mutate values per key, but you can't replace the whole object.
+`.input` is a Proxy keyed primarily by **`varId`** — the variable each input is assigned to (`length = input.int(…)` → `"length"`). **Keying by varId is the recommended way to read and override inputs**: it works even when titles are empty or duplicated. The input's **`title`** also resolves as a *secondary alias* for the common case, and every input also answers to its declaration **`id`** (`in_0`, `in_1`, … — see [Where inputs can be declared](#where-inputs-can-be-declared)). The container is frozen — you mutate values per key, but you can't replace the whole object.
 
 ```javascript
 const code = `
@@ -205,12 +205,64 @@ ind.input['Length'];       // → 10  (a shared title aliases the FIRST input, '
 ind.getInputsMeta().length; // → 3  (duplicates and empty-titled inputs all appear)
 ```
 
+### Where inputs can be declared
+
+As on TradingView, an input is declared wherever its call appears — at global scope, inside `if` / `switch` / loop bodies, inside function bodies, or directly as a call argument. Inputs are numbered `in_0`, `in_1`, … in source order (TradingView's input ids) and labelled like the settings dialog, exposed as `name` in `getInputsMeta()`:
+
+- the `title` argument when given (an explicit `""` stays empty);
+- else the variable the input is assigned to, even deep inside the expression (`k := input(14)`, `a = ta.sma(close, input(14))` → `"a"`);
+- else the enclosing function's name (`f() => input(14)` → `"f"`);
+- else `"untitled"` (`plot(ta.sma(close, input(14)))`).
+
+```javascript
+const code = `
+//@version=6
+indicator("Local inputs")
+var k = 0
+if barstate.isfirst
+    k := input(14)
+plot(ta.sma(close, k) - ta.sma(close, input(28)))
+`;
+const ind = new Indicator(code);
+ind.getInputsMeta().map((m) => [m.id, m.name, m.defval]);
+// → [['in_0', 'k', 14], ['in_1', 'untitled', 28]]
+Object.keys(ind.input); // → ['k', 'in_1']
+ind.input['in_1'] = 50; // an untitled input is addressed by its id
+```
+
+An input without an assigned variable or title — or whose variable/title is already taken by an earlier input (e.g. `k = cond ? input(1) : input(2)`) — is keyed by its `id`. Overrides are forwarded to the runtime under the `id`, so each input is targeted precisely.
+
+A local input is declared even if its block never runs; its value only reaches the script when the block executes (`k` stays `0` above if the `if` never fires). A function called several times still declares a single input. A branch whose condition is a **compile-time constant** false — `if false`, a constant `false` variable, `false and …`, a constant ternary or `switch` subject — is dropped together with its inputs.
+
+**Arguments are evaluated at compile time.** Defaults and other arguments may be calculations over literals and constants — arithmetic, comparisons, ternaries, string concatenation, `math.*`, `int()`/`float()`, `str.upper`/`str.lower`/`str.length`, `color.new`/`color.rgb`, `timestamp("…")`:
+
+```pine
+k = input(2 + 2)                                              // defval 4
+t = input.time(timestamp("2024-01-01 00:00 +0000") + 3600000) // defval 1704070800000
+n = input.int(int(10 / 3), "N", minval = 1 + 1)               // defval 3, minval 2
+w = input(7 / 2)                                              // int input, defval 3
+```
+
+An int-typed calculation is truncated once evaluated, as on TradingView: `input(7 / 2)` is `3` and `input(1 / 2 * 4)` is `2`, while `input(7 / 2.0)` is `3.5`. The script sees the same value at runtime.
+
+Because they are evaluated at compile time, input arguments can only reference constants. These are compile errors, as on TradingView:
+
+```pine
+for i = 0 to 9
+    k = input(i)          // Undeclared identifier "i"   (loop counter)
+f(x) => input(x)          // Undeclared identifier "x"   (function parameter)
+a = input(5)
+b = input(a)              // Arguments of input function must be of constant type, or "source" builtin variables.
+g(a = input(14)) => a     // The default value cannot be a function, variable or calculation.
+h(a = 2 + 2) => a         // The default value assigned to a parameter must be either a literal value (e.g., "5") or a built-in variable (e.g., "close").
+```
+
 ### Validation
 
 Writes are validated against the input's schema. Failures throw immediately with a tailored message:
 
 ```javascript
-ind.input['nope'] = 1;      // ✗ Error: [Indicator.input] unknown input key "nope". Known: length, src, maType, Length, Source, MA Type
+ind.input['nope'] = 1;      // ✗ Error: [Indicator.input] unknown input key "nope". Known: length, src, maType, Length, in_0, Source, in_1, MA Type, in_2
 ind.input['length'] = 1;    // ✗ Error: [Indicator.input] "length" value 1 is below minval 2
 ind.input['maType'] = 'HMA';// ✗ Error: [Indicator.input] "maType" value "HMA" is not one of: "EMA", "SMA", "WMA"
 ind.input = { foo: 1 };     // ✗ Error: [Indicator.input] .input cannot be replaced — mutate individual keys (…)
@@ -223,14 +275,14 @@ Returns the parsed schema as an array of `IPineInput`. Useful for UI builders th
 ```javascript
 const meta = ind.getInputsMeta();
 // [
-//   { type: 'int',    varId: 'length', title: 'Length',  defval: 14, minval: 2, maxval: 200 },
-//   { type: 'source', varId: 'src',    title: 'Source',  defval: 'close' },
-//   { type: 'string', varId: 'maType', title: 'MA Type', defval: 'EMA', options: ['EMA','SMA','WMA'] },
-//   { type: 'color',  varId: 'lineCol',title: 'Line',    defval: '#F23645FF' },
+//   { id: 'in_0', name: 'Length',  type: 'int',    varId: 'length', title: 'Length',  defval: 14, minval: 2, maxval: 200 },
+//   { id: 'in_1', name: 'Source',  type: 'source', varId: 'src',    title: 'Source',  defval: 'close' },
+//   { id: 'in_2', name: 'MA Type', type: 'string', varId: 'maType', title: 'MA Type', defval: 'EMA', options: ['EMA','SMA','WMA'] },
+//   { id: 'in_3', name: 'Line',    type: 'color',  varId: 'lineCol',title: 'Line',    defval: '#F23645FF' },
 // ]
 ```
 
-Each entry carries everything the scanner harvested — `type`, `defval`, **`varId`**, `title`, `tooltip`, `group`, `inline`, `display`, `options`, `minval`, `maxval`, `step`, `active`, `confirm`. `varId` (the assigned variable name) is present for every scanned input and is the primary `.input` override key; `title` may be empty or repeated across inputs, but `varId` is unique. The exported types `IPineInput`, `PineInputType`, and `PineInputDisplay` describe the shape.
+Each entry carries everything the scanner harvested — **`id`**, **`name`**, `type`, `defval`, **`varId`**, `title`, `tooltip`, `group`, `inline`, `display`, `options`, `minval`, `maxval`, `step`, `active`, `confirm`. `id` is unique and always accepted by `.input`; `name` is the settings-dialog label; `varId` (the assigned variable name) is present whenever the input is assigned to a variable and is the preferred `.input` override key. `title` is only set when the script passes one. The exported types `IPineInput`, `PineInputType`, and `PineInputDisplay` describe the shape.
 
 **Color defaults are normalized.** `color`-typed inputs report `defval` as a canonical **8-digit RGBA hex string `#RRGGBBAA`** (uppercase; `FF` = fully opaque), regardless of how the source wrote it:
 
@@ -240,13 +292,13 @@ Each entry carries everything the scanner harvested — `type`, `defval`, **`var
 
 Reading the same key back via `.input['Line']` returns the identical normalized string. This gives UI color pickers a single, parseable format to bind to. (The normalization is presentational — it doesn't affect what the running script computes when the input isn't overridden.) A color default that can't be resolved statically — e.g. one built from a runtime variable or `color.from_gradient(...)` — is reported as `undefined`.
 
-**Constant arguments are resolved.** When an input argument references a top-level constant or simple variable rather than a literal, the scanner resolves it to the declared value — so `defval`, `group`, `inline`, `tooltip`, `options`, etc. report the value, not the variable name. This composes with the enum, color, and chained-const logic.
+**Constant arguments are resolved.** When an input argument references a constant or simple variable (global, or local to the input's block) or a calculation over them, the scanner reports the evaluated value — so `defval`, `group`, `inline`, `tooltip`, `options`, etc. report the value, not the variable name. This composes with the enum, color, and chained-const logic.
 
 ```pine
 const string GRP = "Indicator Settings"
 const int    DEF = 14
 len = input.int(DEF, "Length", group = GRP)
-// → { type: 'int', varId: 'len', title: 'Length', defval: 14, group: 'Indicator Settings' }
+// → { id: 'in_0', name: 'Length', type: 'int', varId: 'len', title: 'Length', defval: 14, group: 'Indicator Settings' }
 ```
 
 References that can't be resolved to a static value (e.g. a computed series like `ta.sma(close, 5)`) fall back to the bare variable name.
