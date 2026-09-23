@@ -17,9 +17,8 @@
  * `ta.falling`, `ta.mfi`, `ta.cmo`, `ta.cog`, `ta.correlation`, `ta.percentrank`,
  * `ta.highestbars`, `ta.mode`, `ta.pivothigh`, ...) was silently wrong.
  *
- * Reference for the "plain" forms below: on BINANCE:BTCUSDT 60 (1500 closed bars) the
- * inline test-position form of each function in this file matched TradingView
- * bar-for-bar once the emission was fixed (Sep 2026).
+ * Reference for the "plain" forms below: once the emission was fixed, the inline
+ * test-position form of each function in this file matches TradingView (Sep 2026).
  */
 import { describe, it, expect } from 'vitest';
 import { PineTS } from '../../src/PineTS.class';
