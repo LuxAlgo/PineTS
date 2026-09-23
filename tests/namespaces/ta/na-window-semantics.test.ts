@@ -4,9 +4,8 @@
  * `na` handling in the window functions `ta.highest` / `ta.lowest` /
  * `ta.highestbars` / `ta.lowestbars` and in `ta.pivothigh` / `ta.pivotlow`.
  *
- * Expected values come from TradingView (Sep 2026): the periodic
- * series below was evaluated on BINANCE:BTCUSDT 60 and every one of ~78 periods
- * agreed. Two rules explain every cell:
+ * Expected values match TradingView (Sep 2026) for the periodic series
+ * below. Two rules explain every cell:
  *
  *   - Window functions RESET at `na`: only the bars since the most recent `na`
  *     (inclusive of none) take part. With `na` on the current bar `highest` /

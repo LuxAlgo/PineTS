@@ -4,9 +4,8 @@
 /**
  * Indentation and line-wrapping parity with TradingView.
  *
- * Every script below was run on TradingView (Sep 2026) and the
- * expected values / accept-reject verdicts come from there. The rules the
- * probes established:
+ * The expected values / accept-reject verdicts below match TradingView
+ * (Sep 2026). The rules:
  *
  *   - Indentation is measured in columns; a tab is four columns, fixed (not a
  *     tab stop): `  \t` and `\t  ` both measure six.

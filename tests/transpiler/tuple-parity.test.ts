@@ -6,9 +6,9 @@
  * declaring them, and passing them to request.security / request.security_lower_tf.
  * Reference: https://www.tradingview.com/pine-script-docs/language/type-system/#tuples
  *
- * Every expected value and accept/reject verdict below comes from running the
- * same script on TradingView (BINANCE:BTCUSDT, Sep 2026). The
- * scripts only depend on `bar_index`, so the values are feed-independent.
+ * Every expected value and accept/reject verdict below matches TradingView
+ * (Sep 2026). The scripts only depend on `bar_index`, so the values are
+ * feed-independent.
  */
 
 import { describe, it, expect } from 'vitest';

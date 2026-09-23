@@ -4,8 +4,7 @@
 /**
  * Reserved-word parity with TradingView.
  *
- * Every accept / reject expectation below was established by compiling the
- * same scripts on TradingView (Pine v6, Sep 2026):
+ * Every accept / reject expectation below matches TradingView (Pine v6, Sep 2026):
  *
  * - The v5 migration guide's reserved words — catch, class, do, ellipse, in,
  *   is, polygon, range, return, struct, text, throw, try — plus the keywords
