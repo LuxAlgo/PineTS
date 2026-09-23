@@ -353,7 +353,7 @@ indicator("label set in fn", overlay=true)
 
 type Marker
     label lbl
-    string text
+    string caption
 
 updateMarker(Marker m, string newText) =>
     label.set_text(m.lbl, newText)
