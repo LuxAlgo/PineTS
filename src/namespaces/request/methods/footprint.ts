@@ -2,6 +2,7 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { Series } from '../../../Series';
+import { PineRuntimeError } from '../../../errors/PineRuntimeError';
 import { hasFootprintData } from '../../../marketData/IProvider';
 import type { FootprintBar } from '../../../marketData/types';
 import { parseArgsForPineParams } from '../../utils';
@@ -32,21 +33,39 @@ function toNumber(value: any): number {
 
 /**
  * The per-context footprint store: the provider's bars keyed by `openTime`, the
- * built `footprint` objects keyed by bar and parameter set, and the market-data
- * version the store reflects (a bump means the tail must be refreshed).
+ * built `footprint` objects keyed by bar, the argument set of the script's
+ * footprint request, and the market-data version the store reflects (a bump
+ * means the tail must be refreshed).
  */
 interface FootprintStore {
     bars: Map<number, FootprintBar>;
-    built: Map<number, Map<string, FootprintObject | null>>;
+    built: Map<number, FootprintObject | null>;
+    requestKey: string | null;
     loadedVersion: number;
     warned: boolean;
 }
 
 function storeOf(context: any): FootprintStore {
     if (!context.cache.__footprint) {
-        context.cache.__footprint = { bars: new Map(), built: new Map(), loadedVersion: -1, warned: false } satisfies FootprintStore;
+        context.cache.__footprint = {
+            bars: new Map(),
+            built: new Map(),
+            requestKey: null,
+            loadedVersion: -1,
+            warned: false,
+        } satisfies FootprintStore;
     }
     return context.cache.__footprint;
+}
+
+/** TradingView's runtime error for a negative `request.footprint()` argument. */
+function rejectNegative(argName: string, value: number) {
+    if (value < 0) {
+        throw new PineRuntimeError(
+            `Invalid value of the '${argName}' argument (${value}) in the 'request.footprint' function. It must be >= 0.`,
+            'request.footprint',
+        );
+    }
 }
 
 function warnOnce(context: any, store: FootprintStore, message: string) {
@@ -96,24 +115,35 @@ async function load(context: any, store: FootprintStore, fromTime: number | unde
  * for it. Footprint data comes from the provider's optional `getFootprintData`
  * surface (see `IFootprintProvider`); the row binning, POC, value area and
  * imbalance flags are computed here so every source shares one set of Pine
- * semantics. Secondary contexts (inside `request.security`) always answer `na` —
- * Pine does not allow nesting request calls.
+ * semantics. Inside `request.security()` the call runs in the secondary context
+ * and describes that context's own bars (its symbol and timeframe).
+ *
+ * Argument rules follow TradingView: a negative argument is a runtime error;
+ * `ticks_per_row` of 0 or `na` yields `na`; `va_percent` is capped at 100 and an
+ * `na` one reduces the value area to the POC row; `na` for `imbalance_percent`
+ * flags no row. An omitted optional argument takes its default (70 / 300).
  */
 export function footprint(context: any) {
     return async (...rawArgs: any[]) => {
-        if (context.isSecondaryContext) return NaN;
-
         const parsed = parseArgsForPineParams<any>(rawArgs.map(unwrapParam), FOOTPRINT_SIGNATURES, FOOTPRINT_TYPES);
-        const ticksPerRow = toNumber(parsed.ticks_per_row);
-        if (!Number.isFinite(ticksPerRow) || ticksPerRow < 1) {
-            throw new Error(`request.footprint(): ticks_per_row must be a positive integer, got ${ticksPerRow}`);
-        }
-        const vaRaw = toNumber(parsed.va_percent);
-        const vaPercent = Number.isFinite(vaRaw) ? Math.min(Math.max(vaRaw, 0), 100) : DEFAULT_VA_PERCENT;
-        const imbRaw = toNumber(parsed.imbalance_percent);
-        const imbalancePercent = Number.isFinite(imbRaw) && imbRaw > 0 ? imbRaw : DEFAULT_IMBALANCE_PERCENT;
+        const ticksPerRow = Math.trunc(toNumber(parsed.ticks_per_row));
+        const vaPercent = parsed.va_percent === undefined ? DEFAULT_VA_PERCENT : toNumber(parsed.va_percent);
+        const imbalancePercent = parsed.imbalance_percent === undefined ? DEFAULT_IMBALANCE_PERCENT : toNumber(parsed.imbalance_percent);
 
+        // A script may request one footprint. TradingView merges calls whose arguments are
+        // identical and rejects the script as soon as a second, different one exists.
         const store = storeOf(context);
+        const key = `${ticksPerRow}|${vaPercent}|${imbalancePercent}`;
+        if (store.requestKey === null) store.requestKey = key;
+        else if (store.requestKey !== key) {
+            throw new PineRuntimeError('The script executes too many `request.footprint()` function calls.', 'request.footprint');
+        }
+
+        rejectNegative('ticks_per_row', ticksPerRow);
+        rejectNegative('va_percent', vaPercent);
+        rejectNegative('imbalance_percent', imbalancePercent);
+        if (!(ticksPerRow > 0)) return NaN;
+
         if (!hasFootprintData(context.source)) {
             warnOnce(context, store, 'request.footprint(): the market data source does not provide footprint data — returning na');
             return NaN;
@@ -134,18 +164,19 @@ export function footprint(context: any) {
         const bar = store.bars.get(openTime);
         if (!bar) return NaN;
 
-        const key = `${Math.trunc(ticksPerRow)}|${vaPercent}|${imbalancePercent}`;
-        let perBar = store.built.get(openTime);
-        if (!perBar) {
-            perBar = new Map();
-            store.built.set(openTime, perBar);
-        }
-        if (!perBar.has(key)) {
-            perBar.set(
-                key,
-                FootprintObject.build(context, bar.levels ?? [], { ticksPerRow: Math.trunc(ticksPerRow), mintick, vaPercent, imbalancePercent }),
+        if (!store.built.has(openTime)) {
+            // The candle's range extends the rows over its wicks, like the chart does.
+            const range = { low: Series.from(context.data.low).get(0), high: Series.from(context.data.high).get(0) };
+            store.built.set(
+                openTime,
+                FootprintObject.build(
+                    context,
+                    bar.levels ?? [],
+                    { ticksPerRow, mintick, vaPercent: Math.min(vaPercent, 100), imbalancePercent },
+                    range,
+                ),
             );
         }
-        return perBar.get(key) ?? NaN;
+        return store.built.get(openTime) ?? NaN;
     };
 }

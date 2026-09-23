@@ -4,7 +4,15 @@
 import * as walk from 'acorn-walk';
 import ScopeManager, { normalizePineBaseType } from '../analysis/ScopeManager';
 import { ASTFactory, CONTEXT_NAME } from '../utils/ASTFactory';
-import { KNOWN_NAMESPACES, NAMESPACES_LIKE, ASYNC_METHODS, CALLSITE_ID_NAMESPACES, BUILTIN_METHOD_NAMES } from '../settings';
+import {
+    KNOWN_NAMESPACES,
+    NAMESPACES_LIKE,
+    ASYNC_METHODS,
+    CALLSITE_ID_NAMESPACES,
+    BUILTIN_METHOD_NAMES,
+    ORDERFLOW_METHODS,
+    FOOTPRINT_ROW_METHODS,
+} from '../settings';
 
 const UNDEFINED_ARG = {
     type: 'Identifier',
@@ -1396,6 +1404,21 @@ function hasGetCallInChain(node: any): boolean {
 }
 
 /** Check if a node is directly a $.get(...) call (not nested in a chain) */
+/**
+ * The `volume_row` type of a call that produces one from a `footprint` receiver
+ * (`fp.poc()`, `fp.get_row_by_price(p)`), before or after that call was routed
+ * to the namespace, so chained accessors (`fp.poc().up_price()`) are typed too.
+ */
+function footprintRowCallType(node: any, scopeManager: ScopeManager): string | undefined {
+    if (node?._orderflowType) return node._orderflowType;
+    if (node?.type !== 'CallExpression' || node.callee?.type !== 'MemberExpression' || node.callee.computed) return undefined;
+    if (!FOOTPRINT_ROW_METHODS.has(node.callee.property?.name)) return undefined;
+    const receiver = node.callee.object;
+    return receiver?.name && !scopeManager.getVariableUdtType(receiver.name) && scopeManager.getVarStaticType(receiver.name) === 'footprint'
+        ? 'volume_row'
+        : undefined;
+}
+
 function isDirectGetCall(node: any): boolean {
     return node?.type === 'CallExpression' &&
         node.callee?.type === 'MemberExpression' &&
@@ -1689,6 +1712,11 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
         node._transformed = true;
     }
 
+    // Static `footprint` / `volume_row` type of a method call's receiver whose
+    // method is one of that type's built-ins — such calls are routed to the
+    // namespace function further down.
+    let orderflowReceiverType: string | undefined;
+
     // Handle method calls on local variables (e.g. arr.set())
     if (!isNamespaceCall && node.callee && node.callee.type === 'MemberExpression') {
         const methodName = node.callee.property.name;
@@ -1733,6 +1761,9 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
         }
         const methodReceiverType = scopeManager.getMethodReceiverType(methodName);
         const receiverTypeMatches = !!receiverBaseType && !!methodReceiverType && receiverBaseType === methodReceiverType;
+
+        const orderflowType = receiverBaseType ?? footprintRowCallType(_obj, scopeManager);
+        if (orderflowType && ORDERFLOW_METHODS[orderflowType]?.has(methodName)) orderflowReceiverType = orderflowType;
 
         // UDT-instance dispatch (pre-existing rule, kept as a fallback for
         // methods whose declared receiver type could not be extracted): a
@@ -1886,6 +1917,19 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
             }
         );
     });
+
+    if (orderflowReceiverType && !node._transformed) {
+        // recv.method(args) → $.pine.<type>.method(recv, args): the helper raises
+        // TradingView's runtime error when the receiver is `na`.
+        const methodName = node.callee.property.name;
+        const pineRef = ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('pine'));
+        const namespaceRef = ASTFactory.createMemberExpression(pineRef, ASTFactory.createIdentifier(orderflowReceiverType));
+        node.arguments = [node.callee.object, ...node.arguments];
+        node.callee = ASTFactory.createMemberExpression(namespaceRef, ASTFactory.createIdentifier(methodName));
+        if (orderflowReceiverType === 'footprint' && FOOTPRINT_ROW_METHODS.has(methodName)) node._orderflowType = 'volume_row';
+        node._transformed = true;
+        return;
+    }
 
     // ---------------------------------------------------------------------------
     // Optional chaining for method calls on values retrieved via $.get().

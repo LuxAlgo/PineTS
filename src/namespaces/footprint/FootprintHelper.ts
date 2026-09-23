@@ -2,20 +2,21 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { Series } from '../../Series';
+import { PineRuntimeError } from '../../errors/PineRuntimeError';
 import { FootprintObject } from './FootprintObject';
 import { VolumeRowObject } from './VolumeRowObject';
 import { resolveArg } from './resolve';
 
-function asFootprint(id: any): FootprintObject | null {
+function asFootprint(id: any, method: string): FootprintObject {
     const resolved = resolveArg(id);
-    return resolved instanceof FootprintObject ? resolved : null;
+    if (resolved instanceof FootprintObject) return resolved;
+    throw new PineRuntimeError(`The \`footprint\` ID used in the \`${method}()\` call cannot be \`na\`.`, `footprint.${method}`);
 }
 
 /**
  * The `footprint.*` namespace: read-only accessors over the `footprint` object a
- * `request.footprint()` call returns. Every function accepts `na` and answers
- * `na` (or `false`), so scripts that don't guard with `not na(fp)` degrade quietly
- * instead of throwing.
+ * `request.footprint()` call returns. As on TradingView, an `na` id is a runtime
+ * error, so scripts guard with `not na(fp)` on bars without footprint data.
  */
 export class FootprintHelper {
     constructor(private context: any) {}
@@ -24,50 +25,44 @@ export class FootprintHelper {
         return Series.from(source).get(index);
     }
 
-    /** `footprint(x)` — the type-cast form: pass a footprint through, anything else is `na`. */
-    any(...args: any[]): FootprintObject | number {
-        if (args.length === 1) {
-            const value = resolveArg(args[0]);
-            return value instanceof FootprintObject ? value : NaN;
-        }
-        return NaN;
+    /** `footprint(x)` — unlike `line(x)` or `box(x)`, Pine has no `footprint` cast function. */
+    any(): never {
+        throw new PineRuntimeError("Could not find function or function reference 'footprint'", 'footprint');
     }
 
     buy_volume(id: any): number {
-        return asFootprint(id)?.buy_volume() ?? NaN;
+        return asFootprint(id, 'buy_volume').buy_volume();
     }
 
     sell_volume(id: any): number {
-        return asFootprint(id)?.sell_volume() ?? NaN;
+        return asFootprint(id, 'sell_volume').sell_volume();
     }
 
     total_volume(id: any): number {
-        return asFootprint(id)?.total_volume() ?? NaN;
+        return asFootprint(id, 'total_volume').total_volume();
     }
 
     delta(id: any): number {
-        return asFootprint(id)?.delta() ?? NaN;
+        return asFootprint(id, 'delta').delta();
     }
 
-    poc(id: any): VolumeRowObject | number {
-        return asFootprint(id)?.poc() ?? NaN;
+    poc(id: any): VolumeRowObject {
+        return asFootprint(id, 'poc').poc();
     }
 
-    vah(id: any): VolumeRowObject | number {
-        return asFootprint(id)?.vah() ?? NaN;
+    vah(id: any): VolumeRowObject {
+        return asFootprint(id, 'vah').vah();
     }
 
-    val(id: any): VolumeRowObject | number {
-        return asFootprint(id)?.val() ?? NaN;
+    val(id: any): VolumeRowObject {
+        return asFootprint(id, 'val').val();
     }
 
     rows(id: any) {
-        return asFootprint(id)?.rows() ?? NaN;
+        return asFootprint(id, 'rows').rows();
     }
 
     get_row_by_price(id: any, price: any): VolumeRowObject | number {
-        const fp = asFootprint(id);
-        if (!fp) return NaN;
-        return fp.get_row_by_price(price);
+        return asFootprint(id, 'get_row_by_price').get_row_by_price(price);
     }
 }
