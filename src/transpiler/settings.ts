@@ -18,6 +18,9 @@ export const NAMESPACES_LIKE = [
     'linefill',
     'polyline',
     'table',
+    // no cast function exists for these two: `footprint.any` / `volume_row.any` reject the call
+    'footprint',
+    'volume_row',
     'na',
     'alert',
     'time',
@@ -33,7 +36,7 @@ export const NAMESPACES_LIKE = [
 ];
 
 // Async methods that require await keyword (format: 'namespace.method')
-export const ASYNC_METHODS = ['request.security', 'request.security_lower_tf'];
+export const ASYNC_METHODS = ['request.security', 'request.security_lower_tf', 'request.footprint'];
 
 // Host-bound Pine built-ins whose values come from the UI/host environment (viewport,
 // theme, chart-type) rather than from market data. PineTS provides sensible defaults
@@ -149,6 +152,8 @@ export const NAMESPACE_COLLISION_NAMES = new Set([
     'strategy',
     'log',
     'str',
+    'footprint',
+    'volume_row',
     // Constant/enum namespaces (member access only). TradingView allows user
     // variables to share these names while namespace member access still
     // works (e.g. `position = 1` alongside `position.top_right`), so the
@@ -258,6 +263,19 @@ export const BUILTIN_METHOD_NAMES = new Set([
     'variance',
 ]);
 
+// Built-in methods of the order-flow types. A call on a receiver statically typed
+// `footprint` / `volume_row` is routed to the namespace function (`fp.delta()` →
+// `footprint.delta(fp)`) instead of the optional-chained member call, because
+// TradingView raises a runtime error for an `na` receiver where drawing methods
+// are silent no-ops.
+export const ORDERFLOW_METHODS: Record<string, Set<string>> = {
+    footprint: new Set(['buy_volume', 'sell_volume', 'total_volume', 'delta', 'poc', 'vah', 'val', 'rows', 'get_row_by_price']),
+    volume_row: new Set(['up_price', 'down_price', 'buy_volume', 'sell_volume', 'total_volume', 'delta', 'has_buy_imbalance', 'has_sell_imbalance']),
+};
+
+// `footprint` methods whose result is a `volume_row`.
+export const FOOTPRINT_ROW_METHODS = new Set(['poc', 'vah', 'val', 'get_row_by_price']);
+
 // All known data variables in the context
 export const CONTEXT_DATA_VARS = ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'openTime', 'closeTime'];
 
@@ -302,6 +320,9 @@ export const CONTEXT_PINE_VARS = [
     'matrix',
     'log',
     'runtime',
+    // order-flow object namespaces (request.footprint)
+    'footprint',
+    'volume_row',
     //types
     'Type', //UDT
     'bool',
