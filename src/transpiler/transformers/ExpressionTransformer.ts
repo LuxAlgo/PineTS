@@ -4,7 +4,7 @@
 import * as walk from 'acorn-walk';
 import ScopeManager, { normalizePineBaseType } from '../analysis/ScopeManager';
 import { ASTFactory, CONTEXT_NAME } from '../utils/ASTFactory';
-import { KNOWN_NAMESPACES, NAMESPACES_LIKE, ASYNC_METHODS, CALLSITE_ID_NAMESPACES } from '../settings';
+import { KNOWN_NAMESPACES, NAMESPACES_LIKE, ASYNC_METHODS, CALLSITE_ID_NAMESPACES, BUILTIN_METHOD_NAMES } from '../settings';
 
 const UNDEFINED_ARG = {
     type: 'Identifier',
@@ -928,6 +928,14 @@ function getParamFromConditionalExpression(node: any, scopeManager: ScopeManager
                 // First transform the call expression itself
                 transformCallExpression(node, scopeManager);
 
+                // A hoisted call was replaced in place by its `temp_N` identifier
+                // but keeps a stale `arguments` array that is SHARED with the
+                // hoisted declaration. Walking it here would wrap the shared
+                // `pN` param identifiers in `$.get(pN, 0)`, turning the hoisted
+                // `ta.crossover(p5, p6, ...)` into a scalar call (#304). Same
+                // guard the statement walkers use.
+                if (node.type !== 'CallExpression' || isInlinedLazyCall(node)) return;
+
                 // Then transform its arguments with the correct context
                 node.arguments.forEach((arg: any) => c(arg, { parent: node, inNamespaceCall: isNamespaceCall || state.inNamespaceCall }));
             },
@@ -1417,12 +1425,47 @@ function resolveCalleeObject(node: any, parentNode: any, scopeManager: ScopeMana
     }
 }
 
+/**
+ * True when `transformCallExpression` kept a lazy-operand call inline (see
+ * LazyOperandPass). Such a node is fully transformed — callee and arguments
+ * included — and, unlike an eager call, was NOT replaced by a hoisted
+ * `temp_N` identifier. Expression walkers that descend into a call's callee /
+ * arguments after transforming it must stop here, otherwise they re-run
+ * `transformMemberExpression` on `ns.method` / `ns.param` callees and turn
+ * them into bogus `ns.method()(...)` auto-calls.
+ */
+export function isInlinedLazyCall(node: any): boolean {
+    return !!node && node.type === 'CallExpression' && node._transformed === true && node._lazyOperand === true;
+}
+
 export function transformCallExpression(node: any, scopeManager: ScopeManager, namespace?: string): void {
     // Skip if this node has already been transformed
     if (node._transformed) {
         return;
     }
 
+    // Calls sitting in a lazy operand (`?:` branch, or the right side of a
+    // lazy `and`/`or` — see LazyOperandPass) must stay inline: hoisting them
+    // into a `const temp_N = ...` ahead of the statement would evaluate them
+    // unconditionally, e.g. running `array.get(a, 0)` even when the guard
+    // `array.size(a) > 0` is false, or executing a stateful `ta.*` call on
+    // bars where TradingView would skip it. Suppressing hoisting for the
+    // duration of this call (arguments included) keeps every generated
+    // `ns.param(...)` / nested call inside the branch expression.
+    if (node._lazyOperand === true && !scopeManager.shouldSuppressHoisting()) {
+        scopeManager.setSuppressHoisting(true);
+        try {
+            transformCallExpressionInner(node, scopeManager, namespace);
+        } finally {
+            scopeManager.setSuppressHoisting(false);
+        }
+        return;
+    }
+
+    transformCallExpressionInner(node, scopeManager, namespace);
+}
+
+function transformCallExpressionInner(node: any, scopeManager: ScopeManager, namespace?: string): void {
     if (node.callee && node.callee.name === 'kernel_matrix') {
         // console.log('Transforming kernel_matrix call');
         // console.log('Arguments before:', node.arguments.map((a: any) => a.name));
@@ -1701,7 +1744,22 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         // `someLine.delete()`.
         const isReceiverUdtInstance = !!_obj.name && scopeManager.isUdtInstance(_obj.name);
 
-        if (isUserFunction && isUserMethod && !scopeManager.isContextBound(methodName) && (receiverTypeMatches || isReceiverUdtInstance)) {
+        // Receivers whose static type cannot be inferred: an untyped local
+        // (`x = bar_index * 1.0`), a parenthesized expression, or the result of a
+        // previous call in a chain (`p.next().next()`). TradingView resolves these
+        // fine, so falling through to the built-in leaves the call unbound. The
+        // dispatch is only safe for a method name Pine does not also expose as a
+        // built-in member — with a colliding name (`delete`, `get`, `size`, …) an
+        // unknown receiver stays genuinely ambiguous and must keep requiring a
+        // positive type match.
+        const dispatchOnUnknownReceiver = receiverBaseType === undefined && !BUILTIN_METHOD_NAMES.has(methodName);
+
+        if (
+            isUserFunction &&
+            isUserMethod &&
+            !scopeManager.isContextBound(methodName) &&
+            (receiverTypeMatches || isReceiverUdtInstance || dispatchOnUnknownReceiver)
+        ) {
             // It's a user variable/function.
             // Transform obj.method(args) -> method(obj, args)
             // 1. Get the object (first arg)
@@ -1718,19 +1776,14 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
             // 4. Transform the object (it becomes the first argument)
             // We need to ensure it's properly scoped/wrapped if it's a variable
             // transformIdentifierForParam might be needed if it's an identifier
-            let transformedObj = obj;
-            if (obj.type === 'Identifier') {
-                 // Use transformIdentifier logic but we need it as an argument
-                 // transformFunctionArgument handles identifiers correctly
-                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
-            } else if (obj.type === 'CallExpression') {
-                 // If object is a call expression, transform it first
+            // A call receiver (`x.twice().twice()`) is transformed first so the
+            // inner dispatch resolves before it is wrapped as an argument. Every
+            // receiver shape — identifier, UDT field chain, call result, or any
+            // other expression like `(bar_index + 0.0)` — is then wrapped the same way.
+            if (obj.type === 'CallExpression') {
                  transformCallExpression(obj, scopeManager);
-                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
-            } else if (obj.type === 'MemberExpression') {
-                 // UDT field chain receiver (e.g. `bs.is_equity.to_sparkline()`)
-                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
             }
+            const transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
 
             // 5. Construct the new call: method(obj, ...args)
             // We need to use $.call(method, id, obj, ...args) pattern because it's a user function

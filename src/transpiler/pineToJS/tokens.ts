@@ -62,17 +62,57 @@ export const Keywords = new Set([
     'to',
     'by',
     'in',
+    'as',
     'import',
     'export',
     'method',
-    'extends',
     'enum',
+]);
+
+// Keywords that TradingView treats as reserved only where they introduce a
+// declaration (`type Foo`, `method bar(...)`, `enum E`) — everywhere else they
+// are ordinary identifiers: `type = close`, `method(x) => x`, `int type = 0`.
+// The lexer downgrades them to IDENTIFIER outside the declaration position.
+export const ContextualKeywords = new Set(['type', 'method', 'enum']);
+
+// Words TradingView rejects as variable / function / parameter / field / type
+// names with `"X" cannot be used as a variable or function name.` even though
+// they carry no syntax of their own (v5 migration guide "reserved words" list).
+// They lex as IDENTIFIER — `text` is still a valid named argument
+// (`label.new(..., text="...")`) — and are rejected at declaration sites only.
+export const ReservedWords = new Set([
+    'catch',
+    'class',
+    'do',
+    'ellipse',
+    'is',
+    'polygon',
+    'range',
+    'return',
+    'struct',
+    'text',
+    'throw',
+    'try',
 ]);
 
 // Multi-character operators
 export const MultiCharOperators = ['==', '!=', '<=', '>=', ':=', '+=', '-=', '*=', '/=', '%=', '=>', '//', 'and', 'or', 'not'];
 
 export class Token {
+    /**
+     * Present on the first token of a line that the lexer joined onto the
+     * previous line because its indentation is not a multiple of four
+     * (Pine line wrapping). `width` is the measured indentation in columns,
+     * `fromLine` the line it was joined to, `column` where the token starts.
+     */
+    public wrapped: { width: number; fromLine: number | null; column: number } | null = null;
+
+    /**
+     * Set on a `[` lexed inside ( ) / [ ] / { }, where newlines are not
+     * emitted: whatever line it sits on, it cannot open a new statement.
+     */
+    public grouped = false;
+
     constructor(public type: string, public value: any, public line: number, public column: number, public indent = 0, public raw: string = null) {}
 
     // toString() {

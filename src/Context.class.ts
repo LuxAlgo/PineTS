@@ -369,6 +369,8 @@ export class Context {
                 'set_style',
                 'set_textalign',
                 'set_tooltip',
+                'set_text_font_family',
+                'set_text_formatting',
                 'set_point',
                 'set_xloc',
                 'set_yloc',
@@ -527,6 +529,7 @@ export class Context {
                 'cell_set_text_halign',
                 'cell_set_text_valign',
                 'cell_set_text_font_family',
+                'cell_set_text_formatting',
                 'set_position',
                 'set_bgcolor',
                 'set_border_color',
@@ -618,6 +621,24 @@ export class Context {
     }
 
     //#region [Runtime functions] ===========================
+
+    /**
+     * Normalizes the right-hand side of a tuple declaration (`[a, b] = ...`) to the
+     * double-bracket tuple convention `[[a, b]]` expected by `init()`.
+     *
+     * Function returns and request.* results are already double-bracketed, but a
+     * tuple produced by an if / switch / loop expression arrives flat (`[a, b]`),
+     * and a local block that returned nothing (an `if` without `else`, a loop that
+     * never ran) arrives as na: Pine yields na for every item in that case.
+     * No Pine value is a JS array (Pine arrays, maps, UDTs are objects), so a flat
+     * array here is always a single-bracket tuple, never a series.
+     */
+    toTuple(value: any, arity: number): any[][] {
+        if (Array.isArray(value)) {
+            return Array.isArray(value[0]) ? value : [value];
+        }
+        return [new Array(arity).fill(NaN)];
+    }
 
     /**
      * this function is used to initialize the target variable with the source array
@@ -927,7 +948,10 @@ export class Context {
     public call(fn: Function, id: string, ...args: any[]) {
         this.pushId(id);
         try {
-            return fn(...args);
+            const result = fn(...args);
+            // Falling off the end of a Pine function (e.g. an `if` with no `else` whose
+            // test was false) yields `na`, not an absent value.
+            return result === undefined ? NaN : result;
         } finally {
             this.popId();
         }

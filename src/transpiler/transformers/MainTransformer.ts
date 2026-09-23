@@ -222,6 +222,77 @@ export function transformEqualityChecks(ast: any): void {
     );
 }
 
+// Pine v5 `and` / `or` inside a lazy operand (tagged `_strictLogical` by
+// LazyOperandPass) → `$.pine.math.__and(l, r)` / `__or(l, r)`. A call evaluates
+// both arguments, so the right operand is not short-circuited away as native
+// `&&` / `||` would, while the whole expression still only runs when the
+// enclosing `?:` branch is taken. Must run after the transformation pass so
+// the operands are already lowered.
+const STRICT_LOGICAL_METHODS: Record<string, string> = {
+    '&&': '__and',
+    '||': '__or',
+};
+
+export function transformStrictLogicalOperators(ast: any): void {
+    const baseVisitor = { ...walk.base, LineComment: () => {} };
+    walk.simple(
+        ast,
+        {
+            LogicalExpression(node: any) {
+                if (!node._strictLogical) return;
+                const method = STRICT_LOGICAL_METHODS[node.operator];
+                if (!method) return;
+                const callExpr = ASTFactory.createMathCompareCall(method, node.left, node.right);
+                callExpr._transformed = true;
+                Object.assign(node, callExpr);
+                delete node.operator;
+                delete node.left;
+                delete node.right;
+            },
+        },
+        baseVisitor
+    );
+}
+
+// Pine's `display.*` values form a SET type: `+` is a union and `-` a difference
+// (`display.all - display.price_scale`). The runtime keeps them as member-name strings,
+// so native `-` would yield NaN and `+` a raw concatenation; route both to the set
+// operators on the `display` namespace instead.
+const DISPLAY_SET_METHODS: Record<string, string> = {
+    '+': '__union',
+    '-': '__minus',
+};
+
+/** `display.<member>` (the namespace is context-bound and never renamed), or a set-operator
+ *  call this pass already produced — so chained arithmetic (`a - b - c`) stays typed. */
+function isDisplayOperand(node: any): boolean {
+    if (node?.type === 'MemberExpression' && !node.computed && node.object?.type === 'Identifier' && node.object.name === 'display') return true;
+    return node?.type === 'CallExpression' && node._displaySetOp === true;
+}
+
+export function transformDisplayArithmetic(ast: any): void {
+    const baseVisitor = { ...walk.base, LineComment: () => {} };
+    // acorn-walk visits children before the node itself, so an inner `display.a - display.b`
+    // is rewritten (and flagged) before the outer expression that uses it is examined.
+    walk.simple(
+        ast,
+        {
+            BinaryExpression(node: any) {
+                const method = DISPLAY_SET_METHODS[node.operator];
+                if (!method) return;
+                // One display operand is enough: the other is a variable holding a display
+                // (`d - display.pane`) — a plain number/string there is not valid Pine anyway.
+                if (!isDisplayOperand(node.left) && !isDisplayOperand(node.right)) return;
+                const fn = ASTFactory.createMemberExpression(ASTFactory.createIdentifier('display'), ASTFactory.createIdentifier(method), false);
+                const callExpr = ASTFactory.createCallExpression(fn, [node.left, node.right]);
+                callExpr._displaySetOp = true;
+                Object.assign(node, callExpr);
+            },
+        },
+        baseVisitor
+    );
+}
+
 export function runTransformationPass(
     ast: any,
     scopeManager: ScopeManager,
