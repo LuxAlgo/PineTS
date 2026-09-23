@@ -64,8 +64,14 @@ The Stage 1 transpiler follows a standard 3-stage compiler pipeline:
 
 The Lexer tokenizes the input string. Its most critical role is handling **Python-style significant indentation**, which is fundamental to Pine Script scopes.
 
--   **Indentation Tracking**: Maintains an indentation stack to emit virtual `INDENT` and `DEDENT` tokens.
--   **Literals**: Parses Pine Script specific literals like Colors (`#FF5500`), Strings, and Numbers.
+-   **Indentation Tracking**: Maintains an indentation stack to emit virtual `INDENT` and `DEDENT` tokens. The rules mirror TradingView (verified with `tv-extractor`):
+    -   Indentation is measured in columns; a tab is four columns, fixed (not a tab stop).
+    -   A width that is a multiple of four is a block level. One level deeper than the enclosing block emits `INDENT`; more than one is an error, as on TradingView.
+    -   Any other width is **line wrapping**: the line is spliced onto the previous logical line (the separating `NEWLINE` / comment tokens are dropped), whatever it starts with — `- r2`, `.size()`, `2`. Its first token is tagged `wrapped` so the parser can explain a resulting syntax error.
+    -   A line that follows a trailing binary/assignment/ternary operator, comma, or `and`/`or` is also spliced even when its width is a multiple of four (TradingView rejects this; PineTS accepts it because the intent is unambiguous).
+    -   Blank lines, comment-only lines, and lines inside `(` `)` / `[` `]` carry no block structure.
+    -   Because wrapping is resolved here, the parser never crosses a `NEWLINE` to continue an expression: `-x` on its own line at the block indent is a unary statement, not a continuation.
+-   **Literals**: Parses Pine Script specific literals like Colors (`#FF5500`), Strings (including triple-quoted multiline strings), and Numbers.
 -   **Comments**: Filters out comments while preserving line information for source mapping.
 
 ### 2. Parser (`parser.ts`)
