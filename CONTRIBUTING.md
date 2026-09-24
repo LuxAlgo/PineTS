@@ -319,13 +319,13 @@ npx prettier --write .
 - **General Questions**: [GitHub Discussions](https://github.com/LuxAlgo/PineTS/discussions)
 - **Bug Reports**: [GitHub Issues](https://github.com/LuxAlgo/PineTS/issues)
 - **Feature Proposals**: [GitHub Discussions](https://github.com/LuxAlgo/PineTS/discussions) first
-- **Private Contact**: [QuantForge Contact Form](https://quantforge.org/contact/)
+- **Private Contact**: [support@luxalgo.com](mailto:support@luxalgo.com)
 
 ### Resources:
 
-- [Documentation](https://quantforgeorg.github.io/PineTS/)
+- [Documentation](https://docs.luxalgo.com/developers/pinets)
 - [Architecture Guide](./docs/architecture/index.md)
-- [API Coverage](https://quantforgeorg.github.io/PineTS/api-coverage/)
+- [API Coverage](https://docs.luxalgo.com/developers/pinets/api-coverage)
 
 ---
 
