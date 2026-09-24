@@ -100,7 +100,53 @@ export class CodeGenerator {
     // renamed) function name that call-site callees carry after the pass.
     private preProcessAST(ast: any) {
         this.renameConflictingVariables(ast);
+        this.renameFunctionsSharingTypeNames(ast);
         this.collectFunctionParams(ast);
+    }
+
+    /**
+     * Pine keeps UDTs and functions in separate namespaces (`type level` next
+     * to `level(...) => line.new(...)`), but both become bindings in one JS
+     * scope. The function is renamed with the collision-proof `_$N` suffix:
+     * it is only ever referenced as a bare callee, while the type name also
+     * lives in annotation strings (`array<level>`, `level l`).
+     * Methods are skipped — their `$M_` prefix already avoids the clash.
+     */
+    private renameFunctionsSharingTypeNames(ast: any) {
+        const typeNames = new Set<string>();
+        for (const node of ast.body) {
+            if (node.type === 'TypeDefinition' && typeof node.name === 'string') typeNames.add(node.name);
+        }
+        if (typeNames.size === 0) return;
+
+        const renameMap = new Map<string, string>();
+        for (const node of ast.body) {
+            const name = node.type === 'FunctionDeclaration' && !node.id?.isMethod ? node.id?.name : undefined;
+            if (name && typeNames.has(name) && !renameMap.has(name)) {
+                renameMap.set(name, `${name}_$${this.paramRenameCounter++}`);
+            }
+        }
+        if (renameMap.size === 0) return;
+
+        const walk = (node: any) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.type === 'FunctionDeclaration' && !node.id?.isMethod && renameMap.has(node.id?.name)) {
+                node.id.name = renameMap.get(node.id.name);
+            }
+            if (node.type === 'CallExpression' && node.callee?.type === 'Identifier' && renameMap.has(node.callee.name)) {
+                node.callee.name = renameMap.get(node.callee.name);
+            }
+            for (const key of Object.keys(node)) {
+                if (key === 'type') continue;
+                const val = node[key];
+                if (Array.isArray(val)) {
+                    for (const child of val) walk(child);
+                } else if (val && typeof val === 'object' && val.type) {
+                    walk(val);
+                }
+            }
+        };
+        walk(ast);
     }
 
     /**
