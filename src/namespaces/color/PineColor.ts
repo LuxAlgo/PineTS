@@ -54,7 +54,7 @@ function rgbaToHex(r: number, g: number, b: number, a: number): string {
 const COLOR_CONSTANTS = {
     aqua:    '#00BCD4',
     black:   '#363A45',
-    blue:    '#2196F3',
+    blue:    '#2962FF',
     fuchsia: '#E040FB',
     gray:    '#787B86',
     green:   '#4CAF50',

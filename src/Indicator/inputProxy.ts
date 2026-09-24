@@ -37,7 +37,8 @@ export function buildInputProxy(
             key,
             type: m.type,
             defval: m.defval,
-            options: m.options,
+            // The source dropdown omits `volume`, which is still a valid override.
+            options: m.type === 'source' ? undefined : m.options,
             minval: m.minval,
             maxval: m.maxval,
             aliases: aliases.length ? aliases : undefined,

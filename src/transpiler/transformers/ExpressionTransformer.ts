@@ -1000,6 +1000,39 @@ function getParamFromUnaryExpression(node: any, scopeManager: ScopeManager, name
     return unaryExpr;
 }
 
+/**
+ * `transformMemberExpression` early-returns for non-computed access on
+ * context-bound user variables, relying on a later top-level identifier
+ * walker to scope the base. A member chain that is about to be wrapped in
+ * `$.param(...)` never reaches that walker, so the base identifier would end
+ * up bare in the emitted code. Scope the leaf base when it is a user-declared
+ * variable (not a built-in / namespace / loop var / function param / local
+ * series).
+ */
+function scopeMemberChainBase(member: any, scopeManager: ScopeManager): void {
+    let baseHolder: any = member;
+    while (baseHolder && baseHolder.type === 'MemberExpression' && baseHolder.object) {
+        if (baseHolder.object.type === 'Identifier') {
+            const base = baseHolder.object;
+            const [scopedName] = scopeManager.getVariable(base.name);
+            const isUserVariable = scopedName !== base.name;
+            if (
+                isUserVariable &&
+                !scopeManager.isContextBound(base.name) &&
+                !scopeManager.isRootParam(base.name) &&
+                !scopeManager.isLoopVariable(base.name) &&
+                !scopeManager.isLocalSeriesVar(base.name) &&
+                !NAMESPACES_LIKE.includes(base.name) &&
+                !KNOWN_NAMESPACES.includes(base.name)
+            ) {
+                baseHolder.object = createScopedVariableAccess(base.name, scopeManager);
+            }
+            break;
+        }
+        baseHolder = baseHolder.object;
+    }
+}
+
 export function transformFunctionArgument(arg: any, namespace: string, scopeManager: ScopeManager): any {
     // Handle binary expressions (arithmetic operations)
 
@@ -1058,6 +1091,8 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                 }
                 if (element.type === 'MemberExpression') {
                     transformMemberExpression(element, namespace, scopeManager);
+                    // e.g. enum fields in `input.enum(…, options = [E.a, E.b])`
+                    if (!element.computed) scopeMemberChainBase(element, scopeManager);
                     return element;
                 }
                 return element;
@@ -1118,36 +1153,8 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             transformCallExpression(arg.object, scopeManager);
         } else if (arg.object.type === 'MemberExpression') {
             transformMemberExpression(arg.object, '', scopeManager);
-            // Regression: `transformMemberExpression` early-returns for non-computed
-            // access on context-bound user variables (relying on a later top-level
-            // identifier walker to scope the base). But here the result is about to
-            // be wrapped in `$.param(...)` immediately, so the later walker never
-            // runs and the base identifier ends up bare in the emitted code.
             // Pattern that hits this:  `bar.low[1]` where `bar` is a UDT instance.
-            // Walk into the MemberExpression chain and scope the leaf base when it
-            // is a user-declared variable (not a built-in / namespace / loop var /
-            // function param / local series).
-            let baseHolder: any = arg.object;
-            while (baseHolder && baseHolder.type === 'MemberExpression' && baseHolder.object) {
-                if (baseHolder.object.type === 'Identifier') {
-                    const base = baseHolder.object;
-                    const [scopedName] = scopeManager.getVariable(base.name);
-                    const isUserVariable = scopedName !== base.name;
-                    if (
-                        isUserVariable &&
-                        !scopeManager.isContextBound(base.name) &&
-                        !scopeManager.isRootParam(base.name) &&
-                        !scopeManager.isLoopVariable(base.name) &&
-                        !scopeManager.isLocalSeriesVar(base.name) &&
-                        !NAMESPACES_LIKE.includes(base.name) &&
-                        !KNOWN_NAMESPACES.includes(base.name)
-                    ) {
-                        baseHolder.object = createScopedVariableAccess(base.name, scopeManager);
-                    }
-                    break;
-                }
-                baseHolder = baseHolder.object;
-            }
+            scopeMemberChainBase(arg.object, scopeManager);
         } else if (arg.object.type === 'BinaryExpression') {
             arg.object = getParamFromBinaryExpression(arg.object, scopeManager, namespace);
         } else if (arg.object.type === 'LogicalExpression') {

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 LuxAlgo
 
+import { resolveColorToRgba } from '../../../namespaces/color/PineColor';
 import { dottedName } from './constEval';
+
+const COLOR_LITERAL = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 
 /**
  * Minimal Pine type-qualifier inference, used to reject runtime values in
@@ -11,7 +14,7 @@ import { dottedName } from './constEval';
  */
 
 export type Qualifier = 'const' | 'input' | 'simple' | 'series';
-export type ValueType = 'int' | 'float' | 'bool' | 'string';
+export type ValueType = 'int' | 'float' | 'bool' | 'string' | 'color';
 
 export interface Qualified {
     qual: Qualifier;
@@ -94,7 +97,7 @@ export function inferQualified(node: any, env: QualifierEnv): Qualified | undefi
     switch (node.type) {
         case 'Literal':
             if (typeof node.value === 'boolean') return { qual: 'const', type: 'bool' };
-            if (typeof node.value === 'string') return { qual: 'const', type: 'string' };
+            if (typeof node.value === 'string') return { qual: 'const', type: COLOR_LITERAL.test(node.value) ? 'color' : 'string' };
             if (typeof node.value === 'number')
                 return { qual: 'const', type: typeof node.raw === 'string' && /[.eE]/.test(node.raw) ? 'float' : 'int' };
             return undefined;
@@ -105,6 +108,7 @@ export function inferQualified(node: any, env: QualifierEnv): Qualified | undefi
         }
         case 'MemberExpression': {
             const name = dottedName(node);
+            if (name?.startsWith('color.') && resolveColorToRgba(name)) return { qual: 'const', type: 'color' };
             return name ? BUILTIN_VARIABLES[name] : undefined;
         }
         case 'UnaryExpression': {
@@ -163,6 +167,7 @@ function inferCall(node: any, env: QualifierEnv): Qualified | undefined {
         if (qs.length >= 3) return { qual: maxQual('simple', qual), type: 'int' };
         return undefined;
     }
+    if (callee === 'color.new' || callee === 'color.rgb') return { qual, type: 'color' };
     if (callee === 'int' && qs.length === 1 && isNum(qs[0].type)) return { qual, type: 'int' };
     if (callee === 'float' && qs.length === 1 && isNum(qs[0].type)) return { qual, type: 'float' };
     if (callee === 'str.tostring' || callee === 'str.format') return { qual: maxQual('simple', qual), type: 'string' };
@@ -203,6 +208,8 @@ export function startPos(node: any): string | undefined {
     switch (node?.type) {
         case 'Identifier':
         case 'Literal':
+        case 'UnaryExpression':
+        case 'ArrayExpression':
             return node._pos;
         case 'MemberExpression':
             return startPos(node.object);

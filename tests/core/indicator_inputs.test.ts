@@ -270,7 +270,7 @@ indicator("C")
 c = input.color(color.blue, "Line")
 plot(close)`);
         ind.getInputsMeta(); // trigger scan
-        expect(ind.input['Line']).toBe('#2196F3FF'); // color.blue = #2196F3
+        expect(ind.input['Line']).toBe('#2962FFFF'); // color.blue = #2962FF
     });
 
     it('statically evaluates color.new(col, transp) defaults', () => {

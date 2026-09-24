@@ -40,6 +40,12 @@ const TYPE_BY_FN: Record<string, PineInputType> = {
     timeframe: 'timeframe',
 };
 
+// Input types TradingView leaves out of the status line unless `display` says otherwise.
+const HIDDEN_BY_DEFAULT = new Set<PineInputType>(['bool', 'color', 'time', 'text_area']);
+
+// The source dropdown (`volume` is a valid default but not listed).
+const SOURCE_OPTIONS = ['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'hlcc4', 'ohlc4'];
+
 /**
  * Public entry point. Returns `[]` for invalid Pine or for non-string source.
  */
@@ -70,8 +76,9 @@ function toMeta(site: InputSite): IPineInput | null {
     if (a.inline !== undefined) meta.inline = String(a.inline);
     if (a.confirm !== undefined) meta.confirm = Boolean(a.confirm);
     if (a.active !== undefined) meta.active = Boolean(a.active);
-    if (a.display !== undefined) meta.display = normalizeDisplay(a.display);
+    meta.display = (a.display !== undefined ? normalizeDisplay(a.display) : undefined) ?? (HIDDEN_BY_DEFAULT.has(type) ? 'none' : 'all');
     if (Array.isArray(a.options)) meta.options = a.options;
+    else if (type === 'source') meta.options = [...SOURCE_OPTIONS];
     if (typeof a.minval === 'number') meta.minval = a.minval;
     if (typeof a.maxval === 'number') meta.maxval = a.maxval;
     if (typeof a.step === 'number') meta.step = a.step;

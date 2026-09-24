@@ -86,6 +86,8 @@ const POSITIONAL_BY_FN: Record<string, readonly string[]> = {
     time: ['defval', 'title', 'tooltip', 'inline', 'group', 'confirm', 'display', 'active'],
     timeframe: ['defval', 'title', 'options', 'tooltip', 'inline', 'group', 'confirm', 'display', 'active'],
 };
+// The bare wrapper's source overload orders `inline` / `group` before `tooltip`.
+const BARE_SOURCE_LAYOUT = ['defval', 'title', 'inline', 'group', 'tooltip', 'display', 'active'];
 // input.int / input.float: the 3rd positional is `options` (array) or `minval`.
 const INT_FLOAT_OPTIONS = ['defval', 'title', 'options', 'tooltip', 'inline', 'group', 'confirm', 'display', 'active'];
 const INT_FLOAT_RANGE = ['defval', 'title', 'minval', 'maxval', 'step', 'tooltip', 'inline', 'group', 'confirm', 'display', 'active'];
@@ -395,30 +397,40 @@ class InputAnalyzer {
     // ── input call sites ────────────────────────────────────────────────
 
     private recordInput(call: any, fn: string, ctx: Ctx): void {
-        this.validateArguments(call, ctx.scope);
-
         const args: any[] = call.arguments ?? [];
         const last = args[args.length - 1];
         const hasNamed = last?.type === 'ObjectExpression';
         const named: any[] = hasNamed ? (last.properties ?? []) : [];
         const positionals = hasNamed ? args.slice(0, -1) : args.slice();
+        const fnName = fn === '' ? 'input' : `input.${fn}`;
 
         // Parameter name → argument node (named arguments win over positionals).
         const raw: Record<string, { node: any; holder: any; key: string }> = {};
+        const defvalNode = positionals[0] ?? named.find((p) => p.key?.name === 'defval')?.value;
         const layout =
             fn === 'int' || fn === 'float'
                 ? named.some((p) => p.key?.name === 'options') || positionals[2]?.type === 'ArrayExpression'
                     ? INT_FLOAT_OPTIONS
                     : INT_FLOAT_RANGE
-                : POSITIONAL_BY_FN[fn];
+                : fn === '' && isBuiltinSource(defvalNode, ctx.scope)
+                  ? BARE_SOURCE_LAYOUT
+                  : POSITIONAL_BY_FN[fn];
         positionals.forEach((node, i) => {
             if (i < layout.length) raw[layout[i]] = { node, holder: args, key: String(i) };
         });
+        const allowed = fn === 'int' || fn === 'float' ? new Set([...INT_FLOAT_OPTIONS, ...INT_FLOAT_RANGE]) : new Set(POSITIONAL_BY_FN[fn]);
         for (const p of named) {
-            if (p.type === 'Property' && p.key?.name) raw[p.key.name] = { node: p.value, holder: p, key: 'value' };
+            if (p.type !== 'Property' || !p.key?.name) continue;
+            if (!allowed.has(p.key.name)) {
+                throw new Error(
+                    `The "${fnName}" function does not have an argument with the name "${p.key.name}"${p.key._pos ? ` at ${p.key._pos}` : ''}`,
+                );
+            }
+            raw[p.key.name] = { node: p.value, holder: p, key: 'value' };
         }
 
-        this.checkQualifiers(call, fn, raw, ctx.scope);
+        this.validateArguments(call, ctx.scope, raw.active?.node);
+        this.checkArgumentTypes(call, fn, raw, ctx.scope);
 
         const values: Record<string, unknown> = {};
         let defvalType: ConstType | undefined;
@@ -426,6 +438,15 @@ class InputAnalyzer {
             const cv = node?.type === 'ArrayExpression' ? undefined : this.fold(node, ctx.scope);
             if (param === 'defval') defvalType = cv?.type;
             values[param] = cv ? finalizeConst(cv) : fallbackValue(node, (n) => this.fold(n, ctx.scope));
+        }
+
+        this.checkDefvalConstraints(call, fn, raw, values, ctx.scope);
+        if (fn === 'enum' && values.options === undefined) {
+            // Without `options`, the dropdown lists every field of the defval's enum.
+            const field = this.enumField(raw.defval?.node, ctx.scope);
+            const prefix = field?.slice(0, field.lastIndexOf('.') + 1);
+            if (prefix)
+                values.options = [...this.enums].filter(([k]) => k.startsWith(prefix) && !k.slice(prefix.length).includes('.')).map(([, v]) => v);
         }
 
         this.inlineDefval(raw.defval, ctx.scope);
@@ -478,49 +499,137 @@ class InputAnalyzer {
     }
 
     /**
-     * Input arguments must be constants. A runtime value (`bar_index`,
-     * `close * 2`, `barstate.isfirst`, `ta.sma(…)`, a variable holding one)
-     * is rejected with TradingView's messages: CE10123 naming the argument
-     * and its qualified type, or — for a numeric defval of the bare
-     * `input()` — "Arguments of input function must be of constant type".
+     * Input arguments must be constants of the parameter's type. A runtime
+     * value (`bar_index`, `close * 2`, `barstate.isfirst`, `ta.sma(…)`, a
+     * variable holding one) or a constant of another type (`input.int(2.5)`,
+     * `input.bool(1)`, `input.color("red")`) is rejected with TradingView's
+     * messages: CE10123 naming the argument and its qualified type, or — for
+     * a numeric runtime defval of the bare `input()` — "Arguments of input
+     * function must be of constant type".
      */
-    private checkQualifiers(call: any, fn: string, raw: Record<string, { node: any }>, scope: Scope): void {
-        if (fn === 'enum') return;
+    private checkArgumentTypes(call: any, fn: string, raw: Record<string, { node: any }>, scope: Scope): void {
         const env = this.qualifierEnv(scope);
         const fnName = fn === '' ? 'input' : `input.${fn}`;
+        const callPos = leftmostPos(call.callee);
+        const at = (pos: string | undefined) => (pos ? ` at ${pos}` : '');
         for (const [param, { node }] of Object.entries(raw)) {
+            if (!node) continue;
             if (fn === 'source' && param === 'defval') {
-                const isBuiltinSource = node?.type === 'Identifier' && SOURCE_BUILTINS.has(node.name) && !scope.resolve(node.name);
-                if (isBuiltinSource) continue;
-                const pos = leftmostPos(call.callee);
+                if (isBuiltinSource(node, scope)) continue;
                 throw new Error(
                     'Invalid value for the "defval" parameter of the "input.source" function. ' +
-                        `Possible values: [open, high, low, close, hl2, hlc3, ohlc4, hlcc4].${pos ? ` at ${pos}` : ''}`,
+                        `Possible values: [open, high, low, close, hl2, hlc3, ohlc4, hlcc4].${at(callPos)}`,
                 );
             }
-            if (fn !== '' && param === 'defval' && node?.type === 'Identifier' && node.name === 'na' && !scope.resolve('na')) {
-                const pos = startPos(node);
-                throw new Error(`The "defval" parameter of the "${fnName}()" function cannot accept a "na" argument.${pos ? ` at ${pos}` : ''}`);
+            if (fn === 'enum') continue;
+            if (param === 'defval' && node.type === 'Identifier' && node.name === 'na' && !scope.resolve('na')) {
+                if (fn === '') throw new Error(`Arguments of input function must be of constant type, or "source" builtin variables.${at(callPos)}`);
+                if (fn === 'bool') {
+                    throw new Error(
+                        `Cannot call "input.bool" with argument "defval"="na". An argument of "simple na" type was used but a "const bool"  is expected.${at(startPos(node))}`,
+                    );
+                }
+                throw new Error(`The "defval" parameter of the "${fnName}()" function cannot accept a "na" argument.${at(startPos(node))}`);
+            }
+            if (param === 'options' && node.type === 'ArrayExpression') {
+                this.checkOptionTypes(fnName, fn, node, env);
+                continue;
             }
             const expected = expectedArgType(fn, param);
-            if (!expected || !node) continue;
+            if (!expected) continue;
             const q = inferQualified(node, env);
-            if (!q || (q.qual !== 'simple' && q.qual !== 'series')) continue;
+            if (!q) continue;
+            const runtime = q.qual === 'simple' || q.qual === 'series';
 
-            if (fn === '' && param === 'defval' && q.type !== 'bool' && q.type !== 'string') {
-                // Numeric runtime defaults of the bare wrapper: a source builtin is
-                // a source input; a ternary is accepted as one too.
-                if (node.type === 'Identifier' && SOURCE_BUILTINS.has(node.name) && !scope.resolve(node.name)) continue;
-                if (node.type === 'ConditionalExpression') continue;
-                const pos = leftmostPos(call.callee);
-                throw new Error(`Arguments of input function must be of constant type, or "source" builtin variables.${pos ? ` at ${pos}` : ''}`);
+            if (fn === '' && param === 'defval') {
+                // The bare wrapper takes a constant of any type.
+                if (!runtime) continue;
+                if (q.type !== 'bool' && q.type !== 'string') {
+                    // Numeric runtime defaults: a source builtin is a source input;
+                    // a ternary is accepted as one too.
+                    if (isBuiltinSource(node, scope) || node.type === 'ConditionalExpression') continue;
+                    throw new Error(`Arguments of input function must be of constant type, or "source" builtin variables.${at(callPos)}`);
+                }
+            } else if (!runtime && isCompatible(q.type, expected)) {
+                continue;
             }
 
-            const pos = startPos(node);
+            const isLiteral = node.type === 'Literal';
+            const desc = isLiteral ? literalText(node) : describeArgument(node, q);
             throw new Error(
-                `Cannot call "${fnName}" with argument "${param}"="${describeArgument(node, q)}". ` +
-                    `An argument of "${q.qual} ${q.type}" type was used but a "const ${expected}"  is expected.${pos ? ` at ${pos}` : ''}`,
+                `Cannot call "${fnName}" with argument "${param}"="${desc}". ` +
+                    `An argument of "${isLiteral ? 'literal' : q.qual} ${q.type}" type was used but a "const ${expected}"  is expected.${at(startPos(node))}`,
             );
+        }
+    }
+
+    /** `options = [1, "x"]` on a numeric input: each element must be a constant of the input's type. */
+    private checkOptionTypes(fnName: string, fn: string, array: any, env: QualifierEnv): void {
+        const expected = fn === 'int' ? 'int' : fn === 'float' ? 'float' : ['string', 'session', 'timeframe'].includes(fn) ? 'string' : undefined;
+        if (!expected) return;
+        const elements: any[] = array.elements ?? [];
+        const qs = elements.map((el) => inferQualified(el, env));
+        if (qs.some((q) => !q)) return;
+        const ok = qs.every((q) => q!.qual !== 'simple' && q!.qual !== 'series' && isCompatible(q!.type, expected));
+        if (ok) return;
+        const desc = elements.map((el, i) => (el.type === 'Literal' ? literalText(el) : describeArgument(el, qs[i]!))).join(',');
+        const used = elements.map((el, i) => `${el.type === 'Literal' ? 'literal' : qs[i]!.qual} ${qs[i]!.type}`).join(', ');
+        const pos = startPos(array);
+        throw new Error(
+            `Cannot call "${fnName}" with argument "options"="${desc}". An argument of "[${used}]" type was used but a "[const ${expected}...]"  is expected.${pos ? ` at ${pos}` : ''}`,
+        );
+    }
+
+    /**
+     * The default must be selectable: within `minval`..`maxval`, and one of
+     * `options` when given. `input.enum` fields must all come from one enum.
+     */
+    /** `E.b` for an enum field reference, also through a constant ternary (`true ? E.b : E.a`). */
+    private enumField(node: any, scope: Scope): string | null {
+        if (node?.type === 'ConditionalExpression') {
+            const cond = this.foldCondition(node.test, scope);
+            return cond === undefined ? null : this.enumField(cond ? node.consequent : node.alternate, scope);
+        }
+        return dottedName(node);
+    }
+
+    private checkDefvalConstraints(call: any, fn: string, raw: Record<string, { node: any }>, values: Record<string, unknown>, scope: Scope): void {
+        const defNode = raw.defval?.node;
+        const at = (pos: string | undefined) => (pos ? ` at ${pos}` : '');
+        if (fn === 'enum') {
+            const fields = [defNode, ...(raw.options?.node?.type === 'ArrayExpression' ? raw.options.node.elements : [])].map((n) =>
+                this.enumField(n, scope),
+            );
+            if (fields.some((f) => !f || !this.enums.has(f))) return;
+            const enumNames = new Set(fields.map((f) => f!.slice(0, f!.lastIndexOf('.'))));
+            if (enumNames.size > 1) {
+                throw new Error(
+                    `All values passed to "input.enum()" as its "defval" or "options" must be fields of the same enum.${at(leftmostPos(call.callee))}`,
+                );
+            }
+            if (raw.options) {
+                const [def, ...options] = fields as string[];
+                if (!options.includes(def))
+                    throw new Error(`input's defval should be in options, but '${def}' is not in [${options.join(', ')}]${at(startPos(defNode))}`);
+            }
+            return;
+        }
+        const d = values.defval;
+        if (typeof d === 'number' && (fn === 'int' || fn === 'float')) {
+            const { minval, maxval } = values;
+            if ((typeof minval === 'number' && d < minval) || (typeof maxval === 'number' && d > maxval)) {
+                throw new Error(`Input's "defval" value must be between "minval" and "maxval"${at(startPos(defNode))}`);
+            }
+        }
+        const options = values.options;
+        if (Array.isArray(options) && raw.options?.node?.type === 'ArrayExpression' && (typeof d === 'number' || typeof d === 'string')) {
+            const found = options.some((o) => (typeof o === 'number' && typeof d === 'number' ? Math.abs(o - d) < 1e-10 : o === d));
+            if (!found && options.every((o) => typeof o === typeof d)) {
+                const shown = typeof d === 'string' ? `'${d}'` : String(d);
+                throw new Error(
+                    `input's defval should be in options, but ${shown} is not in [${options.map(String).join(', ')}]${at(startPos(defNode))}`,
+                );
+            }
         }
     }
 
@@ -528,9 +637,12 @@ class InputAnalyzer {
      * Input arguments are evaluated at compile time, in a scope where only
      * constants exist: loop counters and function parameters are undeclared
      * there (even when an outer variable has the same name), and a variable
-     * holding another input's value is not a constant.
+     * holding another input's value is not a constant — except in `active`,
+     * which takes an input bool (`active = showInput`).
      */
-    private validateArguments(call: any, scope: Scope): void {
+    private validateArguments(call: any, scope: Scope, activeNode?: any): void {
+        const inActive = new Set<any>();
+        if (activeNode) forEachNode(activeNode, (n) => inActive.add(n));
         forEachNode({ type: 'Args', list: call.arguments ?? [] }, (node, parent, key) => {
             if (node.type !== 'Identifier') return;
             if (parent?.type === 'Property' && key === 'key') return;
@@ -540,12 +652,27 @@ class InputAnalyzer {
             if (sym.kind === 'loop' || sym.kind === 'param') {
                 throw new Error(`Undeclared identifier "${node.name}"${node._pos ? ` at ${node._pos}` : ''}`);
             }
-            if (sym.kind === 'value' && sym.inputDerived) {
+            if (sym.kind === 'value' && sym.inputDerived && !inActive.has(node)) {
                 const pos = leftmostPos(call.callee);
                 throw new Error(`Arguments of input function must be of constant type, or "source" builtin variables.${pos ? ` at ${pos}` : ''}`);
             }
         });
     }
+}
+
+/** A reference to a built-in source series (`close`, `hl2`, …) not shadowed by a user variable. */
+function isBuiltinSource(node: any, scope: Scope): boolean {
+    return node?.type === 'Identifier' && SOURCE_BUILTINS.has(node.name) && !scope.resolve(node.name);
+}
+
+/** Whether a constant of type `actual` is accepted where a `const expected` is required. */
+function isCompatible(actual: ValueType, expected: string): boolean {
+    return actual === expected || (expected === 'float' && actual === 'int');
+}
+
+/** How TradingView prints a literal argument in type errors (`5.0` → "5", `"red"` → "red"). */
+function literalText(node: any): string {
+    return String(node.value);
 }
 
 /**

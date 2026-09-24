@@ -1811,9 +1811,11 @@ export class Parser {
         if (this.match(TokenType.OPERATOR)) {
             const op = this.peek().value;
             if (['+', '-', '!'].includes(op)) {
-                this.advance();
+                const opToken = this.advance();
                 this.skipNewlines();
-                return new UnaryExpression(op, this.parseUnary());
+                const node = new UnaryExpression(op, this.parseUnary());
+                (node as any)._pos = this.startOf(opToken);
+                return node;
             }
         }
 
@@ -1971,13 +1973,16 @@ export class Parser {
                 this.peek(1).type === TokenType.OPERATOR &&
                 this.peek(1).value === '='
             ) {
-                const name = this.advance().value;
+                const nameToken = this.advance();
+                const name = nameToken.value;
                 this.advance(); // =
                 this.skipNewlines();
                 const valueToken = this.peek();
                 const value = this.parseExpression();
                 rejectTupleArg(value, valueToken, userParams ? name : undefined);
-                namedArgs.push(new Property(new Identifier(name), value));
+                const key = new Identifier(name);
+                (key as any)._pos = this.startOf(nameToken);
+                namedArgs.push(new Property(key, value));
             } else {
                 const value = this.parseExpression();
                 rejectTupleArg(value, argToken, userParams?.[args.length]);
@@ -2105,6 +2110,7 @@ export class Parser {
         this.expect(TokenType.RBRACKET);
         const tuple = new ArrayExpression(elements);
         this.tupleLiteralStart.set(tuple, open);
+        (tuple as any)._pos = this.startOf(open);
         return tuple;
     }
 

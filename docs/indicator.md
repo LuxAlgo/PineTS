@@ -271,6 +271,14 @@ else
     k := input(200)       // two inputs, both labelled "k"
 ```
 
+The other argument rules are enforced too, with TradingView's messages and positions:
+
+- each argument must be a constant of the parameter's type — `input.int(2.5)`, `input.bool(1)`, `input.color("red")`, `input.int(10, step = 0.5)` and `options = [1, "x"]` on a numeric input are rejected, as is a typed input defaulting to `na`;
+- the default must lie within `minval` / `maxval` and be one of `options` (`input's defval should be in options, but 4 is not in [1, 2, 3]`);
+- `input.enum` fields must all belong to one enum;
+- named arguments must exist on the function (`input.text_area` has no `inline`, `input.bool` has no `options`);
+- `active` accepts an input bool (`active = showInput`).
+
 ### Validation
 
 Writes are validated against the input's schema. Failures throw immediately with a tailored message:
@@ -296,7 +304,7 @@ const meta = ind.getInputsMeta();
 // ]
 ```
 
-Each entry carries everything the scanner harvested — **`id`**, **`name`**, `type`, `defval`, **`varId`**, `title`, `tooltip`, `group`, `inline`, `display`, `options`, `minval`, `maxval`, `step`, `active`, `confirm`. `id` is unique and always accepted by `.input`; `name` is the settings-dialog label; `varId` (the assigned variable name) is present whenever the input is assigned to a variable and is the preferred `.input` override key. `title` is only set when the script passes one. The exported types `IPineInput`, `PineInputType`, and `PineInputDisplay` describe the shape.
+Each entry carries everything the scanner harvested — **`id`**, **`name`**, `type`, `defval`, **`varId`**, `title`, `tooltip`, `group`, `inline`, `display`, `options`, `minval`, `maxval`, `step`, `active`, `confirm`. `id` is unique and always accepted by `.input`; `name` is the settings-dialog label; `varId` (the assigned variable name) is present whenever the input is assigned to a variable and is the preferred `.input` override key. `title` is only set when the script passes one. `display` is always set: when the script does not pass it, it is `'none'` for `bool`, `color`, `time` and `text_area` inputs and `'all'` otherwise, as on TradingView. `options` is also filled in when the dropdown is implicit: an `input.enum` without `options` lists every field title of its enum, and a source input lists the eight selectable sources (`open`, `high`, `low`, `close`, `hl2`, `hlc3`, `hlcc4`, `ohlc4` — a `volume` override is still accepted). The exported types `IPineInput`, `PineInputType`, and `PineInputDisplay` describe the shape.
 
 **Color defaults are normalized.** `color`-typed inputs report `defval` as a canonical **8-digit RGBA hex string `#RRGGBBAA`** (uppercase; `FF` = fully opaque), regardless of how the source wrote it:
 
