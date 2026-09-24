@@ -713,20 +713,13 @@ function literalText(node: any): string {
     return String(node.value);
 }
 
-/**
- * Metadata value for an argument that does not fold: arrays fold per element,
- * an unresolvable bare name is kept as-is (`tooltip = ma` → "ma").
- */
+/** Metadata value for an argument that does not fold as a whole: arrays fold per element. */
 function fallbackValue(node: any, fold: (n: any) => ConstValue | undefined): unknown {
-    if (!node) return undefined;
-    if (node.type === 'ArrayExpression') {
-        return (node.elements ?? []).map((el: any) => {
-            const cv = fold(el);
-            return cv ? finalizeConst(cv) : fallbackValue(el, fold);
-        });
-    }
-    if (node.type === 'Identifier') return node.name;
-    return undefined;
+    if (node?.type !== 'ArrayExpression') return undefined;
+    return (node.elements ?? []).map((el: any) => {
+        const cv = fold(el);
+        return cv ? finalizeConst(cv) : undefined;
+    });
 }
 
 function containsInputCall(node: any): boolean {

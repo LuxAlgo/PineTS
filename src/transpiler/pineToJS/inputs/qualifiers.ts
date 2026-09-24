@@ -2,9 +2,7 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { resolveColorToRgba } from '../../../namespaces/color/PineColor';
-import { dottedName } from './constEval';
-
-const COLOR_LITERAL = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
+import { COLOR_LITERAL, dottedName } from './constEval';
 
 /**
  * Minimal Pine type-qualifier inference, used to reject runtime values in

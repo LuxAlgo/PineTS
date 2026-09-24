@@ -3,6 +3,7 @@
 
 import { resolveColorToRgba, rgbaToHex8 } from '../../../namespaces/color/PineColor';
 import * as PINE_CONSTANTS from '../../../namespaces/Types';
+import { SOURCE_BUILTINS } from '../../../namespaces/input/utils';
 
 /**
  * Compile-time evaluation of Pine expressions over the pine2js AST.
@@ -38,11 +39,11 @@ export interface ConstEnv {
     truncatingIntDivision: boolean;
 }
 
-export const SOURCE_BUILTINS = new Set(['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'volume']);
+export { SOURCE_BUILTINS };
 
 const MATH_CONSTANTS: Record<string, number> = { pi: Math.PI, e: Math.E, phi: 1.618033988749895, rphi: 0.618033988749895 };
 
-const COLOR_LITERAL = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
+export const COLOR_LITERAL = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 
 const num = (value: number, type: 'int' | 'float', exact = true): ConstValue | undefined =>
     Number.isFinite(value) ? { value, type, exact } : undefined;
