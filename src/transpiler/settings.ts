@@ -278,7 +278,6 @@ export const FOOTPRINT_ROW_METHODS = new Set(['poc', 'vah', 'val', 'get_row_by_p
 
 // All known data variables in the context
 export const CONTEXT_DATA_VARS = ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'openTime', 'closeTime'];
-
 // All known Pine variables in the context
 export const CONTEXT_PINE_VARS = [
     //namespaces

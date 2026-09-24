@@ -113,6 +113,9 @@ export class Token {
      */
     public grouped = false;
 
+    /** Column of the opening quote of a single-line string literal (`column` is past the closing one). */
+    public startColumn?: number;
+
     constructor(public type: string, public value: any, public line: number, public column: number, public indent = 0, public raw: string = null) {}
 
     // toString() {

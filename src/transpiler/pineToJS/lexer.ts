@@ -362,6 +362,7 @@ export class Lexer {
 
         this.advance(); // closing quote
         this.addToken(TokenType.STRING, value);
+        this.tokens[this.tokens.length - 1].startColumn = startCol;
     }
 
     // Consume a backslash escape sequence and return the character it denotes.

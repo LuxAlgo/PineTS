@@ -119,7 +119,7 @@ if barstate.islast
 
         const activeLine = lines.find((l: any) => l.x1 !== null);
         expect(activeLine).toBeDefined();
-        expect(activeLine.color).toBe('#2196F3');
+        expect(activeLine.color).toBe('#2962FF');
     });
 
     it('should pass label textcolor through function parameter (runtime)', async () => {

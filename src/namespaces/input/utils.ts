@@ -46,27 +46,42 @@ const INPUT_ARGS_TYPES = {
     step: 'number',
 };
 
+const isSentinel = (arg: any) =>
+    !!arg &&
+    typeof arg === 'object' &&
+    (Object.prototype.hasOwnProperty.call(arg, '__varId') || Object.prototype.hasOwnProperty.call(arg, '__inputId'));
+
 export function parseInputOptions(args: any[]): Partial<InputOptions> {
-    // Pop the transpiler-injected `{ __varId }` sentinel if present (always the
-    // last arg — added after param-wrapping, so it's a raw object literal). A
-    // Series or a real options object won't carry an own `__varId` property.
+    // Pop the transpiler-injected sentinels (always trailing raw object
+    // literals): `{ __inputId, __varId }` from the Pine input analysis and
+    // `{ __varId }` from the declaration tagging, added after param-wrapping.
+    // A Series or a real options object won't carry these own properties.
     let varId: string | undefined;
-    const last = args[args.length - 1];
-    if (last && typeof last === 'object' && Object.prototype.hasOwnProperty.call(last, '__varId')) {
-        varId = (last as any).__varId;
+    let inputId: string | undefined;
+    while (args.length && isSentinel(args[args.length - 1])) {
+        const s = args[args.length - 1];
+        // The analysis sentinel (with `__inputId`) carries the Pine variable name; it wins.
+        if (s.__inputId !== undefined) varId = s.__varId ?? varId;
+        else varId ??= s.__varId;
+        inputId ??= s.__inputId;
         args = args.slice(0, -1);
     }
     const options = parseArgsForPineParams<Partial<InputOptions>>(args, INPUT_SIGNATURES, INPUT_ARGS_TYPES);
     if (varId !== undefined) options.__varId = varId;
+    if (inputId !== undefined) options.__inputId = inputId;
     return options;
 }
 
 export function resolveInput(context: any, options: Partial<InputOptions>) {
     // Override resolution, PRIMARY → fallback:
+    //   0. by inputId — `in_N`, unique per declared input of a Pine script
     //   1. by varId   — the variable name; robust to empty/duplicate titles
     //   2. by title   — back-compat (legacy constructor `inputs` map and
     //                   title-keyed `.input` access both land here)
     //   3. source default
+    if (options.__inputId && context.inputs && context.inputs[options.__inputId] !== undefined) {
+        return context.inputs[options.__inputId];
+    }
     if (options.__varId && context.inputs && context.inputs[options.__varId] !== undefined) {
         return context.inputs[options.__varId];
     }

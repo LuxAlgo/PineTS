@@ -214,6 +214,23 @@ export class Parser {
         }
     }
 
+    /**
+     * A function parameter's default must be a literal or a built-in variable:
+     * TradingView rejects calls (`a = input(14)`, `a = math.max(1, 2)`) and
+     * calculations (`a = 2 + 2`). `startToken` is the parameter's first token,
+     * where TradingView reports the error.
+     */
+    private assertParamDefault(value: any, startToken: Token): void {
+        if (value?.type === 'CallExpression') {
+            throw new Error(`The default value cannot be a function, variable or calculation. at ${this.startOf(startToken)}`);
+        }
+        if (value?.type === 'BinaryExpression' || value?.type === 'LogicalExpression' || value?.type === 'ConditionalExpression') {
+            throw new Error(
+                `The default value assigned to a parameter must be either a literal value (e.g., "5") or a built-in variable (e.g., "close"). at ${this.startOf(startToken)}`
+            );
+        }
+    }
+
     /** `line:column` of a token's first character (tokens carry the column just past their end). */
     private startOf(token: Token): string {
         return `${token.line}:${token.column - String(token.value).length}`;
@@ -470,7 +487,10 @@ export class Parser {
                 
                 // Return a BlockStatement containing all comma-separated statements
                 this.rejectDanglingWrappedLine();
-                return new BlockStatement(statements);
+                const sequence = new BlockStatement(statements);
+                // Not a scope: the statements belong to the enclosing block.
+                (sequence as any)._sequence = true;
+                return sequence;
             }
         }
 
@@ -959,6 +979,7 @@ export class Parser {
             this.skipNewlines();
             if (this.match(TokenType.RPAREN)) break;
 
+            const paramStart = this.peek();
             let paramType = null;
 
             // Handle type qualifiers (can be multiple: series float, simple int, etc.)
@@ -1001,6 +1022,7 @@ export class Parser {
                 this.advance();
                 this.skipNewlines();
                 const defaultValue = this.parseExpression();
+                this.assertParamDefault(defaultValue, paramStart);
                 params.push(new AssignmentPattern(param, defaultValue));
             } else {
                 params.push(param);
@@ -1057,6 +1079,7 @@ export class Parser {
             this.skipNewlines();
             if (this.match(TokenType.RPAREN)) break;
 
+            const paramStart = this.peek();
             let paramType = null;
 
             // Handle type qualifiers (can be multiple: series float, simple int, etc.)
@@ -1099,6 +1122,7 @@ export class Parser {
                 this.advance();
                 this.skipNewlines();
                 const defaultValue = this.parseExpression();
+                this.assertParamDefault(defaultValue, paramStart);
                 params.push(new AssignmentPattern(param, defaultValue));
             } else {
                 params.push(param);
@@ -1790,9 +1814,11 @@ export class Parser {
         if (this.match(TokenType.OPERATOR)) {
             const op = this.peek().value;
             if (['+', '-', '!'].includes(op)) {
-                this.advance();
+                const opToken = this.advance();
                 this.skipNewlines();
-                return new UnaryExpression(op, this.parseUnary());
+                const node = new UnaryExpression(op, this.parseUnary());
+                (node as any)._pos = this.startOf(opToken);
+                return node;
             }
         }
 
@@ -1950,13 +1976,16 @@ export class Parser {
                 this.peek(1).type === TokenType.OPERATOR &&
                 this.peek(1).value === '='
             ) {
-                const name = this.advance().value;
+                const nameToken = this.advance();
+                const name = nameToken.value;
                 this.advance(); // =
                 this.skipNewlines();
                 const valueToken = this.peek();
                 const value = this.parseExpression();
                 rejectTupleArg(value, valueToken, userParams ? name : undefined);
-                namedArgs.push(new Property(new Identifier(name), value));
+                const key = new Identifier(name);
+                (key as any)._pos = this.startOf(nameToken);
+                namedArgs.push(new Property(key, value));
             } else {
                 const value = this.parseExpression();
                 rejectTupleArg(value, argToken, userParams?.[args.length]);
@@ -1985,17 +2014,23 @@ export class Parser {
         // Literals
         if (this.match(TokenType.NUMBER)) {
             const num = this.advance();
-            return new Literal(num.value, num.raw);
+            const node = new Literal(num.value, num.raw);
+            if (typeof num.raw === 'string') (node as any)._pos = `${num.line}:${num.column - num.raw.length}`;
+            return node;
         }
 
         if (this.match(TokenType.STRING)) {
             const str = this.advance();
-            return new Literal(str.value);
+            const node = new Literal(str.value);
+            if (str.startColumn !== undefined) (node as any)._pos = `${str.line}:${str.startColumn}`;
+            return node;
         }
 
         if (this.match(TokenType.BOOLEAN)) {
             const bool = this.advance();
-            return new Literal(bool.value);
+            const node = new Literal(bool.value);
+            (node as any)._pos = this.startOf(bool);
+            return node;
         }
 
         // Identifier. Contextual keywords (`type`, `method`, `enum`) used as
@@ -2016,7 +2051,9 @@ export class Parser {
             ) {
                 name = name + '_var';
             }
-            return new Identifier(name);
+            const node = new Identifier(name);
+            (node as any)._pos = this.startOf(id);
+            return node;
         }
 
         // Array literal
@@ -2076,6 +2113,7 @@ export class Parser {
         this.expect(TokenType.RBRACKET);
         const tuple = new ArrayExpression(elements);
         this.tupleLiteralStart.set(tuple, open);
+        (tuple as any)._pos = this.startOf(open);
         return tuple;
     }
 

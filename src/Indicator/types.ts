@@ -46,13 +46,20 @@ export type PineInputDisplay = 'none' | 'data_window' | 'status_line' | 'all';
  */
 export interface IPineInput {
     // Always present
+    // Declaration id, `in_0`, `in_1`, … in declaration order (TradingView's
+    // input ids). Unique; always accepted as a `.input[...]` key.
+    id: string;
+    // Label shown in the settings dialog: the title when given, else the
+    // variable the input is assigned to, else the enclosing function's name,
+    // else "untitled" (e.g. `ta.sma(close, input(14))`).
+    name: string;
     type: PineInputType;
     defval: unknown;
 
-    // Variable the input is assigned to (`len = input.int(…)` → "len"). Present
-    // for every scanned input (the scanner only captures `var = input.*()`
-    // forms). It is the PRIMARY, stable key for `.input[...]` overrides — title
-    // is a secondary alias (titles can be empty or duplicated; varId can't).
+    // Variable the input is assigned to (`len = input.int(…)`, `k := input(…)`,
+    // `a = 1 + input(…)` → "len" / "k" / "a"). Absent when the input is not
+    // assigned (e.g. passed directly as an argument). It is the preferred key
+    // for `.input[...]` overrides; `title` and `id` are aliases.
     varId?: string;
 
     // Universal optional

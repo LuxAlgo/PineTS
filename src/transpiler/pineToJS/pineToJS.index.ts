@@ -7,6 +7,7 @@
 import { Lexer } from './lexer';
 import { Parser } from './parser';
 import { CodeGenerator } from './codegen';
+import { analyzeInputs } from './inputs/analyzeInputs';
 
 /**
  * Extract Pine Script version from source code
@@ -60,6 +61,9 @@ export function pineToJS(sourceCode: string, options: any = {}) {
         const parser = new Parser(tokens);
         const ast = parser.parse();
 
+        // Step 2b: Declare inputs (ids, labels, compile-time folded arguments)
+        const inputs = analyzeInputs(ast, { version });
+
         // Step 3: Generate JavaScript (pass source code for comments)
         const codegenOptions = { ...options, sourceCode };
         const codegen = new CodeGenerator(codegenOptions);
@@ -71,6 +75,7 @@ export function pineToJS(sourceCode: string, options: any = {}) {
             code: jsCode,
             ast: ast,
             tokens: tokens,
+            inputs,
         };
     } catch (error) {
         return {
