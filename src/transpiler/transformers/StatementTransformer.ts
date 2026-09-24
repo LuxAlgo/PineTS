@@ -1386,6 +1386,8 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                 // For complex expressions, walk the AST and transform all identifiers and expressions
                 walk.recursive(node.argument, scopeManager, {
                     Identifier(node: any, state: ScopeManager) {
+                        // Loop counters must stay raw JS locals inside for-headers.
+                        if (scopeManager.isLoopVariable(node.name)) return;
                         transformIdentifier(node, state);
                         // Add array access if needed
                         if (node.type === 'Identifier' && !node._arrayAccessed) {
@@ -1393,6 +1395,13 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                             node._arrayAccessed = true;
                         }
                     },
+                    // Do not descend into a for-header here: the counter must stay a
+                    // raw JS local (`let i`), and wrapping it yields the invalid
+                    // `$.get(i, 0)++` (throws "Invalid left-hand side expression in
+                    // postfix operation" on the first loop iteration). The loop's
+                    // declaration/test/update/body are handled by the statement
+                    // machinery when the enclosing function is transformed.
+                    ForStatement() {},
                     MemberExpression(node: any) {
                         transformMemberExpression(node, '', scopeManager);
                     },
