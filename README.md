@@ -2,6 +2,8 @@
   <img src="./.github/images/banner.png" alt="PineTS" />
 </p>
 
+<h1 align="center">PineTS</h1>
+
 <p align="center">
   <strong>Pine Script® runtime for JavaScript</strong><br>
   Run TradingView® indicators in Node.js, browsers, and any JS environment.
@@ -23,7 +25,8 @@
   <a href="#usage">Usage</a> •
   <a href="#api-coverage">API Coverage</a> •
   <a href="#documentation">Docs</a> •
-  <a href="#charting-with-vela">Vela</a>
+  <a href="#charting-with-vela">Vela</a> •
+  <a href="#use-with-ai-agents">AI Agents</a>
 </p>
 
 ## What is PineTS?
@@ -358,6 +361,16 @@ plot(ta.ema(close, 20), color=color.orange, linewidth=2)
 Use `PineWorkerEngine` instead of `PineEngine` when a heavy script should not block the chart. A `strategy()` script runs through the same engine; Vela-pinets maps PineTS's broker-emulator trades onto Vela's price-pane trade markers. Mutable `indicator()` / `strategy()` declaration arguments appear on Vela's **Properties** tab.
 
 **[Vela](https://github.com/LuxAlgo/Vela)** · **[Vela PineTS](https://github.com/LuxAlgo/Vela-pinets)** (`@luxalgo/vela-pinets`)
+
+
+
+## Use with AI agents
+
+[pinets-cli](https://github.com/LuxAlgo/pinets-cli) runs Pine Script® files from the command line with PineTS. The script goes in as a file or on stdin and the plots come out as JSON, so an agent can call it as a tool without a wrapper. Its repository includes skills for Claude Code, OpenAI Codex, and OpenClaw; see its [AI agents guide](https://github.com/LuxAlgo/pinets-cli#use-with-ai-agents).
+
+```bash
+npx pinets-cli run rsi.pine --symbol BTCUSDT --timeframe 60 --quiet
+```
 
 
 

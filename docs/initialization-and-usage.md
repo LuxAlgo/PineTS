@@ -437,8 +437,11 @@ zoom/pan), notably:
 For most scripts these are unused, and the defaults are "the full loaded
 range is the viewport" — perfectly defensible since PineTS does compute over
 everything it loaded. For scripts that *do* reference them (e.g. LuxAlgo's
-Supply-and-Demand Visible Range), a host like QFChart can wire its actual
-viewport in.
+Supply-and-Demand Visible Range), the chart host can wire its actual viewport
+in. On a Vela™ chart, [Vela-PineTS](https://docs.luxalgo.com/developers/pinets/using-within-charts)
+(`@luxalgo/vela-pinets`) does this for you: when the user pans or zooms,
+scripts that reference these built-ins re-run with the chart's visible range,
+passed in through `setVisibleRange()`.
 
 ### `setVisibleRange(left: number, right: number)`
 
@@ -462,13 +465,12 @@ Use this to short-circuit fan-out logic across many indicators on one
 chart — only viewport-dependent indicators need re-runs on user zoom:
 
 ```typescript
-function onChartPan(left, right) {
+async function onChartPan(left, right) {
     for (const p of indicators) {
         if (!p.usesVisibleRange()) continue;   // skip — output unaffected
         p.setVisibleRange(left, right);
-        chart.clear();                          // QFChart helper
         const ctx = await p.update();
-        chart.addIndicator(p.id, ctx.plots);
+        redraw(p, ctx.plots);                  // your chart's render call
     }
 }
 ```
