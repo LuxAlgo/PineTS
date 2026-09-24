@@ -42,6 +42,8 @@ export class Parser {
     private tokens: Token[];
     private pos: number;
     private functionNames: Set<string> = new Set();
+    // Names of top-level UDTs (`type level`).
+    private typeNames: Set<string> = new Set();
     // Stack of parameter-name sets for currently-being-parsed function bodies.
     // When the body of fn `f(x, y) =>` is being parsed, the top frame is {x, y}.
     // Used to suppress the `name → name_var` rewrite for identifiers that are
@@ -350,6 +352,8 @@ export class Parser {
 
     // Pine keeps functions and variables in separate namespaces, so a variable may
     // share a function's name even when it is declared before the function.
+    // UDT names are collected too: types are a third namespace, so `level.new()`
+    // must keep naming the type even when a function `level(...)` exists.
     private collectTopLevelFunctionNames() {
         let depth = 0;
         for (let i = 0; i < this.tokens.length; i++) {
@@ -357,6 +361,12 @@ export class Parser {
             if (t.type === TokenType.INDENT) depth++;
             else if (t.type === TokenType.DEDENT) depth--;
             const atLineStart = i === 0 || this.tokens[i - 1].type === TokenType.NEWLINE || this.tokens[i - 1].type === TokenType.DEDENT;
+            if (depth === 0 && t.type === TokenType.KEYWORD && t.value === 'type' && i + 1 < this.tokens.length) {
+                const prev = this.tokens[i - 1];
+                if (atLineStart || (prev?.type === TokenType.KEYWORD && prev.value === 'export')) {
+                    this.typeNames.add(this.tokens[i + 1].value);
+                }
+            }
             if (depth !== 0 || !atLineStart || t.type !== TokenType.IDENTIFIER) continue;
             this.pos = i;
             if (!this.isFunctionDeclaration()) continue;
@@ -654,7 +664,12 @@ export class Parser {
             this.skipNewlines();
             if (this.match(TokenType.DEDENT)) break;
 
-            // Parse field: type name [= defaultValue]
+            // Parse field: [varip] type name [= defaultValue]
+            // `varip` only affects realtime rollback, which PineTS treats the
+            // same as `var` (see generateVariableDeclaration), so it is dropped.
+            if (this.match(TokenType.KEYWORD, 'varip')) {
+                this.advance();
+            }
             const fieldType = this.parseTypeExpression(); // Now handles generics
             // Field names may be contextual keywords (`int type = 0`) — the lexer
             // already delivers them as identifiers here; reserved words are rejected.
@@ -2047,7 +2062,9 @@ export class Parser {
                 // is the constants namespace, not a variable sharing the
                 // function's name — leave the base identifier untouched so the
                 // codegen collision pass can treat it as a namespace access.
-                !(this.peek().type === TokenType.DOT && NAMESPACE_COLLISION_NAMES.has(name))
+                !(this.peek().type === TokenType.DOT && NAMESPACE_COLLISION_NAMES.has(name)) &&
+                // `level.new()` after `type level` and `level(x) => ...` is the type.
+                !(this.peek().type === TokenType.DOT && this.typeNames.has(name))
             ) {
                 name = name + '_var';
             }
