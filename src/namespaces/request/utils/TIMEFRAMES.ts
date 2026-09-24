@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //Pine Script Timeframes (canonical format: minutes as integers, D/W/M for day/week/month)
-export const TIMEFRAMES = ['1', '3', '5', '15', '30', '45', '60', '120', '180', '240', 'D', 'W', 'M'];
+export const TIMEFRAMES = ['1', '3', '5', '10', '15', '30', '45', '60', '120', '180', '240', '360', '480', '720', 'D', 'W', 'M'];
 
 /**
  * Normalize a timeframe string to the canonical Pine Script format used in TIMEFRAMES.
- * Handles common formats like '1h', '4h', '1d', '1w', '1D', '1W', '1M', etc.
+ * Handles common formats like '1h', '4h', '6h', '8h', '12h', '1d', '1w', '1D', '1W', '1M', etc.
  */
 const TIMEFRAME_MAP: Record<string, string> = {
-    '1m': '1', '3m': '3', '5m': '5', '15m': '15', '30m': '30', '45m': '45',
-    '1h': '60', '2h': '120', '3h': '180', '4h': '240',
+    '1m': '1', '3m': '3', '5m': '5', '10m': '10', '15m': '15', '30m': '30', '45m': '45',
+    '1h': '60', '2h': '120', '3h': '180', '4h': '240', '6h': '360', '8h': '480', '12h': '720',
     '1d': 'D', '1w': 'W', '1M': 'M',
 };
 

@@ -19,25 +19,32 @@ describe('normalizeTimeframe', () => {
         }
     });
 
-    it('should normalize minute formats (1m, 3m, 5m, 15m, 30m, 45m)', () => {
+    it('should normalize minute formats (1m, 3m, 5m, 10m, 15m, 30m, 45m)', () => {
         expect(normalizeTimeframe('1m')).toBe('1');
         expect(normalizeTimeframe('3m')).toBe('3');
         expect(normalizeTimeframe('5m')).toBe('5');
+        expect(normalizeTimeframe('10m')).toBe('10');
         expect(normalizeTimeframe('15m')).toBe('15');
         expect(normalizeTimeframe('30m')).toBe('30');
         expect(normalizeTimeframe('45m')).toBe('45');
     });
 
-    it('should normalize hour formats (1h, 2h, 3h, 4h)', () => {
+    it('should normalize hour formats (1h, 2h, 3h, 4h, 6h, 8h, 12h)', () => {
         expect(normalizeTimeframe('1h')).toBe('60');
         expect(normalizeTimeframe('2h')).toBe('120');
         expect(normalizeTimeframe('3h')).toBe('180');
         expect(normalizeTimeframe('4h')).toBe('240');
+        expect(normalizeTimeframe('6h')).toBe('360');
+        expect(normalizeTimeframe('8h')).toBe('480');
+        expect(normalizeTimeframe('12h')).toBe('720');
     });
 
-    it('should normalize uppercase hour formats (1H, 4H)', () => {
+    it('should normalize uppercase hour formats (1H, 4H, 6H, 8H, 12H)', () => {
         expect(normalizeTimeframe('1H')).toBe('60');
         expect(normalizeTimeframe('4H')).toBe('240');
+        expect(normalizeTimeframe('6H')).toBe('360');
+        expect(normalizeTimeframe('8H')).toBe('480');
+        expect(normalizeTimeframe('12H')).toBe('720');
     });
 
     it('should normalize day/week/month formats', () => {
@@ -241,7 +248,71 @@ plot(dailyClose, "dc")
 
         // Non-canonical formats should also work
         expect(TIMEFRAMES.indexOf(normalizeTimeframe('4h'))).toBe(TIMEFRAMES.indexOf('240'));
+        expect(TIMEFRAMES.indexOf(normalizeTimeframe('6h'))).toBe(TIMEFRAMES.indexOf('360'));
+        expect(TIMEFRAMES.indexOf(normalizeTimeframe('8h'))).toBe(TIMEFRAMES.indexOf('480'));
+        expect(TIMEFRAMES.indexOf(normalizeTimeframe('12h'))).toBe(TIMEFRAMES.indexOf('720'));
         expect(TIMEFRAMES.indexOf(normalizeTimeframe('1w'))).toBe(TIMEFRAMES.indexOf('W'));
         expect(TIMEFRAMES.indexOf(normalizeTimeframe('1d'))).toBe(TIMEFRAMES.indexOf('D'));
+
+        // 6h/8h/12h should sit between 4h (240) and Daily (D)
+        const idx4h = TIMEFRAMES.indexOf('240');
+        const idx6h = TIMEFRAMES.indexOf('360');
+        const idx8h = TIMEFRAMES.indexOf('480');
+        const idx12h = TIMEFRAMES.indexOf('720');
+        const idxD = TIMEFRAMES.indexOf('D');
+
+        expect(idx6h).toBeGreaterThan(idx4h);
+        expect(idx8h).toBeGreaterThan(idx6h);
+        expect(idx12h).toBeGreaterThan(idx8h);
+        expect(idxD).toBeGreaterThan(idx12h);
+    });
+
+    it('360 (6h) chart requesting Daily with request.security should execute without throwing Invalid timeframe', async () => {
+        const bar = (t: number) => ({
+            openTime: t,
+            closeTime: t + 21599999,
+            open: 100,
+            high: 101,
+            low: 99,
+            close: 100.5,
+            volume: 10,
+        });
+        const make = (n: number, ms: number) =>
+            Array.from({ length: n }, (_, i) => bar(1700000000000 + i * ms));
+
+        const datasets: Record<string, any[]> = {
+            '360': make(50, 21600e3),
+            'D': make(50, 86400e3),
+        };
+        const mockProvider = {
+            async getMarketData(_t: any, tf: string) {
+                if (!datasets[tf]) throw new Error(`no data for ${tf}`);
+                return datasets[tf];
+            },
+            async getSymbolInfo() {
+                return {
+                    ticker: 'BTCUSDT',
+                    tickerid: 'BINANCE:BTCUSDT',
+                    type: 'crypto',
+                    currency: 'USDT',
+                    mintick: 0.01,
+                    pointvalue: 1,
+                    timezone: 'UTC',
+                };
+            },
+            configure() {},
+        };
+
+        const mtf = `//@version=5
+indicator("mtf 6h")
+float dClose = request.security(syminfo.tickerid, "D", close)
+plot(dClose, "dc")
+`;
+
+        const pineTS = new PineTS(mockProvider as any, 'BINANCE:BTCUSDT', '360', 50);
+        const { plots } = await pineTS.run(mtf);
+
+        expect(plots['dc']).toBeDefined();
+        expect(plots['dc'].data.length).toBeGreaterThan(0);
     });
 });
