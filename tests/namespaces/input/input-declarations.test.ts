@@ -119,6 +119,11 @@ describe('input declarations: local scopes', () => {
             ['in_0', 'k', 'int', 1],
             ['in_1', 'k', 'int', 2],
         ]);
+        // The runtime choice a ternary default cannot express is written as an if/else.
+        expect(declared('var k = 0', 'if bar_index > 40000', '    k := input(14)', 'else', '    k := input(200)', 'plot(ta.sma(close, k))')).toEqual([
+            ['in_0', 'k', 'int', 14],
+            ['in_1', 'k', 'int', 200],
+        ]);
     });
 
     it('switch arms declare their inputs; a constant subject keeps only the selected arm', () => {
@@ -163,6 +168,9 @@ describe('input declarations: compile-time evaluation of arguments', () => {
     });
 
     it('divides int constants fractionally and truncates an int-typed result', () => {
+        expect(declared('x = input(7 / 3)', 'plot(x)')).toEqual([['in_0', 'x', 'int', 2]]);
+        expect(declared('x = input.float(7 / 3)', 'plot(x)')).toEqual([['in_0', 'x', 'float', 2]]);
+        expect(declared('x = input(7.0 / 3.0)', 'plot(x)')).toEqual([['in_0', 'x', 'float', 7 / 3]]);
         expect(declared('k = input(7 / 2)', 'plot(k)')).toEqual([['in_0', 'k', 'int', 3]]);
         expect(declared('k = input(1 / 2 * 4)', 'plot(k)')).toEqual([['in_0', 'k', 'int', 2]]);
         expect(declared('k = input(10 / 4)', 'plot(k)')).toEqual([['in_0', 'k', 'int', 2]]);
@@ -313,6 +321,100 @@ describe('input declarations: compile errors', () => {
             ['a = input(5)', 'b = input(a)', 'plot(b)'],
             'Arguments of input function must be of constant type, or "source" builtin variables. at 4:5',
         );
+    });
+
+    it('a runtime value in a typed input argument is a qualifier error', () => {
+        const err = (fn: string, param: string, desc: string, used: string, expected: string, at: string) =>
+            `Cannot call "${fn}" with argument "${param}"="${desc}". An argument of "${used}" type was used but a "const ${expected}"  is expected. at ${at}`;
+        fails(
+            ['k = input.int(bar_index > 40000 ? 14 : 200)', 'plot(ta.sma(close, k))'],
+            err('input.int', 'defval', 'call "operator ?:" (series int)', 'series int', 'int', '3:15'),
+        );
+        fails(
+            ['k = input.float(close > open ? 1.0 : 2.0)', 'plot(k)'],
+            err('input.float', 'defval', 'call "operator ?:" (series float)', 'series float', 'float', '3:17'),
+        );
+        fails(['k = input.int(bar_index)', 'plot(k)'], err('input.int', 'defval', 'bar_index', 'series int', 'int', '3:15'));
+        fails(['k = input.int(bar_index + 1)', 'plot(k)'], err('input.int', 'defval', 'call "operator +" (series int)', 'series int', 'int', '3:15'));
+        fails(
+            ['k = input.float(close * 2)', 'plot(k)'],
+            err('input.float', 'defval', 'call "operator *" (series float)', 'series float', 'float', '3:17'),
+        );
+        fails(['k = input.time(time)', 'plot(k)'], err('input.time', 'defval', 'time', 'series int', 'int', '3:16'));
+        fails(
+            ['k = input.bool(barstate.isfirst)', 'plot(k ? 1 : 0)'],
+            err('input.bool', 'defval', 'barstate.isfirst', 'series bool', 'bool', '3:16'),
+        );
+        fails(['k = input(barstate.isfirst)', 'plot(k ? 1 : 0)'], err('input', 'defval', 'barstate.isfirst', 'series bool', 'bool', '3:11'));
+        fails(
+            ['k = input.int(int(ta.sma(close, 3)))', 'plot(k)'],
+            err('input.int', 'defval', 'call "int" (series int)', 'series int', 'int', '3:15'),
+        );
+        fails(
+            ['k = input.float(ta.sma(close, 3))', 'plot(k)'],
+            err('input.float', 'defval', 'call "ta.sma" (series float)', 'series float', 'float', '3:17'),
+        );
+        fails(
+            ['k = input.int(math.max(bar_index, 3))', 'plot(k)'],
+            err('input.int', 'defval', 'call "math.max" (series int)', 'series int', 'int', '3:15'),
+        );
+        fails(['x = bar_index', 'k = input.int(x)', 'plot(k)'], err('input.int', 'defval', 'x', 'series int', 'int', '4:15'));
+        fails(
+            ['k = input.int(3, str.tostring(bar_index))', 'plot(k)'],
+            err('input.int', 'title', 'call "str.tostring" (series string)', 'series string', 'string', '3:18'),
+        );
+        fails(['k = input.int(3, minval = bar_index)', 'plot(k)'], err('input.int', 'minval', 'bar_index', 'series int', 'int', '3:27'));
+        fails(
+            ['s = input.string("a" + str.tostring(bar_index))', 'plot(close)'],
+            err('input.string', 'defval', 'call "operator +" (series string)', 'series string', 'string', '3:18'),
+        );
+        fails(['k = input.int(timeframe.multiplier)', 'plot(k)'], err('input.int', 'defval', 'timeframe.multiplier', 'simple int', 'int', '3:15'));
+        fails(
+            ['t = input.time(timestamp(2024, 1, 1, 0, 0))', 'plot(t)'],
+            err('input.time', 'defval', 'call "timestamp" (simple int)', 'simple int', 'int', '3:16'),
+        );
+        fails(
+            ['k = input(str.tostring(5))', 'plot(close)'],
+            err('input', 'defval', 'call "str.tostring" (simple string)', 'simple string', 'bool', '3:11'),
+        );
+    });
+
+    it('a numeric runtime default of the bare input() is not a constant', () => {
+        const msg = 'Arguments of input function must be of constant type, or "source" builtin variables.';
+        fails(['k = input(bar_index)', 'plot(k)'], `${msg} at 3:5`);
+        fails(['k = input(close * 2)', 'plot(k)'], `${msg} at 3:5`);
+        fails(['k = input(syminfo.mintick)', 'plot(k)'], `${msg} at 3:5`);
+        fails(['x = close', 'k = input(x)', 'plot(k)'], `${msg} at 4:5`);
+        expect(declared('s = input(close)', 'plot(s)')).toEqual([['in_0', 's', 'source', 'close']]);
+        expect(declared('s = input(volume)', 'plot(s)')).toEqual([['in_0', 's', 'source', 'volume']]);
+    });
+
+    it('input.source only accepts a built-in source', () => {
+        const msg =
+            'Invalid value for the "defval" parameter of the "input.source" function. Possible values: [open, high, low, close, hl2, hlc3, ohlc4, hlcc4].';
+        fails(['s = input.source(close * 2)', 'plot(s)'], `${msg} at 3:5`);
+        fails(['s = input.source(close[1])', 'plot(s)'], `${msg} at 3:5`);
+        fails(['s = input.source(ta.sma(close, 3))', 'plot(s)'], `${msg} at 3:5`);
+        fails(['x = close * 2', 's = input.source(x)', 'plot(s)'], `${msg} at 4:5`);
+        expect(declared('s = input.source(volume)', 'plot(s)')).toEqual([['in_0', 's', 'source', 'volume']]);
+        expect(declared('s = input.source(defval = open, title = "S")', 'plot(s)')).toEqual([['in_0', 'S', 'source', 'open']]);
+    });
+
+    it('a typed input cannot default to na', () => {
+        fails(['k = input.float(na)', 'plot(k)'], 'The "defval" parameter of the "input.float()" function cannot accept a "na" argument. at 3:17');
+    });
+
+    it('constant and chart-independent arguments are accepted', () => {
+        for (const line of [
+            'k = input.int(math.max(3, 5))',
+            'k = input.time(timestamp("2024-01-01 00:00 +0000"))',
+            'k = input.int(true ? 3 : 4)',
+            'L = 7',
+            'k = input.int(L * 2, "T" + "x", minval = 1 + 1)',
+            'var k = input.int(14)',
+        ]) {
+            expect(() => transpile(pine(line, 'plot(close)'))).not.toThrow();
+        }
     });
 
     it('a function parameter default cannot be a function call', () => {

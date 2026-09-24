@@ -2,7 +2,8 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { Identifier, Literal, ObjectExpression, Property } from '../ast';
-import { ConstEnv, ConstType, ConstValue, dottedName, evalConst, finalizeConst } from './constEval';
+import { ConstEnv, ConstType, ConstValue, dottedName, evalConst, finalizeConst, SOURCE_BUILTINS } from './constEval';
+import { describeArgument, inferQualified, QualifierEnv, startPos, ValueType } from './qualifiers';
 
 /**
  * Input declaration analysis over the pine2js AST (runs before code generation).
@@ -88,6 +89,30 @@ const POSITIONAL_BY_FN: Record<string, readonly string[]> = {
 // input.int / input.float: the 3rd positional is `options` (array) or `minval`.
 const INT_FLOAT_OPTIONS = ['defval', 'title', 'options', 'tooltip', 'inline', 'group', 'confirm', 'display', 'active'];
 const INT_FLOAT_RANGE = ['defval', 'title', 'minval', 'maxval', 'step', 'tooltip', 'inline', 'group', 'confirm', 'display', 'active'];
+
+const DEFVAL_TYPE: Record<string, string> = {
+    '': 'bool', // the bare wrapper's first overload; used for bool / string runtime defaults
+    int: 'int',
+    float: 'float',
+    bool: 'bool',
+    string: 'string',
+    text_area: 'string',
+    session: 'string',
+    symbol: 'string',
+    timeframe: 'string',
+    time: 'int',
+    price: 'float',
+    color: 'color',
+};
+
+/** Type an input argument must have, as a `const`, for qualifier checks. */
+function expectedArgType(fn: string, param: string): string | undefined {
+    if (param === 'defval') return DEFVAL_TYPE[fn];
+    if (param === 'title' || param === 'tooltip' || param === 'group' || param === 'inline') return 'string';
+    if (param === 'minval' || param === 'maxval' || param === 'step') return fn === 'int' ? 'int' : 'float';
+    if (param === 'confirm') return 'bool';
+    return undefined;
+}
 
 type Sym =
     | { kind: 'value'; name: string; init: any; scope: Scope; nonConst: boolean; inputDerived: boolean; cache?: ConstValue | null; busy?: boolean }
@@ -393,6 +418,8 @@ class InputAnalyzer {
             if (p.type === 'Property' && p.key?.name) raw[p.key.name] = { node: p.value, holder: p, key: 'value' };
         }
 
+        this.checkQualifiers(call, fn, raw, ctx.scope);
+
         const values: Record<string, unknown> = {};
         let defvalType: ConstType | undefined;
         for (const [param, { node }] of Object.entries(raw)) {
@@ -432,6 +459,69 @@ class InputAnalyzer {
                   ? String(value)
                   : null;
         entry.holder[entry.key] = new Literal(value, raw);
+    }
+
+    private qualifierEnv(scope: Scope, seen = new Set<Sym>()): QualifierEnv {
+        return {
+            lookup: (name) => {
+                const sym = scope.resolve(name);
+                if (!sym) return undefined;
+                if (sym.kind !== 'value' || sym.nonConst || sym.inputDerived || seen.has(sym)) return null;
+                const cv = this.fold({ type: 'Identifier', name }, scope);
+                if (cv && ['int', 'float', 'bool', 'string'].includes(cv.type)) return { qual: 'const', type: cv.type as ValueType };
+                seen.add(sym);
+                const q = inferQualified(sym.init, this.qualifierEnv(sym.scope, seen));
+                seen.delete(sym);
+                return q ?? null;
+            },
+        };
+    }
+
+    /**
+     * Input arguments must be constants. A runtime value (`bar_index`,
+     * `close * 2`, `barstate.isfirst`, `ta.sma(…)`, a variable holding one)
+     * is rejected with TradingView's messages: CE10123 naming the argument
+     * and its qualified type, or — for a numeric defval of the bare
+     * `input()` — "Arguments of input function must be of constant type".
+     */
+    private checkQualifiers(call: any, fn: string, raw: Record<string, { node: any }>, scope: Scope): void {
+        if (fn === 'enum') return;
+        const env = this.qualifierEnv(scope);
+        const fnName = fn === '' ? 'input' : `input.${fn}`;
+        for (const [param, { node }] of Object.entries(raw)) {
+            if (fn === 'source' && param === 'defval') {
+                const isBuiltinSource = node?.type === 'Identifier' && SOURCE_BUILTINS.has(node.name) && !scope.resolve(node.name);
+                if (isBuiltinSource) continue;
+                const pos = leftmostPos(call.callee);
+                throw new Error(
+                    'Invalid value for the "defval" parameter of the "input.source" function. ' +
+                        `Possible values: [open, high, low, close, hl2, hlc3, ohlc4, hlcc4].${pos ? ` at ${pos}` : ''}`,
+                );
+            }
+            if (fn !== '' && param === 'defval' && node?.type === 'Identifier' && node.name === 'na' && !scope.resolve('na')) {
+                const pos = startPos(node);
+                throw new Error(`The "defval" parameter of the "${fnName}()" function cannot accept a "na" argument.${pos ? ` at ${pos}` : ''}`);
+            }
+            const expected = expectedArgType(fn, param);
+            if (!expected || !node) continue;
+            const q = inferQualified(node, env);
+            if (!q || (q.qual !== 'simple' && q.qual !== 'series')) continue;
+
+            if (fn === '' && param === 'defval' && q.type !== 'bool' && q.type !== 'string') {
+                // Numeric runtime defaults of the bare wrapper: a source builtin is
+                // a source input; a ternary is accepted as one too.
+                if (node.type === 'Identifier' && SOURCE_BUILTINS.has(node.name) && !scope.resolve(node.name)) continue;
+                if (node.type === 'ConditionalExpression') continue;
+                const pos = leftmostPos(call.callee);
+                throw new Error(`Arguments of input function must be of constant type, or "source" builtin variables.${pos ? ` at ${pos}` : ''}`);
+            }
+
+            const pos = startPos(node);
+            throw new Error(
+                `Cannot call "${fnName}" with argument "${param}"="${describeArgument(node, q)}". ` +
+                    `An argument of "${q.qual} ${q.type}" type was used but a "const ${expected}"  is expected.${pos ? ` at ${pos}` : ''}`,
+            );
+        }
     }
 
     /**

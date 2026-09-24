@@ -2006,17 +2006,23 @@ export class Parser {
         // Literals
         if (this.match(TokenType.NUMBER)) {
             const num = this.advance();
-            return new Literal(num.value, num.raw);
+            const node = new Literal(num.value, num.raw);
+            if (typeof num.raw === 'string') (node as any)._pos = `${num.line}:${num.column - num.raw.length}`;
+            return node;
         }
 
         if (this.match(TokenType.STRING)) {
             const str = this.advance();
-            return new Literal(str.value);
+            const node = new Literal(str.value);
+            if (str.startColumn !== undefined) (node as any)._pos = `${str.line}:${str.startColumn}`;
+            return node;
         }
 
         if (this.match(TokenType.BOOLEAN)) {
             const bool = this.advance();
-            return new Literal(bool.value);
+            const node = new Literal(bool.value);
+            (node as any)._pos = this.startOf(bool);
+            return node;
         }
 
         // Identifier. Contextual keywords (`type`, `method`, `enum`) used as

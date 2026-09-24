@@ -253,8 +253,22 @@ for i = 0 to 9
 f(x) => input(x)          // Undeclared identifier "x"   (function parameter)
 a = input(5)
 b = input(a)              // Arguments of input function must be of constant type, or "source" builtin variables.
+k = input.int(bar_index > 40000 ? 14 : 200)
+                          // Cannot call "input.int" with argument "defval"="call "operator ?:" (series int)". An argument of "series int" type was used but a "const int"  is expected.
+s = input.source(close * 2)
+                          // Invalid value for the "defval" parameter of the "input.source" function. Possible values: [open, high, low, close, hl2, hlc3, ohlc4, hlcc4].
 g(a = input(14)) => a     // The default value cannot be a function, variable or calculation.
 h(a = 2 + 2) => a         // The default value assigned to a parameter must be either a literal value (e.g., "5") or a built-in variable (e.g., "close").
+```
+
+Runtime values — series such as `bar_index`, `close`, `time`, `barstate.*`, `ta.*` results, and simple values such as `timeframe.multiplier`, `syminfo.mintick` or `timestamp(2024, 1, 1)` — are rejected in any input argument (`defval`, `title`, `minval`, …), directly or through a variable. A default that must depend on the chart is written with local inputs instead:
+
+```pine
+var k = 0
+if bar_index > 40000
+    k := input(14)
+else
+    k := input(200)       // two inputs, both labelled "k"
 ```
 
 ### Validation
@@ -301,7 +315,7 @@ len = input.int(DEF, "Length", group = GRP)
 // → { id: 'in_0', name: 'Length', type: 'int', varId: 'len', title: 'Length', defval: 14, group: 'Indicator Settings' }
 ```
 
-References that can't be resolved to a static value (e.g. a computed series like `ta.sma(close, 5)`) fall back to the bare variable name.
+A runtime value (e.g. a computed series like `ta.sma(close, 5)`) is not a valid input argument — see the compile errors in [Where inputs can be declared](#where-inputs-can-be-declared).
 
 ---
 

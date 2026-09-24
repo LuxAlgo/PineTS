@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { PineTS } from '../../src/PineTS.class';
 import { Provider } from '../../src/marketData/Provider.class';
 import { Indicator } from '../../src/Indicator';
+import { transpile } from '../../src/transpiler/index';
 
 describe('PineTS Indicator Inputs', () => {
     it('should pass inputs to the context', async () => {
@@ -129,15 +130,16 @@ plot(close)`;
         expect(metaFor(code, 'Line')?.defval).toBe('#26A69A80');
     });
 
-    it('falls back to the bare name for unresolvable (computed) references', () => {
+    it('rejects a computed series reference (input arguments must be constants)', () => {
         const code = `//@version=6
 indicator("C")
 ma = ta.sma(close, 5)
 n = input.int(20, "N", tooltip = ma)
 plot(close)`;
-        // ma is a computed series, not a literal const → tooltip stays the name.
-        expect(metaFor(code, 'N')?.tooltip).toBe('ma');
-        expect(metaFor(code, 'N')?.defval).toBe(20);
+        expect(() => transpile(code)).toThrow(
+            'Cannot call "input.int" with argument "tooltip"="ma". An argument of "series float" type was used but a "const string"  is expected. at 4:34'
+        );
+        expect(new Indicator(code).getInputsMeta()).toEqual([]);
     });
 });
 
