@@ -71,12 +71,14 @@ function toMeta(site: InputSite): IPineInput | null {
     const meta: IPineInput = { id: site.id, name: site.name, type, defval: a.defval };
     if (site.varId !== undefined) meta.varId = site.varId;
     if (a.title !== undefined) meta.title = String(a.title);
-    if (a.tooltip !== undefined) meta.tooltip = String(a.tooltip);
+    if (a.tooltip !== undefined && a.tooltip !== '') meta.tooltip = String(a.tooltip);
     if (a.group !== undefined) meta.group = String(a.group);
     if (a.inline !== undefined) meta.inline = String(a.inline);
     if (a.confirm !== undefined) meta.confirm = Boolean(a.confirm);
     if (a.active !== undefined) meta.active = Boolean(a.active);
-    meta.display = (a.display !== undefined ? normalizeDisplay(a.display) : undefined) ?? (HIDDEN_BY_DEFAULT.has(type) ? 'none' : 'all');
+    // A combination such as `display.all - display.status_line` has no single value; leave it unset.
+    const display = 'display' in a ? normalizeDisplay(a.display) : HIDDEN_BY_DEFAULT.has(type) ? 'none' : 'all';
+    if (display !== undefined) meta.display = display;
     if (Array.isArray(a.options)) meta.options = a.options;
     else if (type === 'source') meta.options = [...SOURCE_OPTIONS];
     if (typeof a.minval === 'number') meta.minval = a.minval;

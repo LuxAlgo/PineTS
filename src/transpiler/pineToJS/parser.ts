@@ -487,7 +487,10 @@ export class Parser {
                 
                 // Return a BlockStatement containing all comma-separated statements
                 this.rejectDanglingWrappedLine();
-                return new BlockStatement(statements);
+                const sequence = new BlockStatement(statements);
+                // Not a scope: the statements belong to the enclosing block.
+                (sequence as any)._sequence = true;
+                return sequence;
             }
         }
 

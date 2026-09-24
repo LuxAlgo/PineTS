@@ -2,6 +2,7 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { resolveColorToRgba, rgbaToHex8 } from '../../../namespaces/color/PineColor';
+import * as PINE_CONSTANTS from '../../../namespaces/Types';
 
 /**
  * Compile-time evaluation of Pine expressions over the pine2js AST.
@@ -122,7 +123,14 @@ function evalMember(node: any, env: ConstEnv): ConstValue | undefined {
     const [ns, prop] = name.split('.');
     if (ns === 'math' && prop in MATH_CONSTANTS) return num(MATH_CONSTANTS[prop], 'float');
     if (ns === 'color' && resolveColorToRgba(name)) return { value: name, type: 'color', exact: false };
-    // Other namespace constants (display.none, shape.circle, …) keep their dotted name.
+    // Namespace constants (`size.small` → "small", `position.top_right` → "top_right") report their
+    // runtime value; display constants keep their dotted name for the display normalizer.
+    const constants = (PINE_CONSTANTS as Record<string, any>)[ns];
+    if (ns !== 'display' && constants && typeof constants === 'object' && prop in constants) {
+        const v = constants[prop];
+        if (typeof v === 'string') return { value: v, type: 'string', exact: false };
+        if (typeof v === 'number') return { value: v, type: Number.isInteger(v) ? 'int' : 'float', exact: false };
+    }
     return { value: name, type: 'other', exact: false };
 }
 
@@ -271,13 +279,14 @@ function evalColorCall(callee: string, vals: ConstValue[]): ConstValue | undefin
     if (callee === 'color.rgb') {
         const [r, g, b, transp] = vals.map((v) => v.value);
         if (typeof r !== 'number' || typeof g !== 'number' || typeof b !== 'number') return undefined;
-        const a = clamp01(1 - (typeof transp === 'number' ? transp : 0) / 100);
+        // (100 - transp) / 100 keeps 90 → 0.1 exact (1 - 0.9 is 0.0999…, which rounds the alpha byte down)
+        const a = clamp01((100 - (typeof transp === 'number' ? transp : 0)) / 100);
         return { value: rgbaToHex8(r, g, b, a), type: 'color', exact: false };
     }
     const base = resolveColorToRgba(vals[0]?.value);
     const transp = vals[1]?.value;
     if (!base || typeof transp !== 'number') return undefined;
-    return { value: rgbaToHex8(base[0], base[1], base[2], clamp01(1 - transp / 100)), type: 'color', exact: false };
+    return { value: rgbaToHex8(base[0], base[1], base[2], clamp01((100 - transp) / 100)), type: 'color', exact: false };
 }
 
 /**
@@ -288,6 +297,8 @@ function evalColorCall(callee: string, vals: ConstValue[]): ConstValue | undefin
 function evalTimestamp(ds: string): ConstValue | undefined {
     const s = ds.trim();
     const hasZone = /[Zz]$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s);
-    const t = hasZone ? new Date(s).getTime() : new Date(s.includes('T') ? s + 'Z' : s.replace(/\s+/, 'T') + 'Z').getTime();
+    let t = hasZone ? new Date(s).getTime() : new Date(s.includes('T') ? s + 'Z' : s.replace(/\s+/, 'T') + 'Z').getTime();
+    // Non-ISO formats ("04 Mar 2024 00:00"): read the components as UTC.
+    if (!hasZone && Number.isNaN(t)) t = new Date(`${s} UTC`).getTime();
     return num(t, 'int', hasZone);
 }

@@ -348,7 +348,9 @@ export class Core {
             // Force UTC parse (normalize "YYYY-MM-DD HH:MM" → "YYYY-MM-DDTHH:MMZ")
             // then extract UTC components and reinterpret in exchange timezone.
             const isoStr = ds.includes('T') ? ds + 'Z' : ds.replace(/\s+/, 'T') + 'Z';
-            const utcDate = new Date(isoStr);
+            let utcDate = new Date(isoStr);
+            // Non-ISO formats ("04 Mar 2024 00:00"): read the components as UTC, not machine-local time.
+            if (isNaN(utcDate.getTime())) utcDate = new Date(`${ds} UTC`);
             if (!isNaN(utcDate.getTime())) {
                 const timezone = this.context.pine?.syminfo?.timezone || 'UTC';
                 return this._timestampFromComponents(

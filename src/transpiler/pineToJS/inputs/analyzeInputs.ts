@@ -117,7 +117,18 @@ function expectedArgType(fn: string, param: string): string | undefined {
 }
 
 type Sym =
-    | { kind: 'value'; name: string; init: any; scope: Scope; nonConst: boolean; inputDerived: boolean; cache?: ConstValue | null; busy?: boolean }
+    | {
+          kind: 'value';
+          name: string;
+          init: any;
+          scope: Scope;
+          nonConst: boolean;
+          inputDerived: boolean;
+          /** Default of the input call this variable is initialized with (`x = input.string("A")`). */
+          inputDefault?: ConstValue;
+          cache?: ConstValue | null;
+          busy?: boolean;
+      }
     | { kind: 'loop' | 'param'; name: string };
 
 class Scope {
@@ -158,6 +169,8 @@ class InputAnalyzer {
     private readonly enums = new Map<string, unknown>();
     private readonly reassigned = new Set<string>();
     private readonly visited = new WeakSet<object>();
+    private readonly inputDefaults = new WeakMap<object, ConstValue>();
+    private readonly functionNames = new Set<string>();
     private readonly truncatingIntDivision: boolean;
 
     constructor(
@@ -178,6 +191,7 @@ class InputAnalyzer {
 
     private collectEnumsAndReassignments(root: any): void {
         forEachNode(root, (node) => {
+            if (node.type === 'FunctionDeclaration' && node.id?.name) this.functionNames.add(node.id.name);
             if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier') {
                 this.reassigned.add(node.left.name);
             }
@@ -194,14 +208,24 @@ class InputAnalyzer {
         });
     }
 
+    /** The parser renames a variable sharing a user function's name to `name_var`; labels use the Pine name. */
+    private pineName(name: string): string {
+        return name.endsWith('_var') && this.functionNames.has(name.slice(0, -4)) ? name.slice(0, -4) : name;
+    }
+
     // ── constant environment ────────────────────────────────────────────
 
-    private env(scope: Scope): ConstEnv {
+    /**
+     * `withInputDefaults` resolves a variable initialized from an input to that
+     * input's default — how TradingView evaluates `active = mode == "A"`.
+     */
+    private env(scope: Scope, withInputDefaults = false): ConstEnv {
         return {
             enums: this.enums,
             truncatingIntDivision: this.truncatingIntDivision,
             lookup: (name) => {
                 const sym = scope.resolve(name);
+                if (withInputDefaults && sym?.kind === 'value' && !sym.nonConst && sym.inputDefault) return sym.inputDefault;
                 if (!sym || sym.kind !== 'value' || sym.nonConst || sym.busy) return undefined;
                 if (sym.cache === undefined) {
                     sym.busy = true;
@@ -256,14 +280,19 @@ class InputAnalyzer {
             case 'VariableDeclaration':
                 for (const decl of node.declarations ?? []) {
                     const name = decl.id?.type === 'Identifier' ? decl.id.name : null;
-                    this.visit(decl.init, { ...ctx, target: name ?? ctx.target });
-                    if (name) this.declareValue(ctx.scope, name, decl.init, decl.varType ?? decl.id?.varType ?? null);
+                    this.visit(decl.init, { ...ctx, target: name ? this.pineName(name) : ctx.target });
+                    if (name) {
+                        this.declareValue(ctx.scope, name, decl.init, decl.varType ?? decl.id?.varType ?? null);
+                        const sym = ctx.scope.vars.get(name);
+                        const inputDefault = this.inputDefaults.get(decl.init);
+                        if (sym?.kind === 'value' && inputDefault) sym.inputDefault = inputDefault;
+                    }
                 }
                 return;
 
             case 'AssignmentExpression': {
                 const name = node.left?.type === 'Identifier' ? node.left.name : null;
-                this.visit(node.right, { ...ctx, target: name ?? ctx.target });
+                this.visit(node.right, { ...ctx, target: name ? this.pineName(name) : ctx.target });
                 if (name && containsInputCall(node.right)) {
                     const sym = ctx.scope.resolve(name);
                     if (sym?.kind === 'value') sym.inputDerived = true;
@@ -272,7 +301,8 @@ class InputAnalyzer {
             }
 
             case 'BlockStatement':
-                this.visitStatements(node.body ?? [], { ...ctx, scope: new Scope(ctx.scope) });
+                // `a = 1, b = 2` on one line is lowered to a block that shares the enclosing scope.
+                this.visitStatements(node.body ?? [], node._sequence ? ctx : { ...ctx, scope: new Scope(ctx.scope) });
                 return;
 
             case 'IfStatement': {
@@ -435,8 +465,16 @@ class InputAnalyzer {
         const values: Record<string, unknown> = {};
         let defvalType: ConstType | undefined;
         for (const [param, { node }] of Object.entries(raw)) {
-            const cv = node?.type === 'ArrayExpression' ? undefined : this.fold(node, ctx.scope);
-            if (param === 'defval') defvalType = cv?.type;
+            const cv =
+                node?.type === 'ArrayExpression'
+                    ? undefined
+                    : param === 'active'
+                      ? evalConst(node, this.env(ctx.scope, true))
+                      : this.fold(node, ctx.scope);
+            if (param === 'defval') {
+                defvalType = cv?.type;
+                if (cv) this.inputDefaults.set(call, cv);
+            }
             values[param] = cv ? finalizeConst(cv) : fallbackValue(node, (n) => this.fold(n, ctx.scope));
         }
 

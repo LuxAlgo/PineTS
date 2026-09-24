@@ -153,6 +153,56 @@ describe('input metadata defaults', () => {
     });
 });
 
+describe('input metadata in published-script patterns', () => {
+    it('constants declared after an input on the same line are visible to later inputs', () => {
+        const m = meta(pine(`res = input.timeframe('1'), W = 'high/low', C = 'close'`, `iSrc = input.string(W, 'option', options = [W, C])`));
+        expect(m[1]).toMatchObject({ defval: 'high/low', options: ['high/low', 'close'] });
+    });
+
+    it('namespace constants report their value', () => {
+        const m = meta(
+            pine(
+                's = input.string(size.small, "Size", options = [size.tiny, size.small, size.normal])',
+                'p = input.string(position.top_right, "Position")',
+            ),
+        );
+        expect(m.map((x) => [x.defval, x.options])).toEqual([
+            ['small', ['tiny', 'small', 'normal']],
+            ['top_right', undefined],
+        ]);
+    });
+
+    it('timestamp() with a non-ISO date string folds', () => {
+        expect(meta(pine('t = input.time(timestamp("04 Mar 2024 00:00"), "Anchor")'))[0].defval).toBe(1709510400000);
+    });
+
+    it('color.new transparency maps to the rounded alpha byte', () => {
+        expect(meta(pine('c = input.color(color.new(#607D8B, 90))'))[0].defval).toBe('#607D8B1A');
+    });
+
+    it('active is evaluated with the default of the inputs it references', () => {
+        const m = meta(
+            pine(
+                `summaryMethod = input.string('Mean', 'Summary', options = ['Mean', 'Percentile'])`,
+                `percentile = input.int(50, active = summaryMethod == 'Percentile')`,
+            ),
+        );
+        expect(m[1].active).toBe(false);
+    });
+
+    it('a variable sharing a user function name is labelled by its Pine name', async () => {
+        const src = pine(`statistic = input.string('Mean')`, 'statistic(x) => x', 'k = str.length(statistic)', ...plotted(['k']));
+        expect(meta(src).map((m) => [m.name, m.varId])).toEqual([['statistic', 'statistic']]);
+        expect(await firstValues(new Indicator(src, { statistic: 'Median' }), ['k'], 1)).toEqual({ k: [6] });
+    });
+
+    it('a display combination has no single value; an empty tooltip is omitted', () => {
+        const m = meta(pine('a = input.int(100, "A", display = display.all - display.status_line)', 'b = input.int(1, "B", tooltip = "")'));
+        expect(m[0].display).toBeUndefined();
+        expect(m[1].tooltip).toBeUndefined();
+    });
+});
+
 describe('input argument checks', () => {
     it('na defaults', () => {
         for (const [fn, col] of [
@@ -301,6 +351,11 @@ describe('input runtime behavior', () => {
         );
         expect(meta(src)[0].defval).toBe('#2962FFFF');
         expect(await firstValues(new Indicator(src), ['r', 'g', 'b', 't'], 1)).toEqual({ r: [41], g: [98], b: [255], t: [40] });
+    });
+
+    it('timestamp() with a non-ISO date string uses the exchange timezone, not the machine timezone', async () => {
+        const src = pine('t = input.time(timestamp("04 Mar 2024 00:00"), "Anchor")', 'u = timestamp("04 Mar 2024 00:00")', ...plotted(['t', 'u']));
+        expect(await firstValues(new Indicator(src), ['t', 'u'], 1)).toEqual({ t: [1709510400000], u: [1709510400000] });
     });
 
     it('an input in a for loop is one input read on every iteration', async () => {

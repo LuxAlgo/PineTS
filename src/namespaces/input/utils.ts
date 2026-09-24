@@ -60,7 +60,9 @@ export function parseInputOptions(args: any[]): Partial<InputOptions> {
     let inputId: string | undefined;
     while (args.length && isSentinel(args[args.length - 1])) {
         const s = args[args.length - 1];
-        varId ??= s.__varId;
+        // The analysis sentinel (with `__inputId`) carries the Pine variable name; it wins.
+        if (s.__inputId !== undefined) varId = s.__varId ?? varId;
+        else varId ??= s.__varId;
         inputId ??= s.__inputId;
         args = args.slice(0, -1);
     }
