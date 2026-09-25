@@ -2,6 +2,8 @@ export class Series {
     constructor(public data: any[], public offset: number = 0) { }
 
     public get(index: number): any {
+        // Pine reads an `na` offset as 0: `close[na]` is the current bar.
+        if (index == null || Number.isNaN(index)) index = 0;
         // Pine history offsets are integers by definition; a fractional lookback
         // only arises from int-division divergence (e.g. `src[depth/2]`: Pine
         // computes int 5, JS `/` yields 5.5 — see RC2). Truncate the combined

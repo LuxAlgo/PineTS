@@ -797,6 +797,7 @@ export class Context {
         // net — Pine offsets are integers; a fractional value indicates
         // int-division divergence). The Series path re-guards offset+index inside
         // Series.get; this covers the array/scalar paths below.
+        if (index == null || Number.isNaN(index)) index = 0;
         if (typeof index === 'number' && !Number.isInteger(index)) index = Math.trunc(index);
 
         if (source instanceof Series) {

@@ -544,8 +544,8 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const p4 = ta.param($.let.glb1_leftBars, undefined, 'p4');
   const p5 = ta.param($.let.glb1_rightBars, undefined, 'p5');
   const temp_3 = ta.pivothigh(p4, p5, "_ta2");
-  const p6 = $.param(temp_3, 1, 'p6');
-  $.let.glb1_highUsePivot = $.init($.let.glb1_highUsePivot, fixnan(p6));
+  const p7 = $.param($.get($.param(temp_3, undefined, 'p6'), 1), undefined, 'p7');
+  $.let.glb1_highUsePivot = $.init($.let.glb1_highUsePivot, fixnan(p7));
 }`;
 
         expect(result).toBe(expected_code);

@@ -389,6 +389,42 @@ export function transformIdentifier(node: any, scopeManager: ScopeManager): void
     }
 }
 
+// Objects of `[]` that evaluate to a per-bar value rather than a series.
+export const HISTORY_VALUE_OBJECT_TYPES = ['CallExpression', 'BinaryExpression', 'LogicalExpression', 'ConditionalExpression', 'UnaryExpression'];
+
+function transformHistoryValueObject(node: any, scopeManager: ScopeManager): any {
+    if (node.type === 'CallExpression') {
+        if (!node._transformed) transformCallExpression(node, scopeManager);
+        return node;
+    }
+    return transformOperand(node, scopeManager);
+}
+
+/**
+ * Lowers the offset of a `$.get(<series>, offset)` produced from a history
+ * reference, for positions no later identifier walker visits (return values).
+ */
+export function transformHistoryOffset(offset: any, scopeManager: ScopeManager): any {
+    if (offset.type === 'Literal') return offset;
+    const isContextCall = offset.type === 'CallExpression' && offset.callee?.object?.name === CONTEXT_NAME;
+    if (isContextCall) return offset;
+    if (offset.type === 'MemberExpression' && offset.computed) {
+        transformArrayIndex(offset, scopeManager);
+        const lower = (node: any) => {
+            if (node.type !== 'MemberExpression') return;
+            if (node.computed) lower(node.property);
+            transformMemberExpression(node, '', scopeManager);
+        };
+        lower(offset);
+        return offset;
+    }
+    if (offset.type === 'CallExpression') {
+        if (!offset._transformed) transformCallExpression(offset, scopeManager);
+        return offset;
+    }
+    return transformOperand(offset, scopeManager);
+}
+
 export function transformMemberExpression(memberNode: any, originalParamName: string, scopeManager: ScopeManager): void {
     // Skip transformation for Math object properties
     if (memberNode.object && memberNode.object.type === 'Identifier' && memberNode.object.name === 'Math') {
@@ -403,14 +439,19 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
     // so it composes everywhere (arithmetic, $.init, return, argument). Without
     // this the subscript was either dropped (folded into $.init's ignored
     // lookbehind) or left as a raw JS index on a scalar (→ NaN).
+    // A parenthesized expression, e.g. `(close - open)[1]`, is the same case.
     if (
         memberNode.computed &&
         memberNode.object &&
-        memberNode.object.type === 'CallExpression' &&
+        HISTORY_VALUE_OBJECT_TYPES.includes(memberNode.object.type) &&
         !memberNode._historyTransformed
     ) {
-        if (!memberNode.object._transformed) {
-            transformCallExpression(memberNode.object, scopeManager);
+        memberNode.object = transformHistoryValueObject(memberNode.object, scopeManager);
+        const offset = memberNode.property;
+        if (offset.type === 'Identifier' && scopeManager.isLocalSeriesVar(offset.name) && !scopeManager.isLoopVariable(offset.name)) {
+            const plainId = ASTFactory.createIdentifier(offset.name);
+            plainId._skipTransformation = true;
+            memberNode.property = ASTFactory.createGetCall(plainId, 0);
         }
         const paramId = scopeManager.generateParamId();
         const paramCall = {
@@ -1148,21 +1189,20 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             }
         }
 
+        // A call or expression yields one value per bar, not a series: its history
+        // is accumulated in a `$.param` series, as in the assignment form.
+        // (Checked before transforming: a hoisted call becomes a `temp_N` identifier.)
+        let holdsValue = HISTORY_VALUE_OBJECT_TYPES.includes(arg.object.type);
+
         // Ensure complex objects are transformed before being used as array source
-        if (arg.object.type === 'CallExpression') {
-            transformCallExpression(arg.object, scopeManager);
+        if (holdsValue) {
+            arg.object = transformHistoryValueObject(arg.object, scopeManager);
         } else if (arg.object.type === 'MemberExpression') {
+            // `strategy.position_size`-style getters become calls here.
             transformMemberExpression(arg.object, '', scopeManager);
             // Pattern that hits this:  `bar.low[1]` where `bar` is a UDT instance.
             scopeMemberChainBase(arg.object, scopeManager);
-        } else if (arg.object.type === 'BinaryExpression') {
-            arg.object = getParamFromBinaryExpression(arg.object, scopeManager, namespace);
-        } else if (arg.object.type === 'LogicalExpression') {
-            arg.object = getParamFromLogicalExpression(arg.object, scopeManager, namespace);
-        } else if (arg.object.type === 'ConditionalExpression') {
-            arg.object = getParamFromConditionalExpression(arg.object, scopeManager, namespace);
-        } else if (arg.object.type === 'UnaryExpression') {
-            arg.object = getParamFromUnaryExpression(arg.object, scopeManager, namespace);
+            holdsValue = arg.object.type === 'CallExpression';
         }
 
         // Transform array access
@@ -1175,6 +1215,13 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
         let transformedProperty: any;
         if (arg.property.type === 'Identifier' && !scopeManager.isContextBound(arg.property.name) && !scopeManager.isLoopVariable(arg.property.name)) {
             transformedProperty = ASTFactory.createGetCall(transformIdentifierForParam(arg.property, scopeManager), 0);
+        } else if (arg.property.type === 'Identifier' && scopeManager.isContextBound(arg.property.name) && !scopeManager.isLoopVariable(arg.property.name)) {
+            // Built-in series offset, e.g. bar_index[bar_index]
+            const name = arg.property.name;
+            const base = NAMESPACES_LIKE.includes(name)
+                ? ASTFactory.createMemberExpression(ASTFactory.createIdentifier(name), ASTFactory.createIdentifier('__value'))
+                : ASTFactory.createIdentifier(name);
+            transformedProperty = ASTFactory.createGetCall(base, 0);
         } else if (arg.property.type === 'BinaryExpression' || arg.property.type === 'UnaryExpression' ||
                    arg.property.type === 'LogicalExpression' || arg.property.type === 'ConditionalExpression') {
             // Recursively transform identifiers inside complex index expressions
@@ -1198,13 +1245,30 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             transformedProperty = arg.property;
         }
 
+        let source = transformedObject;
+        let offset = transformedProperty;
+        if (holdsValue) {
+            const historyParamId = scopeManager.generateParamId();
+            const historyParam = {
+                type: 'CallExpression',
+                callee: ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('param')),
+                arguments: [arg.object, UNDEFINED_ARG, makeParamNameArg(scopeManager, historyParamId)],
+                _transformed: true,
+                _isParamCall: true,
+            };
+            source = ASTFactory.createGetCall(historyParam, transformedProperty);
+            source._transformed = true;
+            source._historyTransformed = true;
+            offset = UNDEFINED_ARG;
+        }
+
         const memberExpr = ASTFactory.createMemberExpression(ASTFactory.createIdentifier(namespace), ASTFactory.createIdentifier('param'));
 
         const nextParamId = scopeManager.generateParamId();
         const paramCall = {
             type: 'CallExpression',
             callee: memberExpr,
-            arguments: [transformedObject, transformedProperty, makeParamNameArg(scopeManager, nextParamId)],
+            arguments: [source, offset, makeParamNameArg(scopeManager, nextParamId)],
             _transformed: true,
             _isParamCall: true,
         };
