@@ -127,7 +127,21 @@ export class LinefillHelper {
         const lf = new LinefillObject(resolvedLine1, resolvedLine2, resolvedColor);
         lf._createdAtBar = this.context.idx;
         this._linefills.push(lf);
+        this._enforceMaxCount();
         return lf;
+    }
+
+    // Linefills share the max_lines_count limit; the oldest are deleted first.
+    private _enforceMaxCount(): void {
+        const maxCount = this.context.indicator?.max_lines_count ?? 50;
+        let excess = this._linefills.filter((lf) => !lf._deleted).length - maxCount;
+        for (const lf of this._linefills) {
+            if (excess <= 0) break;
+            if (!lf._deleted) {
+                lf._deleted = true;
+                excess--;
+            }
+        }
     }
 
     // linefill() direct call — mapped via NAMESPACES_LIKE → linefill.any()

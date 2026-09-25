@@ -12,6 +12,78 @@ const DAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 
 const pad = (n: number, len: number) => String(n).padStart(len, '0');
 
+// Named number formats of str.format placeholders ({0,number,integer}, …), as DecimalFormat patterns.
+const MESSAGE_NUMBER_FORMATS: Record<string, string> = { '': '#,##0.###', integer: '#,##0', percent: '#,##0%', currency: '$#,##0.00' };
+
+// Integer and fraction digits of a non-negative number, from its shortest round-trip
+// representation, with the decimal point moved right by `shift` places (exact % scaling).
+function plainDecimal(abs: number, shift: number): [string, string] {
+    const m = String(abs).match(/^(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/);
+    if (!m) return [String(abs), ''];
+    let digits = m[1] + (m[2] ?? '');
+    let point = m[1].length + Number(m[3] ?? 0) + shift;
+    if (point <= 0) {
+        digits = '0'.repeat(1 - point) + digits;
+        point = 1;
+    }
+    if (point > digits.length) digits += '0'.repeat(point - digits.length);
+    return [digits.slice(0, point), digits.slice(point)];
+}
+
+// Rounds a decimal digit string to `maxFrac` fraction digits, half up or half even.
+function roundDecimal(int: string, frac: string, maxFrac: number, halfEven: boolean): [string, string] {
+    if (frac.length <= maxFrac) return [int, frac];
+    let digits = int + frac.slice(0, maxFrac);
+    const first = Number(frac[maxFrac]);
+    const tail = frac.slice(maxFrac + 1);
+    const lastKeptOdd = Number(digits[digits.length - 1]) % 2 === 1;
+    if (first > 5 || (first === 5 && (!halfEven || /[1-9]/.test(tail) || lastKeptOdd))) {
+        const chars = digits.split('');
+        let i = chars.length - 1;
+        while (i >= 0 && chars[i] === '9') chars[i--] = '0';
+        if (i >= 0) chars[i] = String(Number(chars[i]) + 1);
+        else chars.unshift('1');
+        digits = chars.join('');
+    }
+    const intLen = digits.length - maxFrac;
+    return [digits.slice(0, intLen), digits.slice(intLen)];
+}
+
+/**
+ * Formats a number with a DecimalFormat-style pattern: literal prefix and suffix, `0` / `#`
+ * digits, `,` grouping, `.` fraction and `%` (×100). str.tostring rounds half up and prints
+ * a value that rounds to zero without its sign; str.format rounds half even and keeps it.
+ * Returns null when the pattern has no digit placeholder.
+ */
+function formatNumberPattern(value: number, pattern: string, halfEven: boolean): string | null {
+    if (!Number.isFinite(value)) return String(value);
+    const m = pattern.match(/^([^#0,.]*)([#0,]*)(?:\.([#0]*))?([\s\S]*)$/);
+    if (!m || !/[#0]/.test(m[2] + (m[3] ?? ''))) return null;
+    const [, prefix, intPattern, fracPattern = '', suffix] = m;
+    const scale = (prefix + suffix).includes('%') ? 100 : 1;
+    const minInt = (intPattern.match(/0/g) ?? []).length;
+    const comma = intPattern.lastIndexOf(',');
+    const groupSize = comma >= 0 ? intPattern.length - comma - 1 : 0;
+    const minFrac = (fracPattern.match(/0/g) ?? []).length;
+    const maxFrac = fracPattern.length;
+
+    // Digits come from the shortest decimal representation of the double, rounded decimally
+    // ("0.0005" is a tie, "3.141592653589793" padded with zeros), like TradingView.
+    const [intPart, fracPart] = plainDecimal(Math.abs(value), scale === 100 ? 2 : 0);
+    const [roundedInt, roundedFrac] = roundDecimal(intPart, fracPart, maxFrac, halfEven);
+    const isZero = !/[1-9]/.test(roundedInt + roundedFrac);
+
+    let intDigits = roundedInt.replace(/^0+/, '');
+    let frac = roundedFrac.padEnd(maxFrac, '0');
+    while (frac.length > minFrac && frac.endsWith('0')) frac = frac.slice(0, -1);
+    if (intDigits.length < minInt) intDigits = intDigits.padStart(minInt, '0');
+    if (!intDigits && minFrac === 0) intDigits = '0';
+    if (groupSize > 0) intDigits = intDigits.replace(new RegExp(`\\B(?=(\\d{${groupSize}})+(?!\\d))`, 'g'), ',');
+
+    const negative = value < 0 && (halfEven || !isZero);
+    return (negative ? '-' : '') + prefix + intDigits + (frac ? '.' + frac : '') + suffix;
+}
+
 export class Str {
     constructor(private context: Context) {}
 
@@ -52,21 +124,8 @@ export class Str {
             return String(Math.round(value));
         }
 
-        // Pattern-based format: "#", "#.#", "#.##", "0.000", etc.
-        // Count decimal places from the pattern
-        const dotIdx = formatStr.indexOf('.');
-        if (dotIdx >= 0) {
-            const decimalPart = formatStr.substring(dotIdx + 1);
-            const decimals = decimalPart.length;
-            return value.toFixed(decimals);
-        }
-
-        // No decimal point in format → integer
-        if (formatStr.includes('#') || formatStr.includes('0')) {
-            return String(Math.round(value));
-        }
-
-        return String(value);
+        // Pattern-based format: "#", "#.##", "0.000", "#,##0.0", "    #.0", "0 bars", …
+        return formatNumberPattern(value, formatStr, false) ?? String(value);
     }
     tonumber(value: any) {
         return Number(value);
@@ -245,11 +304,13 @@ export class Str {
     }
 
     format(message: string, ...args: any[]) {
-        // Handle both simple {0} and extended {0,number,#.##} patterns
-        return message.replace(/\{(\d+)(?:,number,([^}]+))?\}/g, (match, index, fmt) => {
+        // {0}, {0,number}, {0,number,integer|percent|currency} and {0,number,<pattern>}.
+        // Numbers are formatted like Java's MessageFormat: {0} uses "#,##0.###", half-even rounding.
+        return message.replace(/\{(\d+)(?:,number(?:,([^}]*))?)?\}/g, (match, index, fmt) => {
             const val = args[index];
-            if (fmt && typeof val === 'number' && !isNaN(val)) {
-                return this.tostring(val, fmt);
+            if (typeof val === 'number' && !isNaN(val)) {
+                const pattern = MESSAGE_NUMBER_FORMATS[(fmt ?? '').trim()] ?? fmt;
+                return formatNumberPattern(val, pattern, true) ?? String(val);
             }
             return String(val);
         });
