@@ -44,6 +44,9 @@ export class Parser {
     private functionNames: Set<string> = new Set();
     // Names of top-level UDTs (`type level`).
     private typeNames: Set<string> = new Set();
+    // UDT names that are also declared as variables (`var fib fib = fib.new()`): the
+    // variable is emitted as `name_var`; `name.new(...)` / `name.copy(...)` name the type.
+    private typeVariableNames: Set<string> = new Set();
     // Stack of parameter-name sets for currently-being-parsed function bodies.
     // When the body of fn `f(x, y) =>` is being parsed, the top frame is {x, y}.
     // Used to suppress the `name → name_var` rewrite for identifiers that are
@@ -374,6 +377,34 @@ export class Parser {
             this.functionNames.add(this.peek(hasReturnType ? 1 : 0).value);
         }
         this.pos = 0;
+
+        // `<type name> =` outside brackets declares a variable of that name (inside
+        // brackets it is a named argument).
+        let brackets = 0;
+        for (let i = 0; i < this.tokens.length - 1; i++) {
+            const t = this.tokens[i];
+            if (t.type === TokenType.LPAREN || t.type === TokenType.LBRACKET) brackets++;
+            else if (t.type === TokenType.RPAREN || t.type === TokenType.RBRACKET) brackets--;
+            const next = this.tokens[i + 1];
+            if (brackets === 0 && t.type === TokenType.IDENTIFIER && this.typeNames.has(t.value) && next.type === TokenType.OPERATOR && next.value === '=') {
+                this.typeVariableNames.add(t.value);
+            }
+        }
+    }
+
+    // A declared variable that shares its name with a user function or type is renamed.
+    private variableName(name: string): string {
+        return this.functionNames.has(name) || this.typeVariableNames.has(name) ? name + '_var' : name;
+    }
+
+    // `name.new(...)` / `name.copy(...)`: type access, even when a variable shares the name.
+    private isTypeMemberAccess(): boolean {
+        return (
+            this.peek().type === TokenType.DOT &&
+            this.peek(1).type === TokenType.IDENTIFIER &&
+            (this.peek(1).value === 'new' || this.peek(1).value === 'copy') &&
+            this.peek(2).type === TokenType.LPAREN
+        );
     }
 
     // Parse statement
@@ -790,9 +821,7 @@ export class Parser {
             throw new Error(`Expected identifier after ${kind} at ${this.peek().line}:${this.peek().column}`);
         }
 
-        if (this.functionNames.has(name)) {
-            name = name + '_var';
-        }
+        name = this.variableName(name);
 
         this.expect(TokenType.OPERATOR, '=');
         this.skipNewlines(true);
@@ -930,10 +959,7 @@ export class Parser {
             }
         }
 
-        let name = this.expectName().value;
-        if (this.functionNames.has(name)) {
-            name = name + '_var';
-        }
+        const name = this.variableName(this.expectName().value);
 
         this.expect(TokenType.OPERATOR, '=');
         this.skipNewlines(true);
@@ -962,10 +988,7 @@ export class Parser {
         ) {
             this.advance(); // consume ','
             this.skipNewlines(true);
-            let nextName = this.expectName().value;
-            if (this.functionNames.has(nextName)) {
-                nextName = nextName + '_var';
-            }
+            const nextName = this.variableName(this.expectName().value);
             this.expect(TokenType.OPERATOR, '=');
             this.skipNewlines(true);
             const nextInit = this.parseExpression();
@@ -1687,9 +1710,7 @@ export class Parser {
                 if (declared.has(name)) throw new Error(`"${name}" is already defined at ${this.startOf(open)}`);
                 declared.add(name);
             }
-            if (this.functionNames.has(name)) {
-                name = name + '_var';
-            }
+            name = this.variableName(name);
             elements.push(new Identifier(name));
 
             if (this.match(TokenType.COMMA)) {
@@ -2066,6 +2087,8 @@ export class Parser {
                 // `level.new()` after `type level` and `level(x) => ...` is the type.
                 !(this.peek().type === TokenType.DOT && this.typeNames.has(name))
             ) {
+                name = name + '_var';
+            } else if (this.typeVariableNames.has(name) && !this.isCurrentFunctionParam(name) && !this.isTypeMemberAccess()) {
                 name = name + '_var';
             }
             const node = new Identifier(name);
