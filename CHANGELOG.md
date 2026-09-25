@@ -1,5 +1,11 @@
 # Change Log
 
+## [Unreleased]
+
+### Fixed
+
+- **A history reference indexed by another history reference crashed inside a call argument**: in `math.min(lPh[bs[1]], low[bs[1]])` (LuxAlgo ICT Concepts), the offset of the argument's `param()` wrapper was emitted untransformed, so the script failed with `ReferenceError: bs is not defined`. The same happened with a call as the offset (`low[math.max(a[1], 1)]`) and deeper nesting (`low[a[a[1]]]`), in `math.*`, `ta.*` and every other namespace call. The offset is now lowered like the top-level form, to `$.get(<bs>, 1)`. Test: `tests/transpiler/nested-history-index-in-call.test.ts`.
+
 ## [0.10.0] - 2026-09-25 - Request Footprint, Input Declarations & Pine Syntax Parity
 
 ### Added

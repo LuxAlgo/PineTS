@@ -1180,6 +1180,20 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             // Recursively transform identifiers inside complex index expressions
             // e.g. close[strideInput * 2] → ta.param(close, $.get($.let.glb1_strideInput, 0) * 2, 'p2')
             transformedProperty = transformOperand(arg.property, scopeManager, namespace);
+        } else if (arg.property.type === 'MemberExpression') {
+            // History-reference index, e.g. low[a[1]] → ta.param(low, $.get($.let.glb1_a, 1), 'p2')
+            transformArrayIndex(arg.property, scopeManager);
+            const lowerHistoryChain = (node: any) => {
+                if (node.type !== 'MemberExpression') return;
+                if (node.computed) lowerHistoryChain(node.property);
+                transformMemberExpression(node, '', scopeManager);
+            };
+            lowerHistoryChain(arg.property);
+            transformedProperty = arg.property;
+        } else if (arg.property.type === 'CallExpression') {
+            // Call index, e.g. low[math.max(a[1], 1)]
+            if (!arg.property._transformed) transformCallExpression(arg.property, scopeManager);
+            transformedProperty = arg.property;
         } else {
             transformedProperty = arg.property;
         }
