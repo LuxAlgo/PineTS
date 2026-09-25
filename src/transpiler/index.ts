@@ -150,8 +150,9 @@ export function transpile(source: string | Function, options: { debug: boolean; 
     // (see TradingView's v6 migration guide, "Fractional division of constants"),
     // and PineTS-syntax / function input (pineVersion === null) is JavaScript,
     // where `/` is always float division.
-    if (pineVersion !== null && pineVersion < 6) {
-        runTypeInferencePass(ast, scopeManager);
+    // The same pass types array.from() elements (int vs float) for every Pine version.
+    if (pineVersion !== null) {
+        runTypeInferencePass(ast, scopeManager, { intDivision: pineVersion < 6 });
     }
 
     // Lazy operands: tag nodes inside `?:` branches (every version) and the

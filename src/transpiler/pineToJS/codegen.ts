@@ -1450,7 +1450,8 @@ export class CodeGenerator {
             // required so the int/float type inference can distinguish `2` from
             // `2.0` (`int / int` truncates in Pine, `int / float` does not).
             const s = String(node.value);
-            if (typeof node.raw === 'string' && node.raw.includes('.') && !/[.eE]/.test(s)) {
+            // An exponent (`10e6`) also makes a float literal.
+            if (typeof node.raw === 'string' && /[.eE]/.test(node.raw) && !/[.eE]/.test(s)) {
                 this.write(s + '.0');
             } else {
                 this.write(s);
