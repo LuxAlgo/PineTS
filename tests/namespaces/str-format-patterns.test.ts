@@ -58,7 +58,7 @@ describe('Str.tostring Format Patterns', () => {
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('123.5');
-        expect(last(result.r2)).toBe('5.0');
+        expect(last(result.r2)).toBe('5'); // `#` is an optional digit (TradingView prints "5")
         expect(last(result.r3)).toBe('-0.1');
     });
 
@@ -77,7 +77,7 @@ describe('Str.tostring Format Patterns', () => {
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('123.46');
-        expect(last(result.r2)).toBe('42195.10');
+        expect(last(result.r2)).toBe('42195.1'); // `#` is an optional digit (TradingView prints "42195.1")
         expect(last(result.r3)).toBe('0.01');  // 0.005 rounds to 0.01
     });
 
@@ -209,7 +209,8 @@ describe('Str.format Extended Patterns', () => {
         const { result } = await pineTS.run(sourceCode);
         const last = (arr: any[]) => arr[arr.length - 1];
 
-        expect(last(result.r1)).toBe('Price: 42195.12, Volume: 1000');
+        // A plain {N} number is grouped like TradingView's "#,##0.###" ("1,000")
+        expect(last(result.r1)).toBe('Price: 42195.12, Volume: 1,000');
     });
 
     it('should handle {0,number,#} integer pattern', async () => {

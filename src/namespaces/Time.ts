@@ -76,6 +76,14 @@ function parseTimeframeMinutes(tf: string): number {
     return isNaN(n) ? 1440 : n;
 }
 
+// Current values of the arguments; named arguments arrive as a trailing plain object
+// whose values may be series too (`time(tf, session = sessionInput)`).
+function unwrapTimeArgs(args: any[]): any[] {
+    const unwrap = (a: any) => (a instanceof Series ? a.get(0) : a);
+    const isNamedArgs = (a: any) => a !== null && typeof a === 'object' && Object.getPrototypeOf(a) === Object.prototype;
+    return args.map((a) => (isNamedArgs(a) ? Object.fromEntries(Object.entries(a).map(([k, v]) => [k, unwrap(v)])) : unwrap(a)));
+}
+
 // ── Shared timezone utility ──────────────────────────────────────────
 
 interface DateParts {
@@ -239,7 +247,7 @@ export class TimeHelper {
     }
 
     any(...args: any[]) {
-        const unwrapped = args.map((a) => (a instanceof Series ? a.get(0) : a));
+        const unwrapped = unwrapTimeArgs(args);
         const parsed = parseArgsForPineParams<any>(unwrapped, TIME_SIGNATURES, TIME_ARGS_TYPES);
 
         const barsBack = parsed.bars_back ?? 0;
@@ -362,7 +370,7 @@ export class TimeComponentHelper {
     }
 
     any(...args: any[]) {
-        const unwrapped = args.map((a) => (a instanceof Series ? a.get(0) : a));
+        const unwrapped = unwrapTimeArgs(args);
 
         // No args → same as bare identifier (current bar's value)
         if (unwrapped.length === 0) {
