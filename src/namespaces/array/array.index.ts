@@ -18,6 +18,7 @@ import { new_linefill } from './methods/new_linefill';
 import { new_string } from './methods/new_string';
 import { new_table } from './methods/new_table';
 import { param } from './methods/param';
+import { __from_int } from './methods/__from_int';
 
 export class PineArray {
   [key: string]: any;
@@ -81,6 +82,7 @@ export class PineArray {
     this.sum = (id: PineArrayObject, ...args: any[]) => id.sum(...args);
     this.unshift = (id: PineArrayObject, ...args: any[]) => id.unshift(...args);
     this.variance = (id: PineArrayObject, ...args: any[]) => id.variance(...args);
+    this.__from_int = __from_int(context);
   }
 }
 

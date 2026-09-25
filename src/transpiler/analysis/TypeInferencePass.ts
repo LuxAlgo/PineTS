@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * TypeInferencePass — Pine v5 const-int division inference.
+ * TypeInferencePass — Pine v5 const-int division inference, and the element type
+ * of `array.from()` (int when every argument is int-typed, for every Pine version).
  *
  * Runs BEFORE the main lowering pass, on the clean AST (operands are still bare
- * identifiers and literals — not yet `$.get(...)`), and ONLY for Pine v5 sources
- * (the caller in `transpiler/index.ts` gates on the //@version directive).
+ * identifiers and literals — not yet `$.get(...)`), for Pine sources only; the
+ * division rewrite is enabled for v5 only (`options.intDivision`).
  *
  * Purpose: replicate Pine v5's `const int / const int → int` truncation.
  * Per TradingView's v6 migration guide ("Fractional division of constants"):
@@ -169,7 +170,12 @@ class Env {
     }
 }
 
-export function runTypeInferencePass(ast: any, _scopeManager: ScopeManager): void {
+export interface TypeInferenceOptions {
+    /** Rewrite `const int / const int` to a truncating division (Pine v5 only). */
+    intDivision: boolean;
+}
+
+export function runTypeInferencePass(ast: any, _scopeManager: ScopeManager, options: TypeInferenceOptions = { intDivision: true }): void {
     const env = new Env();
     const mutatedNames = collectMutatedNames(ast);
 
@@ -199,7 +205,7 @@ export function runTypeInferencePass(ast: any, _scopeManager: ScopeManager): voi
                 const lt = visit(node.left);
                 const rt = visit(node.right);
                 if (node.operator === '/') {
-                    if (lt === 'constint' && rt === 'constint') {
+                    if (options.intDivision && lt === 'constint' && rt === 'constint') {
                         // v5 const int / const int → const int (truncated toward
                         // zero). Rewrite in place; the main pass lowers
                         // node.left / node.right in the args.
@@ -236,8 +242,13 @@ export function runTypeInferencePass(ast: any, _scopeManager: ScopeManager): voi
             case 'CallExpression': {
                 // Visit callee's object subtree (may contain divisions) and every arg.
                 if (node.callee?.type === 'MemberExpression') visit(node.callee.object);
-                for (const arg of node.arguments || []) visit(arg);
+                const argTypes = (node.arguments || []).map((arg: any) => visit(arg));
                 const name = calleeName(node.callee);
+                // array.from() of int-typed values is an int array; the runtime cannot tell
+                // `1` from `1.0`, so the call is routed to the int-typed factory.
+                if (name === 'array.from' && argTypes.length > 0 && argTypes.every((t: T) => t !== 'notint')) {
+                    node.callee.property.name = '__from_int';
+                }
                 return name && INT_RETURNING_CALLS.has(name) ? 'int' : 'notint';
             }
 
