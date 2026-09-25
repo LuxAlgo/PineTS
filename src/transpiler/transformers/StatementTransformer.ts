@@ -14,6 +14,8 @@ import {
     addArrayAccess,
     createScopedVariableReference,
     createScopedVariableAccess,
+    HISTORY_VALUE_OBJECT_TYPES,
+    transformHistoryOffset,
 } from './ExpressionTransformer';
 
 /**
@@ -1339,8 +1341,11 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                 // transformMemberExpression so the call-result history ref is
                 // lowered to `$.get($.param(...), N)` (a scalar). Otherwise the
                 // return path leaves a raw subscript on a scalar (→ NaN).
-                if (node.argument.computed && node.argument.object.type === 'CallExpression') {
+                if (node.argument.computed && HISTORY_VALUE_OBJECT_TYPES.includes(node.argument.object.type)) {
                     transformMemberExpression(node.argument, '', scopeManager);
+                    if (node.argument._historyTransformed) {
+                        node.argument.arguments[1] = transformHistoryOffset(node.argument.arguments[1], scopeManager);
+                    }
                 }
                 // For member expressions, check if the object is context-bound
                 else if (
