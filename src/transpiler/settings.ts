@@ -18,6 +18,9 @@ export const NAMESPACES_LIKE = [
     'linefill',
     'polyline',
     'table',
+    // no cast function exists for these two: `footprint.any` / `volume_row.any` reject the call
+    'footprint',
+    'volume_row',
     'na',
     'alert',
     'time',
@@ -33,7 +36,7 @@ export const NAMESPACES_LIKE = [
 ];
 
 // Async methods that require await keyword (format: 'namespace.method')
-export const ASYNC_METHODS = ['request.security', 'request.security_lower_tf'];
+export const ASYNC_METHODS = ['request.security', 'request.security_lower_tf', 'request.footprint'];
 
 // Host-bound Pine built-ins whose values come from the UI/host environment (viewport,
 // theme, chart-type) rather than from market data. PineTS provides sensible defaults
@@ -149,6 +152,8 @@ export const NAMESPACE_COLLISION_NAMES = new Set([
     'strategy',
     'log',
     'str',
+    'footprint',
+    'volume_row',
     // Constant/enum namespaces (member access only). TradingView allows user
     // variables to share these names while namespace member access still
     // works (e.g. `position = 1` alongside `position.top_right`), so the
@@ -166,46 +171,113 @@ export const NAMESPACE_COLLISION_NAMES = new Set([
     'settlement_as_close',
 ]);
 
-// JavaScript reserved keywords that ARE valid Pine identifiers but invalid as
-// JS identifiers. When a user names a function/method/variable using one of
-// these, we must rename it during codegen — otherwise the generated JS fails
-// to parse (e.g. `function delete() {}` → `Unexpected keyword 'delete'`).
+// JavaScript reserved words (and unsafe-to-shadow globals) that ARE valid Pine
+// identifiers — TradingView accepts `new = close`, `f(delete) => ...`,
+// `type function`, `case = 1`. When a user names a variable, function,
+// parameter or UDT with one of these, codegen renames it (`name_$N`) —
+// otherwise the generated JS fails to parse (`function delete() {}` →
+// `Unexpected keyword 'delete'`) or silently shadows a global the runtime
+// relies on (`NaN`, `undefined`).
 //
-// Excludes words reserved in BOTH languages (break, case, class, const, continue,
-// do, else, enum, export, for, if, import, in, return, switch, try, var, while)
-// — those can't be Pine identifiers in the first place.
+// Pine syntax keywords that are also JS keywords (break, continue, else,
+// export, for, if, import, in, switch, var, while) never reach codegen as
+// names — the lexer tokenizes them as KEYWORD. Pine's reserved-but-syntax-free
+// words that are JS keywords (catch, class, do, return, throw, try) ARE listed:
+// the parser rejects them at declaration sites, but TradingView accepts them
+// as tuple-destructuring targets (`[catch, b] = f()`), and so do we.
 //
-// Excludes `this` — special-cased elsewhere as the implicit first parameter
-// of Pine `method` declarations.
+// `this` is included: TradingView allows it as an ordinary name. The method
+// receiver named `this` (`method f(T this)`) is handled separately (→ `self`)
+// and is excluded from this rename.
 export const JS_RESERVED_WORDS = new Set([
+    'arguments',
     'await',
+    'case',
+    'catch',
+    'class',
+    'const',
     'debugger',
     'default',
     'delete',
+    'do',
+    'enum',
+    'eval',
     'extends',
     'finally',
     'function',
     'implements',
+    'Infinity',
     'instanceof',
     'interface',
     'let',
+    'NaN',
     'new',
     'package',
     'private',
     'protected',
     'public',
+    'return',
     'static',
     'super',
+    'this',
     'throw',
+    'try',
     'typeof',
+    'undefined',
     'void',
     'with',
     'yield',
 ]);
 
+// Every name Pine exposes as a built-in method (`arr.get()`, `ln.delete()`, …),
+// taken from the Pine Script v6 reference manual's 168 distinct method names.
+//
+// Used by the dot-call dispatch in ExpressionTransformer: when a receiver's static
+// type cannot be inferred, a user `method` whose name is NOT in this set is the only
+// thing `recv.name()` can mean, so it dispatches unambiguously. A name that IS in
+// this set stays ambiguous and keeps requiring a positive receiver-type match —
+// otherwise `method delete(Holder this) => this.ln.delete()` would recurse into
+// itself instead of reaching the built-in `line.delete`.
+export const BUILTIN_METHOD_NAMES = new Set([
+    'abs', 'add_col', 'add_row', 'avg', 'binary_search', 'binary_search_leftmost', 'binary_search_rightmost',
+    'buy_volume', 'cell', 'cell_set_bgcolor', 'cell_set_height', 'cell_set_text', 'cell_set_text_color',
+    'cell_set_text_font_family', 'cell_set_text_formatting', 'cell_set_text_halign', 'cell_set_text_size',
+    'cell_set_text_valign', 'cell_set_tooltip', 'cell_set_width', 'clear', 'col', 'columns', 'concat', 'contains',
+    'copy', 'covariance', 'delete', 'delta', 'det', 'diff', 'down_price', 'eigenvalues', 'eigenvectors',
+    'elements_count', 'every', 'fill', 'first', 'get', 'get_bottom', 'get_left', 'get_line1', 'get_line2',
+    'get_price', 'get_right', 'get_row_by_price', 'get_text', 'get_top', 'get_x', 'get_x1', 'get_x2', 'get_y',
+    'get_y1', 'get_y2', 'has_buy_imbalance', 'has_sell_imbalance', 'includes', 'indexof', 'insert', 'inv',
+    'is_antidiagonal', 'is_antisymmetric', 'is_binary', 'is_diagonal', 'is_identity', 'is_square', 'is_stochastic',
+    'is_symmetric', 'is_triangular', 'is_zero', 'join', 'keys', 'kron', 'last', 'lastindexof', 'max', 'median',
+    'merge_cells', 'min', 'mode', 'mult', 'percentile_linear_interpolation', 'percentile_nearest_rank', 'percentrank',
+    'pinv', 'poc', 'pop', 'pow', 'push', 'put', 'put_all', 'range', 'rank', 'remove', 'remove_col', 'remove_row',
+    'reshape', 'reverse', 'row', 'rows', 'sell_volume', 'set', 'set_bgcolor', 'set_border_color', 'set_border_style',
+    'set_border_width', 'set_bottom', 'set_bottom_right_point', 'set_color', 'set_extend', 'set_first_point',
+    'set_frame_color', 'set_frame_width', 'set_left', 'set_lefttop', 'set_point', 'set_position', 'set_right',
+    'set_rightbottom', 'set_second_point', 'set_size', 'set_style', 'set_text', 'set_text_color',
+    'set_text_font_family', 'set_text_formatting', 'set_text_halign', 'set_text_size', 'set_text_valign',
+    'set_text_wrap', 'set_textalign', 'set_textcolor', 'set_tooltip', 'set_top', 'set_top_left_point', 'set_width',
+    'set_x', 'set_x1', 'set_x2', 'set_xloc', 'set_xy', 'set_xy1', 'set_xy2', 'set_y', 'set_y1', 'set_y2', 'set_yloc',
+    'shift', 'size', 'slice', 'some', 'sort', 'sort_indices', 'standardize', 'stdev', 'submatrix', 'sum',
+    'swap_columns', 'swap_rows', 'total_volume', 'trace', 'transpose', 'unshift', 'up_price', 'vah', 'val', 'values',
+    'variance',
+]);
+
+// Built-in methods of the order-flow types. A call on a receiver statically typed
+// `footprint` / `volume_row` is routed to the namespace function (`fp.delta()` →
+// `footprint.delta(fp)`) instead of the optional-chained member call, because
+// TradingView raises a runtime error for an `na` receiver where drawing methods
+// are silent no-ops.
+export const ORDERFLOW_METHODS: Record<string, Set<string>> = {
+    footprint: new Set(['buy_volume', 'sell_volume', 'total_volume', 'delta', 'poc', 'vah', 'val', 'rows', 'get_row_by_price']),
+    volume_row: new Set(['up_price', 'down_price', 'buy_volume', 'sell_volume', 'total_volume', 'delta', 'has_buy_imbalance', 'has_sell_imbalance']),
+};
+
+// `footprint` methods whose result is a `volume_row`.
+export const FOOTPRINT_ROW_METHODS = new Set(['poc', 'vah', 'val', 'get_row_by_price']);
+
 // All known data variables in the context
 export const CONTEXT_DATA_VARS = ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'openTime', 'closeTime'];
-
 // All known Pine variables in the context
 export const CONTEXT_PINE_VARS = [
     //namespaces
@@ -247,6 +319,9 @@ export const CONTEXT_PINE_VARS = [
     'matrix',
     'log',
     'runtime',
+    // order-flow object namespaces (request.footprint)
+    'footprint',
+    'volume_row',
     //types
     'Type', //UDT
     'bool',

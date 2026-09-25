@@ -43,7 +43,7 @@ describe('Color Namespace', () => {
 
         expect(last(result.aqua)).toBe('#00BCD4');
         expect(last(result.black)).toBe('#363A45');
-        expect(last(result.blue)).toBe('#2196F3');
+        expect(last(result.blue)).toBe('#2962FF');
         expect(last(result.fuchsia)).toBe('#E040FB');
         expect(last(result.gray)).toBe('#787B86');
         expect(last(result.green)).toBe('#4CAF50');

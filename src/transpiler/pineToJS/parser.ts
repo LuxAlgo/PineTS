@@ -4,7 +4,7 @@
 // PineScript Parser with Proper Indentation Support
 // Uses INDENT/DEDENT tokens from lexer
 
-import { Token, TokenType } from './tokens';
+import { Token, TokenType, ReservedWords } from './tokens';
 import {
     Program,
     ExpressionStatement,
@@ -42,16 +42,24 @@ export class Parser {
     private tokens: Token[];
     private pos: number;
     private functionNames: Set<string> = new Set();
+    // Names of top-level UDTs (`type level`).
+    private typeNames: Set<string> = new Set();
     // Stack of parameter-name sets for currently-being-parsed function bodies.
     // When the body of fn `f(x, y) =>` is being parsed, the top frame is {x, y}.
     // Used to suppress the `name → name_var` rewrite for identifiers that are
     // really parameters of the enclosing function and just happen to share a
     // name with some other user function.
     private paramScopes: Set<string>[] = [];
-    // When true, peekOperatorEx does NOT cross NEWLINE boundaries at all.
-    // Used inside single-line switch case bodies to prevent binary operator
-    // continuation from absorbing the next case's negative test value.
-    private noLineContinuation: boolean = false;
+    // Counter for the temps that carry a trailing loop's value out of a function body.
+    private loopValueCounter: number = 0;
+    // Tuple size returned by user functions whose last statement is a tuple
+    // (`f(a) => [a, a * 2]`); null when the name is overloaded with other shapes.
+    private functionTupleArity: Map<string, number | null> = new Map();
+    // Parameter names of user functions, for TradingView's tuple-argument error;
+    // null when the name is overloaded.
+    private functionParamNames: Map<string, string[] | null> = new Map();
+    // Opening `[` of each tuple literal, for errors reported at the literal.
+    private tupleLiteralStart: WeakMap<object, Token> = new WeakMap();
     constructor(tokens: Token[]) {
         this.tokens = tokens;
         this.pos = 0;
@@ -86,112 +94,221 @@ export class Parser {
     expect(type, value = null) {
         const token = this.peek();
         if (token.type !== type) {
-            throw new Error(`Expected ${type} but got ${token.type} at ${token.line}:${token.column}`);
+            throw new Error(`Expected ${type} but got ${token.type} at ${token.line}:${token.column}${this.layoutHint(token)}`);
         }
         if (value !== null && token.value !== value) {
-            throw new Error(`Expected '${value}' but got '${token.value}' at ${token.line}:${token.column}`);
+            throw new Error(`Expected '${value}' but got '${token.value}' at ${token.line}:${token.column}${this.layoutHint(token)}`);
         }
         return this.advance();
     }
 
-    // Pine v5/v6 contextual keywords — reserved only in their declaration-introducing
-    // position (e.g. `type Foo`, `method bar(...)`, `enum E`), but valid as identifiers
-    // anywhere else (e.g. as a UDT field name, function parameter, variable).
-    private static readonly CONTEXTUAL_KEYWORDS = new Set([
-        'type', 'method', 'enum',
-    ]);
+    /**
+     * Error for a token that cannot start / continue what is being parsed.
+     * Two layout situations are baffling without context and get a specific
+     * message: an INDENT where a statement was expected (the line is indented
+     * as a local block, but nothing opened one), and a token the lexer joined
+     * onto the previous line because of Pine's line-wrapping rule.
+     */
+    private unexpected(token: Token): Error {
+        if (token.type === TokenType.INDENT) {
+            // The INDENT token itself sits at the first non-blank column of the line.
+            const first = this.tokens[this.tokens.indexOf(token) + 1] ?? token;
+            return new Error(
+                `Unexpected indentation at ${token.line}:${token.column} - '${first.value}' is indented as a local block, ` +
+                    `but the previous statement does not open one. A line indented by a multiple of four columns starts a new ` +
+                    `statement; to wrap a long line, indent the continuation by a number of columns that is not a multiple of four`
+            );
+        }
+        const value = token.type === TokenType.NEWLINE ? 'end of line' : token.value;
+        const column = token.wrapped ? token.wrapped.column : token.column;
+        return new Error(`Unexpected token ${token.type} '${value}' at ${token.line}:${column}${this.layoutHint(token)}`);
+    }
+
+    /** Suffix explaining that `token` starts a line the lexer joined onto the previous one. */
+    private layoutHint(token: Token): string {
+        const w = token.wrapped;
+        if (!w) return '';
+        const why =
+            w.width % 4 !== 0
+                ? `is indented by ${w.width} columns, which is not a multiple of four, so it continues line ${w.fromLine} (Pine line wrapping)`
+                : `continues line ${w.fromLine}, which ends with an operator`;
+        return ` - line ${token.line} ${why}. A statement inside a local block must be indented by four spaces or one tab per level`;
+    }
 
     /**
-     * Consume an identifier OR a contextual keyword used as an identifier.
-     * Used in positions where Pine permits soft keywords as names — most notably
-     * UDT field names like `int type = 0`.
+     * After a complete statement, the next token must start a new line. The
+     * only way it cannot is when the lexer joined the following line onto
+     * this one (indentation not a multiple of four) and the statement did not
+     * absorb it: `    v := 1` followed by `      v := 2`. TradingView rejects
+     * that ("Syntax error at input 'v'"); so do we, with the reason.
+     *
+     * A wrapped COMMA is left alone: `a = 0, b = 1` ⏎ ` , c = 2` continues the
+     * statement sequence, which the caller consumes. Where a comma is not
+     * valid it fails on its own, with the same layout hint.
      */
-    expectIdentifierOrContextual(): Token {
+    private rejectDanglingWrappedLine() {
         const token = this.peek();
-        if (token.type === TokenType.IDENTIFIER) {
-            return this.advance();
-        }
-        if (token.type === TokenType.KEYWORD && Parser.CONTEXTUAL_KEYWORDS.has(token.value)) {
-            return this.advance();
-        }
-        throw new Error(`Expected ${TokenType.IDENTIFIER} but got ${token.type} at ${token.line}:${token.column}`);
+        if (token.wrapped && token.type !== TokenType.COMMA) throw this.unexpected(token);
     }
 
-    // Match a token, optionally ignoring NEWLINE and INDENT (for line continuation)
-    matchEx(type, value = null, allowLineContinuation = false) {
-        if (!allowLineContinuation) {
-            return this.match(type, value);
-        }
-
-        let offset = 0;
-        let token = this.peek(offset);
-
-        // In single-line switch case bodies, do NOT cross newlines
-        if (token.type === TokenType.NEWLINE && this.noLineContinuation) {
-            return false;
-        }
-
-        // Skip NEWLINE and subsequent INDENT
-        if (token.type === TokenType.NEWLINE) {
-            offset++;
-            token = this.peek(offset);
-
-            // Optional INDENT after NEWLINE
-            if (token.type === TokenType.INDENT) {
-                offset++;
-                token = this.peek(offset);
-            }
-        }
-
-        if (token.type !== type) return false;
-        if (value !== null && token.value !== value) return false;
-
-        // Consume skipped tokens
-        for (let i = 0; i < offset; i++) {
-            this.advance();
-        }
-
-        return true;
+    /**
+     * True when the current token is the first token of a new logical line:
+     * the previous token (looking past DEDENTs) is a NEWLINE, or sits on an
+     * earlier physical line without the current token being a lexer-joined
+     * wrapped line.
+     */
+    private startsNewLine(): boolean {
+        const token = this.peek();
+        if (token.wrapped || token.grouped) return false;
+        let i = this.pos - 1;
+        while (i >= 0 && this.tokens[i].type === TokenType.DEDENT) i--;
+        if (i < 0) return true;
+        const prev = this.tokens[i];
+        return prev.type === TokenType.NEWLINE || prev.line !== token.line;
     }
 
-    // Peek ahead for an operator, optionally ignoring NEWLINE and INDENT (non-consuming unless matched)
-    // Returns the operator value if found, null otherwise
-    // IMPORTANT: Does NOT match across NEWLINE+INDENT for ambiguous operators (+, -)
-    // that could be unary, since NEWLINE+INDENT indicates a new indented block
+    /**
+     * TradingView's error for a keyword or reserved word used where a new name
+     * is declared (variable, function, parameter, UDT field, type or enum
+     * name). `text`, `range`, `return`, ... carry no syntax of their own but
+     * are still rejected here; `type`/`method`/`enum` never reach this point
+     * because the lexer already downgraded them to identifiers outside their
+     * declaration position.
+     */
+    private reservedNameError(token: Token): Error {
+        // Word tokens carry the column just past their last character; report
+        // the first character, where TradingView points.
+        const column = token.column - String(token.value).length;
+        return new Error(`"${token.value}" cannot be used as a variable or function name. at ${token.line}:${column}`);
+    }
+
+    private isReservedName(token: Token): boolean {
+        return token.type === TokenType.KEYWORD || (token.type === TokenType.IDENTIFIER && ReservedWords.has(token.value));
+    }
+
+    /**
+     * Consume the name being declared. Rejects keywords and reserved words
+     * with TradingView's message; the lexer has already turned contextual
+     * keywords (`type`, `method`, `enum`) into identifiers here.
+     *
+     * Not used for tuple destructuring targets (`[text, b] = f()`), which
+     * TradingView accepts unchecked.
+     */
+    expectName(): Token {
+        const token = this.peek();
+        if (this.isReservedName(token)) {
+            throw this.reservedNameError(token);
+        }
+        if (token.type !== TokenType.IDENTIFIER) {
+            throw new Error(`Expected ${TokenType.IDENTIFIER} but got ${token.type} at ${token.line}:${token.column}`);
+        }
+        return this.advance();
+    }
+
+    /**
+     * Same check for a declaration recognised only after its target was parsed
+     * as an expression (`text = close` → VariableDeclaration). `startToken` is
+     * the first token of the statement, where TradingView reports the error.
+     */
+    private assertDeclarableName(id: any, startToken: Token): void {
+        if (id?.type === 'Identifier' && ReservedWords.has(id.name)) {
+            throw this.reservedNameError(startToken);
+        }
+    }
+
+    /**
+     * A function parameter's default must be a literal or a built-in variable:
+     * TradingView rejects calls (`a = input(14)`, `a = math.max(1, 2)`) and
+     * calculations (`a = 2 + 2`). `startToken` is the parameter's first token,
+     * where TradingView reports the error.
+     */
+    private assertParamDefault(value: any, startToken: Token): void {
+        if (value?.type === 'CallExpression') {
+            throw new Error(`The default value cannot be a function, variable or calculation. at ${this.startOf(startToken)}`);
+        }
+        if (value?.type === 'BinaryExpression' || value?.type === 'LogicalExpression' || value?.type === 'ConditionalExpression') {
+            throw new Error(
+                `The default value assigned to a parameter must be either a literal value (e.g., "5") or a built-in variable (e.g., "close"). at ${this.startOf(startToken)}`
+            );
+        }
+    }
+
+    /** `line:column` of a token's first character (tokens carry the column just past their end). */
+    private startOf(token: Token): string {
+        return `${token.line}:${token.column - String(token.value).length}`;
+    }
+
+    /** `ta.sma` for a callee built from identifiers only, otherwise null. */
+    private dottedName(node: any): string | null {
+        if (node?.type === 'Identifier') return node.name;
+        if (node?.type === 'MemberExpression' && !node.computed && node.property?.type === 'Identifier') {
+            const object = this.dottedName(node.object);
+            return object === null ? null : `${object}.${node.property.name}`;
+        }
+        return null;
+    }
+
+    /** Tuple size returned by a call to a user function, when statically known. */
+    private tupleArityOf(init: any): number | undefined {
+        if (init?.type !== 'CallExpression' || init.callee?.type !== 'Identifier') return undefined;
+        return this.functionTupleArity.get(init.callee.name) ?? undefined;
+    }
+
+    /** Pine has no tuple literals outside a local block's return value: `u = [a, b]`, `[u, v] = [a, b]`. */
+    private assertNotTupleLiteral(init: any): void {
+        if (init?.type === 'ArrayExpression') {
+            const open = this.tupleLiteralStart.get(init);
+            throw new Error(`Syntax error at input "["${open ? ` at ${this.startOf(open)}` : ''}`);
+        }
+    }
+
+    /** `u = f()` where `f` returns a tuple, or `u = [a, b]`: TradingView rejects the declaration. */
+    private assertNotTupleAssignment(id: any, init: any, startToken: Token): void {
+        this.assertNotTupleLiteral(init);
+        if (id?.type === 'Identifier' && this.tupleArityOf(init) !== undefined) {
+            throw new Error(`Invalid assignment. Cannot assign a tuple to a variable "${id.name}". at ${this.startOf(startToken)}`);
+        }
+    }
+
+    /**
+     * `keyword = expr` at statement start (`in = close`, `import = 1`): the
+     * expression parser would only report a generic unexpected-token error;
+     * TradingView reports the reserved-name error instead.
+     */
+    private rejectReservedAssignmentTarget(): void {
+        const token = this.peek();
+        const next = this.peek(1);
+        if (this.isReservedName(token) && next.type === TokenType.OPERATOR && next.value === '=') {
+            throw this.reservedNameError(token);
+        }
+    }
+
+    /**
+     * IDENTIFIER, or a keyword sitting where a declared name belongs (so the
+     * declaration parser can reject it with the reserved-name error). Keywords
+     * that open their own statement are excluded so lookaheads never mistake
+     * `if (...)` / `switch (...)` for a declaration.
+     */
+    private isNameSlot(token: Token): boolean {
+        if (token.type === TokenType.IDENTIFIER) return true;
+        return token.type === TokenType.KEYWORD && !Parser.STATEMENT_KEYWORDS.has(token.value);
+    }
+
+    private static readonly STATEMENT_KEYWORDS = new Set(['if', 'else', 'for', 'while', 'switch']);
+
+    // Peek for a binary operator at the current position (non-consuming).
+    // Returns the operator value if found, null otherwise.
+    //
+    // Line wrapping is resolved by the lexer: a wrapped line (indentation that
+    // is not a multiple of four, or one that follows a trailing operator) is
+    // joined onto the previous line and never produces a NEWLINE token. So a
+    // NEWLINE here always ends the expression — `x = 1` / `-x` on the next
+    // line at the block indent is a unary statement, exactly as on TradingView,
+    // not `x = 1 - x`.
     peekOperatorEx(validOps: string[]) {
-        let offset = 0;
-        let token = this.peek(offset);
-        let crossedIndent = false;
-
-        // Skip NEWLINE and subsequent INDENT
-        if (token.type === TokenType.NEWLINE) {
-            // In single-line switch case bodies, do NOT cross newlines at all
-            if (this.noLineContinuation) return null;
-
-            offset++;
-            token = this.peek(offset);
-
-            // Optional INDENT after NEWLINE
-            if (token.type === TokenType.INDENT) {
-                crossedIndent = true;
-                offset++;
-                token = this.peek(offset);
-            }
-        }
-
+        const token = this.peek();
         if (token.type !== TokenType.OPERATOR) return null;
         if (!validOps.includes(token.value)) return null;
-
-        // If we crossed an INDENT boundary and the operator is ambiguous (could be unary),
-        // do NOT treat it as a binary operator continuation
-        if (crossedIndent && (token.value === '+' || token.value === '-')) {
-            return null;
-        }
-
-        // Only now consume the skipped NEWLINE/INDENT tokens
-        for (let i = 0; i < offset; i++) {
-            this.advance();
-        }
         return token.value;
     }
 
@@ -211,6 +328,8 @@ export class Parser {
     parse() {
         const body = [];
 
+        this.collectTopLevelFunctionNames();
+
         while (!this.match(TokenType.EOF)) {
             this.skipNewlines();
             
@@ -229,6 +348,32 @@ export class Parser {
         }
 
         return new Program(body);
+    }
+
+    // Pine keeps functions and variables in separate namespaces, so a variable may
+    // share a function's name even when it is declared before the function.
+    // UDT names are collected too: types are a third namespace, so `level.new()`
+    // must keep naming the type even when a function `level(...)` exists.
+    private collectTopLevelFunctionNames() {
+        let depth = 0;
+        for (let i = 0; i < this.tokens.length; i++) {
+            const t = this.tokens[i];
+            if (t.type === TokenType.INDENT) depth++;
+            else if (t.type === TokenType.DEDENT) depth--;
+            const atLineStart = i === 0 || this.tokens[i - 1].type === TokenType.NEWLINE || this.tokens[i - 1].type === TokenType.DEDENT;
+            if (depth === 0 && t.type === TokenType.KEYWORD && t.value === 'type' && i + 1 < this.tokens.length) {
+                const prev = this.tokens[i - 1];
+                if (atLineStart || (prev?.type === TokenType.KEYWORD && prev.value === 'export')) {
+                    this.typeNames.add(this.tokens[i + 1].value);
+                }
+            }
+            if (depth !== 0 || !atLineStart || t.type !== TokenType.IDENTIFIER) continue;
+            this.pos = i;
+            if (!this.isFunctionDeclaration()) continue;
+            const hasReturnType = this.peek(1).type !== TokenType.LPAREN;
+            this.functionNames.add(this.peek(hasReturnType ? 1 : 0).value);
+        }
+        this.pos = 0;
     }
 
     // Parse statement
@@ -297,6 +442,8 @@ export class Parser {
 
         if (!stmt) {
             // Expression or assignment
+            this.rejectReservedAssignmentTarget();
+            const startToken = this.peek();
             const expr = this.parseExpression();
 
             // Check for assignment
@@ -309,6 +456,8 @@ export class Parser {
 
                     // Simple assignment with = creates variable declaration
                     if (op === '=' && expr.type === 'Identifier') {
+                        this.assertDeclarableName(expr, startToken);
+                        this.assertNotTupleAssignment(expr, right, startToken);
                         stmt = new VariableDeclaration([new VariableDeclarator(expr, right)], VariableDeclarationKind.LET);
                     } else {
                         // Other assignments
@@ -326,12 +475,16 @@ export class Parser {
         if (stmt) {
             stmt._line = startLine;
             
-            // Handle comma-separated statements on the same line: a = high, b = low
-            // Only handle commas at the top level (not in recursive calls)
-            if (handleCommas && this.match(TokenType.COMMA) && this.peek().line === startLine) {
+            // Handle comma-separated statements on the same logical line: a = high, b = low
+            // Only handle commas at the top level (not in recursive calls).
+            // A COMMA directly after a complete statement is on the same logical
+            // line by construction (a NEWLINE token would otherwise sit between
+            // them), even if the statement spanned wrapped lines or a multi-line
+            // call: `x = f(a,` ⏎ `    b), y = 2`.
+            if (handleCommas && this.match(TokenType.COMMA)) {
                 const statements = [stmt];
                 
-                while (this.match(TokenType.COMMA) && this.peek().line === startLine) {
+                while (this.match(TokenType.COMMA)) {
                     this.advance(); // consume comma
                     this.skipNewlines(true); // skip any whitespace after comma
                     
@@ -343,10 +496,15 @@ export class Parser {
                 }
                 
                 // Return a BlockStatement containing all comma-separated statements
-                return new BlockStatement(statements);
+                this.rejectDanglingWrappedLine();
+                const sequence = new BlockStatement(statements);
+                // Not a scope: the statements belong to the enclosing block.
+                (sequence as any)._sequence = true;
+                return sequence;
             }
         }
 
+        this.rejectDanglingWrappedLine();
         return stmt;
     }
 
@@ -355,15 +513,18 @@ export class Parser {
         const saved = this.pos;
         try {
             // Pattern: [type] identifier(...) =>
+            // A keyword in the name slot (`in(x) => x`) is accepted by the
+            // lookahead so parseFunctionDeclaration can report it as a
+            // reserved name rather than a generic syntax error.
             let i = 0;
 
             // Optional return type
-            if (this.peek(i).type === TokenType.IDENTIFIER && this.peek(i + 1).type === TokenType.IDENTIFIER) {
+            if (this.peek(i).type === TokenType.IDENTIFIER && this.isNameSlot(this.peek(i + 1))) {
                 i++; // Skip return type
             }
 
             // Function name
-            if (this.peek(i).type !== TokenType.IDENTIFIER) {
+            if (!this.isNameSlot(this.peek(i))) {
                 return false;
             }
             i++;
@@ -382,10 +543,6 @@ export class Parser {
                 i++;
             }
 
-            // Skip newlines
-            while (this.peek(i).type === TokenType.NEWLINE) i++;
-
-            // Check for =>
             return this.peek(i).type === TokenType.OPERATOR && this.peek(i).value === '=>';
         } finally {
             this.pos = saved;
@@ -450,7 +607,7 @@ export class Parser {
     //   - untitled: just the member name (e.g. "a", NOT "X.a")
     parseEnumDefinition() {
         this.expect(TokenType.KEYWORD, 'enum');
-        const name = this.expect(TokenType.IDENTIFIER).value;
+        const name = this.expectName().value;
 
         this.skipNewlines();
         this.expect(TokenType.INDENT);
@@ -464,7 +621,7 @@ export class Parser {
                 continue;
             }
 
-            const memberName = this.expectIdentifierOrContextual().value;
+            const memberName = this.expectName().value;
             let memberTitle: string | null = null;
             if (this.match(TokenType.OPERATOR, '=')) {
                 this.advance(); // consume '='
@@ -491,7 +648,7 @@ export class Parser {
 
     parseTypeDefinition() {
         this.expect(TokenType.KEYWORD, 'type');
-        const name = this.expect(TokenType.IDENTIFIER).value;
+        const name = this.expectName().value;
 
         // Check for => (v5 syntax)
         const hasArrow = this.match(TokenType.OPERATOR, '=>');
@@ -507,11 +664,16 @@ export class Parser {
             this.skipNewlines();
             if (this.match(TokenType.DEDENT)) break;
 
-            // Parse field: type name [= defaultValue]
+            // Parse field: [varip] type name [= defaultValue]
+            // `varip` only affects realtime rollback, which PineTS treats the
+            // same as `var` (see generateVariableDeclaration), so it is dropped.
+            if (this.match(TokenType.KEYWORD, 'varip')) {
+                this.advance();
+            }
             const fieldType = this.parseTypeExpression(); // Now handles generics
-            // Field names may be contextual keywords (e.g. `int type = 0`) — Pine
-            // treats `type`/`method`/`enum` as identifiers outside their declaration context.
-            const fieldName = this.expectIdentifierOrContextual().value;
+            // Field names may be contextual keywords (`int type = 0`) — the lexer
+            // already delivers them as identifiers here; reserved words are rejected.
+            const fieldName = this.expectName().value;
 
             let defaultValue = null;
             if (this.match(TokenType.OPERATOR, '=')) {
@@ -539,6 +701,15 @@ export class Parser {
         let varType = null;
         let name = null;
 
+        // `var const int x = 1` — a type qualifier may sit between the keyword and the type.
+        if (
+            this.peek().type === TokenType.IDENTIFIER &&
+            ['const', 'simple', 'series'].includes(this.peek().value) &&
+            this.peek(1).type === TokenType.IDENTIFIER
+        ) {
+            this.advance();
+        }
+
         // Check for type: var type name = ... or var name = ...
         // Pattern 1: var IDENTIFIER IDENTIFIER = ... (typed)
         // Pattern 2: var IDENTIFIER [] IDENTIFIER = ... (typed with array syntax)
@@ -556,10 +727,10 @@ export class Parser {
             this.advance(); // [
             varType += '[]';
             this.advance(); // ]
-            name = this.expectIdentifierOrContextual().value;
+            name = this.expectName().value;
         } else if (
             this.peek().type === TokenType.IDENTIFIER &&
-            (this.peek(1).type === TokenType.DOT || this.peek(1).type === TokenType.IDENTIFIER || (this.peek(1).type === TokenType.OPERATOR && this.peek(1).value === '<'))
+            (this.peek(1).type === TokenType.DOT || this.isNameSlot(this.peek(1)) || (this.peek(1).type === TokenType.OPERATOR && this.peek(1).value === '<'))
         ) {
             // Has type: var type name = ..., var type<generic> name = ..., or var ns.type name = ...
             varType = this.advance().value;
@@ -575,7 +746,7 @@ export class Parser {
                 this.advance(); // consume [
                 this.advance(); // consume ]
                 varType += '[]';
-                name = this.expectIdentifierOrContextual().value;
+                name = this.expectName().value;
             }
             // Handle generic type syntax: array<float>, map<string, int>, etc.
             else if (this.match(TokenType.OPERATOR, '<')) {
@@ -605,13 +776,16 @@ export class Parser {
                     this.advance();
                 }
 
-                name = this.expectIdentifierOrContextual().value;
+                name = this.expectName().value;
             } else {
-                name = this.expectIdentifierOrContextual().value;
+                name = this.expectName().value;
             }
-        } else if (this.peek().type === TokenType.IDENTIFIER) {
-            // No type: var name = ...
-            name = this.advance().value;
+        } else if (this.isNameSlot(this.peek())) {
+            // No type: var name = ... (a keyword here is reported as a reserved name)
+            name = this.expectName().value;
+        } else if (this.match(TokenType.OPERATOR, '=') || this.match(TokenType.LPAREN)) {
+            // `var = close` / `var(x) => x` — the keyword itself used as a name.
+            throw this.reservedNameError(keyword);
         } else {
             throw new Error(`Expected identifier after ${kind} at ${this.peek().line}:${this.peek().column}`);
         }
@@ -668,10 +842,12 @@ export class Parser {
         }
 
         // Check for array shorthand: type[] name =
+        // (A keyword in the name slot is accepted here and in the branches
+        // below so parseTypedVarDeclaration reports it as a reserved name.)
         if (this.peek(offset).type === TokenType.LBRACKET && this.peek(offset + 1).type === TokenType.RBRACKET) {
             offset += 2; // skip []
             // Now expect IDENTIFIER (name) then =
-            if (this.peek(offset).type !== TokenType.IDENTIFIER) return false;
+            if (!this.isNameSlot(this.peek(offset))) return false;
             offset++;
             return this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '=';
         }
@@ -687,16 +863,16 @@ export class Parser {
                 offset++;
             }
             // Now expect IDENTIFIER (name) then =
-            if (this.peek(offset).type !== TokenType.IDENTIFIER) return false;
+            if (!this.isNameSlot(this.peek(offset))) return false;
             offset++;
             return this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '=';
         }
 
         // Check for simple typed declaration: type name = or type qualifier name =
-        if (this.peek(offset).type !== TokenType.IDENTIFIER) return false;
+        if (!this.isNameSlot(this.peek(offset))) return false;
         offset++;
         // Skip additional type qualifiers (series float x, simple int y, etc.)
-        while (this.peek(offset).type === TokenType.IDENTIFIER) {
+        while (this.isNameSlot(this.peek(offset))) {
             offset++;
         }
         return this.peek(offset).type === TokenType.OPERATOR && this.peek(offset).value === '=';
@@ -749,12 +925,12 @@ export class Parser {
         }
         // Handle multi-qualifier types (series float, simple int, etc.)
         else {
-            while (this.peek().type === TokenType.IDENTIFIER && this.peek(1).type === TokenType.IDENTIFIER) {
+            while (this.peek().type === TokenType.IDENTIFIER && this.isNameSlot(this.peek(1))) {
                 varType += ' ' + this.advance().value;
             }
         }
 
-        let name = this.expectIdentifierOrContextual().value;
+        let name = this.expectName().value;
         if (this.functionNames.has(name)) {
             name = name + '_var';
         }
@@ -786,7 +962,7 @@ export class Parser {
         ) {
             this.advance(); // consume ','
             this.skipNewlines(true);
-            let nextName = this.expectIdentifierOrContextual().value;
+            let nextName = this.expectName().value;
             if (this.functionNames.has(nextName)) {
                 nextName = nextName + '_var';
             }
@@ -804,11 +980,11 @@ export class Parser {
     // Parse function declaration
     parseFunctionDeclaration() {
         let returnType = null;
-        if (this.peek().type === TokenType.IDENTIFIER && this.peek(1).type === TokenType.IDENTIFIER) {
+        if (this.peek().type === TokenType.IDENTIFIER && this.isNameSlot(this.peek(1))) {
             returnType = this.advance().value;
         }
 
-        const name = this.expect(TokenType.IDENTIFIER).value;
+        const name = this.expectName().value;
         this.functionNames.add(name);
 
         this.expect(TokenType.LPAREN);
@@ -818,6 +994,7 @@ export class Parser {
             this.skipNewlines();
             if (this.match(TokenType.RPAREN)) break;
 
+            const paramStart = this.peek();
             let paramType = null;
 
             // Handle type qualifiers (can be multiple: series float, simple int, etc.)
@@ -851,7 +1028,7 @@ export class Parser {
                 paramType = paramType ? paramType + ' ' + arrayType : arrayType;
             }
 
-            const paramName = this.expectIdentifierOrContextual().value;
+            const paramName = this.expectName().value;
             const param = new Identifier(paramName);
             if (paramType) param.varType = paramType;
 
@@ -860,6 +1037,7 @@ export class Parser {
                 this.advance();
                 this.skipNewlines();
                 const defaultValue = this.parseExpression();
+                this.assertParamDefault(defaultValue, paramStart);
                 params.push(new AssignmentPattern(param, defaultValue));
             } else {
                 params.push(param);
@@ -890,6 +1068,12 @@ export class Parser {
         const id = new Identifier(name);
         if (returnType) id.returnType = returnType;
 
+        const last = body.body[body.body.length - 1];
+        const returned = last?.type === 'ReturnStatement' ? last.argument : null;
+        const arity = returned?.type === 'ArrayExpression' ? returned.elements.length : this.tupleArityOf(returned) ?? null;
+        this.functionTupleArity.set(name, this.functionTupleArity.has(name) && this.functionTupleArity.get(name) !== arity ? null : arity);
+        this.functionParamNames.set(name, this.functionParamNames.has(name) ? null : [...paramFrame]);
+
         return new FunctionDeclaration(id, params, body, returnType);
     }
 
@@ -902,7 +1086,7 @@ export class Parser {
             returnType = this.advance().value;
         }
 
-        const name = this.expectIdentifierOrContextual().value;
+        const name = this.expectName().value;
         this.expect(TokenType.LPAREN);
 
         const params = [];
@@ -910,6 +1094,7 @@ export class Parser {
             this.skipNewlines();
             if (this.match(TokenType.RPAREN)) break;
 
+            const paramStart = this.peek();
             let paramType = null;
 
             // Handle type qualifiers (can be multiple: series float, simple int, etc.)
@@ -943,7 +1128,7 @@ export class Parser {
                 paramType = paramType ? paramType + ' ' + arrayType : arrayType;
             }
 
-            const paramName = this.expectIdentifierOrContextual().value;
+            const paramName = this.expectName().value;
             const param = new Identifier(paramName);
             if (paramType) param.varType = paramType;
 
@@ -952,6 +1137,7 @@ export class Parser {
                 this.advance();
                 this.skipNewlines();
                 const defaultValue = this.parseExpression();
+                this.assertParamDefault(defaultValue, paramStart);
                 params.push(new AssignmentPattern(param, defaultValue));
             } else {
                 params.push(param);
@@ -990,10 +1176,14 @@ export class Parser {
     parseFunctionBody() {
         const statements = [];
 
-        // Check if it's a single expression (no INDENT)
+        // Single-line body (no INDENT). It is not necessarily a bare expression:
+        // `f(a) => b = a * 2` and `f(a) => b = a * 2, c = b + 1, b + c` are both valid
+        // Pine, so route it through the same statement/sequence parser as a block body.
         if (!this.match(TokenType.INDENT)) {
-            const expr = this.parseExpression();
-            return new BlockStatement([new ReturnStatement(expr)]);
+            const stmts = this.parseStatementOrSequence();
+            const body = Array.isArray(stmts) ? stmts : stmts ? [stmts] : [];
+            if (body.length > 0) this._addImplicitReturn(body);
+            return new BlockStatement(body);
         }
 
         this.advance(); // consume INDENT
@@ -1026,33 +1216,77 @@ export class Parser {
     }
 
     /**
-     * Recursively convert the last expression in a statement list to a ReturnStatement.
-     * Handles if/else chains by adding return to each branch's last expression.
+     * Recursively convert the last statement in a statement list to a ReturnStatement.
+     *
+     * A Pine function evaluates to the value of its last statement, whatever kind of
+     * statement that is — not just a bare expression. `f(a) =>\n    b = a * 2` returns
+     * `a * 2` on TradingView, and a trailing loop returns whatever its body produced on
+     * the final iteration. Handles if/else chains by adding a return to each branch.
      */
     private _addImplicitReturn(statements: any[]): void {
         const last = statements[statements.length - 1];
-        if (last.type === 'ExpressionStatement') {
-            statements[statements.length - 1] = new ReturnStatement(last.expression);
-        } else if (last.type === 'IfStatement') {
-            this._addImplicitReturnToIf(last);
+        if (last.type === 'ForStatement' || last.type === 'WhileStatement') {
+            this._addImplicitReturnToLoop(statements);
+        } else {
+            this._emitLastValue(statements, (value) => new ReturnStatement(value));
         }
     }
 
-    private _addImplicitReturnToIf(node: any): void {
-        // Add return to the consequent branch
-        if (node.consequent && node.consequent.type === 'BlockStatement' && node.consequent.body.length > 0) {
-            this._addImplicitReturn(node.consequent.body);
-        }
-        // Add return to the alternate branch (else / else if)
-        if (node.alternate) {
-            if (node.alternate.type === 'IfStatement') {
-                // else if — recurse
-                this._addImplicitReturnToIf(node.alternate);
-            } else if (node.alternate.type === 'BlockStatement' && node.alternate.body.length > 0) {
-                // else block
-                this._addImplicitReturn(node.alternate.body);
+    /**
+     * Give a trailing loop a value: Pine yields whatever the loop body's last statement
+     * produced on its final iteration, or na when the body never ran (or the final
+     * iteration skipped it). Captures that into a temp reset at the top of each iteration.
+     */
+    private _addImplicitReturnToLoop(statements: any[]): void {
+        const loop = statements[statements.length - 1];
+        if (loop.body?.type !== 'BlockStatement' || loop.body.body.length === 0) return;
+
+        const tmp = `__loopValue_${this.loopValueCounter++}`;
+        const na = () => new Identifier('na');
+        const assignTmp = (value: any) => new ExpressionStatement(new AssignmentExpression('=', new Identifier(tmp), value));
+
+        if (!this._emitLastValue(loop.body.body, assignTmp)) return;
+        loop.body.body.unshift(assignTmp(na()));
+        statements.splice(statements.length - 1, 0, new VariableDeclaration([new VariableDeclarator(new Identifier(tmp), na())], VariableDeclarationKind.LET));
+        statements.push(new ReturnStatement(new Identifier(tmp)));
+    }
+
+    /**
+     * Rewrite the last statement of `statements` so its value flows into `emit`
+     * (a `return`, or an assignment to a temp). Recurses into if/else branches.
+     * Returns false when the last statement has no usable value (`break`, a loop, …).
+     */
+    private _emitLastValue(statements: any[], emit: (value: any) => any): boolean {
+        const last = statements[statements.length - 1];
+        if (last.type === 'ExpressionStatement') {
+            const expr = last.expression;
+            if (expr?.type === 'Identifier' && (expr.name === 'break' || expr.name === 'continue')) return false;
+            // An assignment's value is the assigned variable; read it back rather than
+            // nesting the assignment inside the emitted statement.
+            if (expr?.type === 'AssignmentExpression' && expr.left?.type === 'Identifier') {
+                statements.push(emit(new Identifier(expr.left.name)));
+            } else {
+                statements[statements.length - 1] = emit(expr);
             }
+            return true;
         }
+        if (last.type === 'VariableDeclaration') {
+            const declarator = last.declarations[last.declarations.length - 1];
+            if (declarator?.id?.type !== 'Identifier') return false;
+            statements.push(emit(new Identifier(declarator.id.name)));
+            return true;
+        }
+        if (last.type === 'IfStatement') {
+            let emitted = false;
+            for (let branch = last; branch; branch = branch.alternate?.type === 'IfStatement' ? branch.alternate : null) {
+                const blocks = [branch.consequent, branch.alternate?.type === 'BlockStatement' ? branch.alternate : null];
+                for (const block of blocks) {
+                    if (block?.body?.length > 0) emitted = this._emitLastValue(block.body, emit) || emitted;
+                }
+            }
+            return emitted;
+        }
+        return false;
     }
 
     // Parse statement or comma-separated sequence
@@ -1106,6 +1340,8 @@ export class Parser {
                         declarations.push(this.parseTypedVarDeclaration());
                     } else {
                         // Not a typed declaration after comma — parse as a regular statement
+                        this.rejectReservedAssignmentTarget();
+                        const startToken = this.peek();
                         const expr = this.parseExpression();
                         if (this.match(TokenType.OPERATOR)) {
                             const op = this.peek().value;
@@ -1114,6 +1350,8 @@ export class Parser {
                                 this.skipNewlines(true);
                                 const right = this.parseExpression();
                                 if (op === '=' && expr.type === 'Identifier') {
+                                    this.assertDeclarableName(expr, startToken);
+                                    this.assertNotTupleAssignment(expr, right, startToken);
                                     declarations.push(new VariableDeclaration([new VariableDeclarator(expr, right)], VariableDeclarationKind.LET));
                                 } else {
                                     declarations.push(new ExpressionStatement(new AssignmentExpression(op === ':=' ? '=' : op, expr, right)));
@@ -1135,6 +1373,8 @@ export class Parser {
 
         while (true) {
             // Parse one item (could be assignment or expression)
+            this.rejectReservedAssignmentTarget();
+            const startToken = this.peek();
             const expr = this.parseExpression();
 
             // Check if it's an assignment
@@ -1147,6 +1387,8 @@ export class Parser {
 
                     // Simple assignment with = creates variable declaration
                     if (op === '=' && expr.type === 'Identifier') {
+                        this.assertDeclarableName(expr, startToken);
+                        this.assertNotTupleAssignment(expr, right, startToken);
                         sequenceItems.push(new VariableDeclaration([new VariableDeclarator(expr, right)], VariableDeclarationKind.LET));
                     } else {
                         sequenceItems.push(new ExpressionStatement(new AssignmentExpression(op === ':=' ? '=' : op, expr, right)));
@@ -1241,7 +1483,7 @@ export class Parser {
             const elements = [];
             while (!this.match(TokenType.RBRACKET)) {
                 this.skipNewlines();
-                elements.push(new Identifier(this.expectIdentifierOrContextual().value));
+                elements.push(new Identifier(this.expect(TokenType.IDENTIFIER).value));
                 if (this.match(TokenType.COMMA)) {
                     this.advance();
                 }
@@ -1251,7 +1493,7 @@ export class Parser {
             isDestructuring = true;
         } else {
             // Simple identifier: for i in array or for i = 0 to 10
-            const varName = this.expectIdentifierOrContextual().value;
+            const varName = this.expectName().value;
             loopVar = new Identifier(varName);
         }
 
@@ -1339,6 +1581,10 @@ export class Parser {
     // Parse indented block
     parseBlock() {
         if (!this.match(TokenType.INDENT)) {
+            // `if cond` followed by a body line at 2 or 6 columns: the lexer
+            // joined that line onto the header (not a multiple of four), so
+            // there is no INDENT. TradingView rejects it as a syntax error.
+            this.rejectDanglingWrappedLine();
             // Single statement without indent (shouldn't happen in proper PineScript)
             const stmt = this.parseStatement();
             return new BlockStatement(stmt ? [stmt] : []);
@@ -1381,7 +1627,9 @@ export class Parser {
         return new BlockStatement(statements);
     }
 
-    // Check if current position looks like tuple destructuring
+    // Check if current position looks like tuple destructuring.
+    // Also matches the shapes TradingView rejects — a type keyword before a name
+    // (`[int a, b] = ...`) and `:=` — so parseTupleDestructuring reports them.
     isTupleDestructuring() {
         if (!this.match(TokenType.LBRACKET)) return false;
 
@@ -1395,6 +1643,7 @@ export class Parser {
             // Expect identifier
             if (this.peek(i).type !== TokenType.IDENTIFIER) return false;
             i++;
+            if (this.peek(i).type === TokenType.IDENTIFIER) i++;
 
             // Skip newlines
             while (this.peek(i).type === TokenType.NEWLINE) i++;
@@ -1414,18 +1663,30 @@ export class Parser {
         // Skip newlines after ]
         while (this.peek(i).type === TokenType.NEWLINE) i++;
 
-        // Check for =
-        return this.peek(i).type === TokenType.OPERATOR && this.peek(i).value === '=';
+        // Check for = (or := , rejected by parseTupleDestructuring)
+        return this.peek(i).type === TokenType.OPERATOR && (this.peek(i).value === '=' || this.peek(i).value === ':=');
     }
 
     // Parse tuple destructuring
     parseTupleDestructuring() {
-        this.expect(TokenType.LBRACKET);
+        const open = this.expect(TokenType.LBRACKET);
         const elements = [];
+        const declared = new Set<string>();
 
         while (!this.match(TokenType.RBRACKET)) {
             this.skipNewlines();
-            let name = this.expectIdentifierOrContextual().value;
+            // TradingView does not apply the reserved-word check to tuple
+            // targets: `[text, b] = f()` compiles. Mirror that.
+            const nameToken = this.expect(TokenType.IDENTIFIER);
+            if (this.match(TokenType.IDENTIFIER)) {
+                // Tuple declarations take no type keywords: `[int a, int b] = f()`.
+                throw new Error(`Mismatched input "${this.peek().value}" expecting set "]" at ${this.startOf(this.peek())}`);
+            }
+            let name = nameToken.value;
+            if (name !== '_') {
+                if (declared.has(name)) throw new Error(`"${name}" is already defined at ${this.startOf(open)}`);
+                declared.add(name);
+            }
             if (this.functionNames.has(name)) {
                 name = name + '_var';
             }
@@ -1438,9 +1699,21 @@ export class Parser {
 
         this.expect(TokenType.RBRACKET);
         this.skipNewlines();
+        if (this.match(TokenType.OPERATOR, ':=')) {
+            throw new Error(`Mismatched input ":=" expecting set "=" at ${this.startOf(this.peek())}`);
+        }
         this.expect(TokenType.OPERATOR, '=');
         this.skipNewlines(true);
         const init = this.parseExpression();
+
+        this.assertNotTupleLiteral(init);
+        const arity = this.tupleArityOf(init);
+        if (arity !== undefined && arity !== elements.length) {
+            throw new Error(
+                `Syntax error: The quantities of tuple elements on each side of the assignment operator do not match. ` +
+                    `The right side has ${arity} but the left side has ${elements.length}. at ${this.startOf(open)}`
+            );
+        }
 
         return new VariableDeclaration([new VariableDeclarator(new ArrayPattern(elements), init)], VariableDeclarationKind.CONST);
     }
@@ -1453,20 +1726,21 @@ export class Parser {
     parseTernary() {
         let expr = this.parseLogicalOr();
 
-        if (this.matchEx(TokenType.OPERATOR, '?', true)) {
-            this.advance();
+        if (this.match(TokenType.OPERATOR, '?')) {
+            const question = this.advance();
             this.skipNewlines(true);
             const consequent = this.parseExpression();
-            
-            // Handle : with line continuation
-            if (this.matchEx(TokenType.COLON, null, true)) {
-                this.advance(); // Consume :
-            } else {
-                this.expect(TokenType.COLON);
-            }
-            
+            this.expect(TokenType.COLON);
             this.skipNewlines(true);
             const alternate = this.parseExpression();
+            // Only local blocks (functions, if/switch, loops) return tuples.
+            const tuple = [consequent, alternate].find((branch) => branch.type === 'ArrayExpression');
+            if (tuple) {
+                throw new Error(
+                    'Ternary operations cannot return tuples. Convert the expression into an `if` or `switch` conditional structure ' +
+                        `to return a tuple. at ${this.startOf(this.tupleLiteralStart.get(tuple) ?? question)}`
+                );
+            }
             return new ConditionalExpression(expr, consequent, alternate);
         }
 
@@ -1476,7 +1750,7 @@ export class Parser {
     parseLogicalOr() {
         let left = this.parseLogicalAnd();
 
-        while (this.matchEx(TokenType.KEYWORD, 'or', true) || this.peekOperatorEx(['||'])) {
+        while (this.match(TokenType.KEYWORD, 'or') || this.peekOperatorEx(['||'])) {
             this.advance();
             this.skipNewlines(true);
             const right = this.parseLogicalAnd();
@@ -1489,7 +1763,7 @@ export class Parser {
     parseLogicalAnd() {
         let left = this.parseEquality();
 
-        while (this.matchEx(TokenType.KEYWORD, 'and', true) || this.peekOperatorEx(['&&'])) {
+        while (this.match(TokenType.KEYWORD, 'and') || this.peekOperatorEx(['&&'])) {
             this.advance();
             this.skipNewlines(true);
             const right = this.parseEquality();
@@ -1555,9 +1829,11 @@ export class Parser {
         if (this.match(TokenType.OPERATOR)) {
             const op = this.peek().value;
             if (['+', '-', '!'].includes(op)) {
-                this.advance();
+                const opToken = this.advance();
                 this.skipNewlines();
-                return new UnaryExpression(op, this.parseUnary());
+                const node = new UnaryExpression(op, this.parseUnary());
+                (node as any)._pos = this.startOf(opToken);
+                return node;
             }
         }
 
@@ -1658,11 +1934,12 @@ export class Parser {
             }
             // Index/history operator
             else if (this.match(TokenType.LBRACKET)) {
-                // If this looks like tuple destructuring [a, b, c] = ..., it's a new
-                // statement, not a postfix index on the previous expression.
-                // This happens after block expressions like switch where DEDENT is
-                // immediately followed by LBRACKET with no intervening NEWLINE.
-                if (this.isTupleDestructuring()) {
+                // A `[` that opens a new line is a new statement (`[a, b] = f()`
+                // or a tuple `[a, b]` returned after a switch/if expression), not
+                // an index on the previous expression. A block expression's
+                // closing DEDENT swallows the NEWLINE that would otherwise end
+                // the expression, so check the line structure directly.
+                if (this.startsNewLine()) {
                     break;
                 }
                 this.advance();
@@ -1679,13 +1956,33 @@ export class Parser {
     }
 
     parseCallExpression(callee) {
+        const calleeToken = this.tokens[this.pos - 1];
         this.expect(TokenType.LPAREN);
         const args = [];
         const namedArgs = [];
 
+        // Only request.*() expression and input.*() options arguments accept a tuple.
+        const calleeName = this.dottedName(callee);
+        const acceptsTuple = calleeName !== null && (calleeName === 'input' || /^(request|input)\./.test(calleeName));
+        const rejectTupleArg = (value: any, token: Token, paramName: string | undefined) => {
+            if (value.type !== 'ArrayExpression' || acceptsTuple) return;
+            if (paramName !== undefined) {
+                throw new Error(
+                    `The "${paramName}" parameter of the "${calleeName}()" function cannot accept a tuple as an argument. ` +
+                        `Pass a single argument to this parameter. at ${this.startOf(calleeToken)}`
+                );
+            }
+            throw new Error(
+                `Cannot call "${calleeName ?? 'function'}" with a tuple argument. Only the expression parameter of request.*() ` +
+                    `functions and the options parameter of input.*() functions accept tuples. at ${this.startOf(token)}`
+            );
+        };
+        const userParams = calleeName !== null ? this.functionParamNames.get(calleeName) : undefined;
+
         while (!this.match(TokenType.RPAREN)) {
             this.skipNewlines();
             if (this.match(TokenType.RPAREN)) break;
+            const argToken = this.peek();
 
             // Check for named argument (name = value)
             // Note: 'name' can be an IDENTIFIER or KEYWORD (like 'type')
@@ -1694,13 +1991,20 @@ export class Parser {
                 this.peek(1).type === TokenType.OPERATOR &&
                 this.peek(1).value === '='
             ) {
-                const name = this.advance().value;
+                const nameToken = this.advance();
+                const name = nameToken.value;
                 this.advance(); // =
                 this.skipNewlines();
+                const valueToken = this.peek();
                 const value = this.parseExpression();
-                namedArgs.push(new Property(new Identifier(name), value));
+                rejectTupleArg(value, valueToken, userParams ? name : undefined);
+                const key = new Identifier(name);
+                (key as any)._pos = this.startOf(nameToken);
+                namedArgs.push(new Property(key, value));
             } else {
-                args.push(this.parseExpression());
+                const value = this.parseExpression();
+                rejectTupleArg(value, argToken, userParams?.[args.length]);
+                args.push(value);
             }
 
             if (this.match(TokenType.COMMA)) {
@@ -1725,25 +2029,29 @@ export class Parser {
         // Literals
         if (this.match(TokenType.NUMBER)) {
             const num = this.advance();
-            return new Literal(num.value, num.raw);
+            const node = new Literal(num.value, num.raw);
+            if (typeof num.raw === 'string') (node as any)._pos = `${num.line}:${num.column - num.raw.length}`;
+            return node;
         }
 
         if (this.match(TokenType.STRING)) {
             const str = this.advance();
-            return new Literal(str.value);
+            const node = new Literal(str.value);
+            if (str.startColumn !== undefined) (node as any)._pos = `${str.line}:${str.startColumn}`;
+            return node;
         }
 
         if (this.match(TokenType.BOOLEAN)) {
             const bool = this.advance();
-            return new Literal(bool.value);
+            const node = new Literal(bool.value);
+            (node as any)._pos = this.startOf(bool);
+            return node;
         }
 
-        // Identifier — also accept contextual keywords (method, type, enum) used as
-        // value references, e.g. `switch method` where `method` is a parameter name.
-        if (
-            this.match(TokenType.IDENTIFIER) ||
-            (token.type === TokenType.KEYWORD && Parser.CONTEXTUAL_KEYWORDS.has(token.value))
-        ) {
+        // Identifier. Contextual keywords (`type`, `method`, `enum`) used as
+        // values — `switch method`, `type + 1` — already arrive as IDENTIFIER
+        // tokens: the lexer only keeps them as keywords in declaration position.
+        if (this.match(TokenType.IDENTIFIER)) {
             const id = this.advance();
             let name = id.value;
             if (
@@ -1754,11 +2062,15 @@ export class Parser {
                 // is the constants namespace, not a variable sharing the
                 // function's name — leave the base identifier untouched so the
                 // codegen collision pass can treat it as a namespace access.
-                !(this.peek().type === TokenType.DOT && NAMESPACE_COLLISION_NAMES.has(name))
+                !(this.peek().type === TokenType.DOT && NAMESPACE_COLLISION_NAMES.has(name)) &&
+                // `level.new()` after `type level` and `level(x) => ...` is the type.
+                !(this.peek().type === TokenType.DOT && this.typeNames.has(name))
             ) {
                 name = name + '_var';
             }
-            return new Identifier(name);
+            const node = new Identifier(name);
+            (node as any)._pos = this.startOf(id);
+            return node;
         }
 
         // Array literal
@@ -1796,11 +2108,11 @@ export class Parser {
             return this.parseWhileExpression();
         }
 
-        throw new Error(`Unexpected token ${token.type} '${token.value}' at ${token.line}:${token.column}`);
+        throw this.unexpected(token);
     }
 
     parseArrayLiteral() {
-        this.expect(TokenType.LBRACKET);
+        const open = this.expect(TokenType.LBRACKET);
         const elements = [];
 
         while (!this.match(TokenType.RBRACKET)) {
@@ -1816,7 +2128,10 @@ export class Parser {
         }
 
         this.expect(TokenType.RBRACKET);
-        return new ArrayExpression(elements);
+        const tuple = new ArrayExpression(elements);
+        this.tupleLiteralStart.set(tuple, open);
+        (tuple as any)._pos = this.startOf(open);
+        return tuple;
     }
 
     parseIfExpression() {
@@ -1942,12 +2257,7 @@ export class Parser {
                 this.advance(); // DEDENT
             } else {
                 // Single line: may be an expression or a statement (e.g., col := value)
-                // Disable line continuation to prevent the expression parser from
-                // absorbing the next case's negative test value (e.g., -1 =>) as
-                // binary subtraction from the current case's body.
-                this.noLineContinuation = true;
                 const stmt = this.parseStatement();
-                this.noLineContinuation = false;
                 if (stmt) consequentStmts.push(stmt);
             }
 

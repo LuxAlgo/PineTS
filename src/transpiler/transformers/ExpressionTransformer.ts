@@ -4,7 +4,15 @@
 import * as walk from 'acorn-walk';
 import ScopeManager, { normalizePineBaseType } from '../analysis/ScopeManager';
 import { ASTFactory, CONTEXT_NAME } from '../utils/ASTFactory';
-import { KNOWN_NAMESPACES, NAMESPACES_LIKE, ASYNC_METHODS, CALLSITE_ID_NAMESPACES } from '../settings';
+import {
+    KNOWN_NAMESPACES,
+    NAMESPACES_LIKE,
+    ASYNC_METHODS,
+    CALLSITE_ID_NAMESPACES,
+    BUILTIN_METHOD_NAMES,
+    ORDERFLOW_METHODS,
+    FOOTPRINT_ROW_METHODS,
+} from '../settings';
 
 const UNDEFINED_ARG = {
     type: 'Identifier',
@@ -928,6 +936,14 @@ function getParamFromConditionalExpression(node: any, scopeManager: ScopeManager
                 // First transform the call expression itself
                 transformCallExpression(node, scopeManager);
 
+                // A hoisted call was replaced in place by its `temp_N` identifier
+                // but keeps a stale `arguments` array that is SHARED with the
+                // hoisted declaration. Walking it here would wrap the shared
+                // `pN` param identifiers in `$.get(pN, 0)`, turning the hoisted
+                // `ta.crossover(p5, p6, ...)` into a scalar call (#304). Same
+                // guard the statement walkers use.
+                if (node.type !== 'CallExpression' || isInlinedLazyCall(node)) return;
+
                 // Then transform its arguments with the correct context
                 node.arguments.forEach((arg: any) => c(arg, { parent: node, inNamespaceCall: isNamespaceCall || state.inNamespaceCall }));
             },
@@ -982,6 +998,39 @@ function getParamFromUnaryExpression(node: any, scopeManager: ScopeManager, name
     });
 
     return unaryExpr;
+}
+
+/**
+ * `transformMemberExpression` early-returns for non-computed access on
+ * context-bound user variables, relying on a later top-level identifier
+ * walker to scope the base. A member chain that is about to be wrapped in
+ * `$.param(...)` never reaches that walker, so the base identifier would end
+ * up bare in the emitted code. Scope the leaf base when it is a user-declared
+ * variable (not a built-in / namespace / loop var / function param / local
+ * series).
+ */
+function scopeMemberChainBase(member: any, scopeManager: ScopeManager): void {
+    let baseHolder: any = member;
+    while (baseHolder && baseHolder.type === 'MemberExpression' && baseHolder.object) {
+        if (baseHolder.object.type === 'Identifier') {
+            const base = baseHolder.object;
+            const [scopedName] = scopeManager.getVariable(base.name);
+            const isUserVariable = scopedName !== base.name;
+            if (
+                isUserVariable &&
+                !scopeManager.isContextBound(base.name) &&
+                !scopeManager.isRootParam(base.name) &&
+                !scopeManager.isLoopVariable(base.name) &&
+                !scopeManager.isLocalSeriesVar(base.name) &&
+                !NAMESPACES_LIKE.includes(base.name) &&
+                !KNOWN_NAMESPACES.includes(base.name)
+            ) {
+                baseHolder.object = createScopedVariableAccess(base.name, scopeManager);
+            }
+            break;
+        }
+        baseHolder = baseHolder.object;
+    }
 }
 
 export function transformFunctionArgument(arg: any, namespace: string, scopeManager: ScopeManager): any {
@@ -1042,6 +1091,8 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                 }
                 if (element.type === 'MemberExpression') {
                     transformMemberExpression(element, namespace, scopeManager);
+                    // e.g. enum fields in `input.enum(…, options = [E.a, E.b])`
+                    if (!element.computed) scopeMemberChainBase(element, scopeManager);
                     return element;
                 }
                 return element;
@@ -1102,36 +1153,8 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             transformCallExpression(arg.object, scopeManager);
         } else if (arg.object.type === 'MemberExpression') {
             transformMemberExpression(arg.object, '', scopeManager);
-            // Regression: `transformMemberExpression` early-returns for non-computed
-            // access on context-bound user variables (relying on a later top-level
-            // identifier walker to scope the base). But here the result is about to
-            // be wrapped in `$.param(...)` immediately, so the later walker never
-            // runs and the base identifier ends up bare in the emitted code.
             // Pattern that hits this:  `bar.low[1]` where `bar` is a UDT instance.
-            // Walk into the MemberExpression chain and scope the leaf base when it
-            // is a user-declared variable (not a built-in / namespace / loop var /
-            // function param / local series).
-            let baseHolder: any = arg.object;
-            while (baseHolder && baseHolder.type === 'MemberExpression' && baseHolder.object) {
-                if (baseHolder.object.type === 'Identifier') {
-                    const base = baseHolder.object;
-                    const [scopedName] = scopeManager.getVariable(base.name);
-                    const isUserVariable = scopedName !== base.name;
-                    if (
-                        isUserVariable &&
-                        !scopeManager.isContextBound(base.name) &&
-                        !scopeManager.isRootParam(base.name) &&
-                        !scopeManager.isLoopVariable(base.name) &&
-                        !scopeManager.isLocalSeriesVar(base.name) &&
-                        !NAMESPACES_LIKE.includes(base.name) &&
-                        !KNOWN_NAMESPACES.includes(base.name)
-                    ) {
-                        baseHolder.object = createScopedVariableAccess(base.name, scopeManager);
-                    }
-                    break;
-                }
-                baseHolder = baseHolder.object;
-            }
+            scopeMemberChainBase(arg.object, scopeManager);
         } else if (arg.object.type === 'BinaryExpression') {
             arg.object = getParamFromBinaryExpression(arg.object, scopeManager, namespace);
         } else if (arg.object.type === 'LogicalExpression') {
@@ -1388,6 +1411,21 @@ function hasGetCallInChain(node: any): boolean {
 }
 
 /** Check if a node is directly a $.get(...) call (not nested in a chain) */
+/**
+ * The `volume_row` type of a call that produces one from a `footprint` receiver
+ * (`fp.poc()`, `fp.get_row_by_price(p)`), before or after that call was routed
+ * to the namespace, so chained accessors (`fp.poc().up_price()`) are typed too.
+ */
+function footprintRowCallType(node: any, scopeManager: ScopeManager): string | undefined {
+    if (node?._orderflowType) return node._orderflowType;
+    if (node?.type !== 'CallExpression' || node.callee?.type !== 'MemberExpression' || node.callee.computed) return undefined;
+    if (!FOOTPRINT_ROW_METHODS.has(node.callee.property?.name)) return undefined;
+    const receiver = node.callee.object;
+    return receiver?.name && !scopeManager.getVariableUdtType(receiver.name) && scopeManager.getVarStaticType(receiver.name) === 'footprint'
+        ? 'volume_row'
+        : undefined;
+}
+
 function isDirectGetCall(node: any): boolean {
     return node?.type === 'CallExpression' &&
         node.callee?.type === 'MemberExpression' &&
@@ -1417,12 +1455,47 @@ function resolveCalleeObject(node: any, parentNode: any, scopeManager: ScopeMana
     }
 }
 
+/**
+ * True when `transformCallExpression` kept a lazy-operand call inline (see
+ * LazyOperandPass). Such a node is fully transformed — callee and arguments
+ * included — and, unlike an eager call, was NOT replaced by a hoisted
+ * `temp_N` identifier. Expression walkers that descend into a call's callee /
+ * arguments after transforming it must stop here, otherwise they re-run
+ * `transformMemberExpression` on `ns.method` / `ns.param` callees and turn
+ * them into bogus `ns.method()(...)` auto-calls.
+ */
+export function isInlinedLazyCall(node: any): boolean {
+    return !!node && node.type === 'CallExpression' && node._transformed === true && node._lazyOperand === true;
+}
+
 export function transformCallExpression(node: any, scopeManager: ScopeManager, namespace?: string): void {
     // Skip if this node has already been transformed
     if (node._transformed) {
         return;
     }
 
+    // Calls sitting in a lazy operand (`?:` branch, or the right side of a
+    // lazy `and`/`or` — see LazyOperandPass) must stay inline: hoisting them
+    // into a `const temp_N = ...` ahead of the statement would evaluate them
+    // unconditionally, e.g. running `array.get(a, 0)` even when the guard
+    // `array.size(a) > 0` is false, or executing a stateful `ta.*` call on
+    // bars where TradingView would skip it. Suppressing hoisting for the
+    // duration of this call (arguments included) keeps every generated
+    // `ns.param(...)` / nested call inside the branch expression.
+    if (node._lazyOperand === true && !scopeManager.shouldSuppressHoisting()) {
+        scopeManager.setSuppressHoisting(true);
+        try {
+            transformCallExpressionInner(node, scopeManager, namespace);
+        } finally {
+            scopeManager.setSuppressHoisting(false);
+        }
+        return;
+    }
+
+    transformCallExpressionInner(node, scopeManager, namespace);
+}
+
+function transformCallExpressionInner(node: any, scopeManager: ScopeManager, namespace?: string): void {
     if (node.callee && node.callee.name === 'kernel_matrix') {
         // console.log('Transforming kernel_matrix call');
         // console.log('Arguments before:', node.arguments.map((a: any) => a.name));
@@ -1646,6 +1719,11 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         node._transformed = true;
     }
 
+    // Static `footprint` / `volume_row` type of a method call's receiver whose
+    // method is one of that type's built-ins — such calls are routed to the
+    // namespace function further down.
+    let orderflowReceiverType: string | undefined;
+
     // Handle method calls on local variables (e.g. arr.set())
     if (!isNamespaceCall && node.callee && node.callee.type === 'MemberExpression') {
         const methodName = node.callee.property.name;
@@ -1691,6 +1769,9 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         const methodReceiverType = scopeManager.getMethodReceiverType(methodName);
         const receiverTypeMatches = !!receiverBaseType && !!methodReceiverType && receiverBaseType === methodReceiverType;
 
+        const orderflowType = receiverBaseType ?? footprintRowCallType(_obj, scopeManager);
+        if (orderflowType && ORDERFLOW_METHODS[orderflowType]?.has(methodName)) orderflowReceiverType = orderflowType;
+
         // UDT-instance dispatch (pre-existing rule, kept as a fallback for
         // methods whose declared receiver type could not be extracted): a
         // direct reference to a known UDT instance always dispatches to the
@@ -1701,7 +1782,22 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
         // `someLine.delete()`.
         const isReceiverUdtInstance = !!_obj.name && scopeManager.isUdtInstance(_obj.name);
 
-        if (isUserFunction && isUserMethod && !scopeManager.isContextBound(methodName) && (receiverTypeMatches || isReceiverUdtInstance)) {
+        // Receivers whose static type cannot be inferred: an untyped local
+        // (`x = bar_index * 1.0`), a parenthesized expression, or the result of a
+        // previous call in a chain (`p.next().next()`). TradingView resolves these
+        // fine, so falling through to the built-in leaves the call unbound. The
+        // dispatch is only safe for a method name Pine does not also expose as a
+        // built-in member — with a colliding name (`delete`, `get`, `size`, …) an
+        // unknown receiver stays genuinely ambiguous and must keep requiring a
+        // positive type match.
+        const dispatchOnUnknownReceiver = receiverBaseType === undefined && !BUILTIN_METHOD_NAMES.has(methodName);
+
+        if (
+            isUserFunction &&
+            isUserMethod &&
+            !scopeManager.isContextBound(methodName) &&
+            (receiverTypeMatches || isReceiverUdtInstance || dispatchOnUnknownReceiver)
+        ) {
             // It's a user variable/function.
             // Transform obj.method(args) -> method(obj, args)
             // 1. Get the object (first arg)
@@ -1718,19 +1814,14 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
             // 4. Transform the object (it becomes the first argument)
             // We need to ensure it's properly scoped/wrapped if it's a variable
             // transformIdentifierForParam might be needed if it's an identifier
-            let transformedObj = obj;
-            if (obj.type === 'Identifier') {
-                 // Use transformIdentifier logic but we need it as an argument
-                 // transformFunctionArgument handles identifiers correctly
-                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
-            } else if (obj.type === 'CallExpression') {
-                 // If object is a call expression, transform it first
+            // A call receiver (`x.twice().twice()`) is transformed first so the
+            // inner dispatch resolves before it is wrapped as an argument. Every
+            // receiver shape — identifier, UDT field chain, call result, or any
+            // other expression like `(bar_index + 0.0)` — is then wrapped the same way.
+            if (obj.type === 'CallExpression') {
                  transformCallExpression(obj, scopeManager);
-                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
-            } else if (obj.type === 'MemberExpression') {
-                 // UDT field chain receiver (e.g. `bs.is_equity.to_sparkline()`)
-                 transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
             }
+            const transformedObj = transformFunctionArgument(obj, CONTEXT_NAME, scopeManager);
 
             // 5. Construct the new call: method(obj, ...args)
             // We need to use $.call(method, id, obj, ...args) pattern because it's a user function
@@ -1833,6 +1924,19 @@ export function transformCallExpression(node: any, scopeManager: ScopeManager, n
             }
         );
     });
+
+    if (orderflowReceiverType && !node._transformed) {
+        // recv.method(args) → $.pine.<type>.method(recv, args): the helper raises
+        // TradingView's runtime error when the receiver is `na`.
+        const methodName = node.callee.property.name;
+        const pineRef = ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('pine'));
+        const namespaceRef = ASTFactory.createMemberExpression(pineRef, ASTFactory.createIdentifier(orderflowReceiverType));
+        node.arguments = [node.callee.object, ...node.arguments];
+        node.callee = ASTFactory.createMemberExpression(namespaceRef, ASTFactory.createIdentifier(methodName));
+        if (orderflowReceiverType === 'footprint' && FOOTPRINT_ROW_METHODS.has(methodName)) node._orderflowType = 'volume_row';
+        node._transformed = true;
+        return;
+    }
 
     // ---------------------------------------------------------------------------
     // Optional chaining for method calls on values retrieved via $.get().

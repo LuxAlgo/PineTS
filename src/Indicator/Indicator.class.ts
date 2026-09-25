@@ -49,8 +49,9 @@ export class Indicator {
     private _prepared: PreparedScript | null = null;
     private _inputMeta: IPineInput[] | null = null;
     private _inputValues: Record<string, unknown> = {};
-    private _explicitOverrides = new Set<string>(); // titles the user wrote via .input.X = ...
+    private _explicitOverrides = new Set<string>(); // canonical keys the user wrote via .input.X = ...
     private _inputProxy: Record<string, unknown> | null = null;
+    private _inputMetaByKey = new Map<string, IPineInput>();
 
     // Prop machinery — same lazy pattern as inputs.
     private _propMeta: IPineProp[] | null = null;
@@ -113,9 +114,12 @@ export class Indicator {
         const usesVisibleRange = detectViewportUsage(fn);
         const ltfSlices = (fn as any)._ltfSlices;
 
+        const self = this;
         this._prepared = {
             fn,
-            inputs: this.getRuntimeInputs(),
+            get inputs() {
+                return self.getRuntimeInputs();
+            },
             usesVisibleRange,
             ltfSlices,
         };
@@ -132,10 +136,12 @@ export class Indicator {
      * `input.utils.resolveInput`). Composed at call time so live mutations
      * to `.input` between `pine.run()` calls are picked up automatically.
      *
-     * Keys are mixed by design and resolved in this precedence by the runtime:
-     *   1. Legacy constructor `inputs` map        — TITLE-keyed (back-compat)
-     *   2. Explicit `.input[...]` writes          — VARID-keyed (canonical);
-     *      resolveInput checks varId before title, so these take priority.
+     * Keys are mixed by design and resolved in this precedence by the runtime
+     * (inputId → varId → title):
+     *   1. Legacy constructor `inputs` map        — any key (title, varId, `in_N`)
+     *   2. Explicit `.input[...]` writes          — forwarded under the input's
+     *      id (`in_N`, exact) and under its canonical key when no other input
+     *      answers to that name (back-compat for readers of this map).
      *
      * Defaults are NOT included — the runtime falls back to `defval` when no
      * override key matches.
@@ -144,7 +150,11 @@ export class Indicator {
         const out: Record<string, unknown> = { ...(this.inputs ?? {}) };
         if (this._inputMeta) {
             for (const key of this._explicitOverrides) {
-                out[key] = this._inputValues[key];
+                const value = this._inputValues[key];
+                const meta = this._inputMetaByKey.get(key);
+                if (meta) out[meta.id] = value;
+                const shared = this._inputMeta.some((m) => m !== meta && (m.varId === key || m.title === key));
+                if (!shared) out[key] = value;
             }
         }
         return out;
@@ -209,9 +219,10 @@ export class Indicator {
                 m.defval = normalizeColorToRgbaHex(m.defval);
             }
         }
-        const built = buildInputProxy(this._inputMeta, (title) => this._explicitOverrides.add(title));
+        const built = buildInputProxy(this._inputMeta, (key) => this._explicitOverrides.add(key));
         this._inputValues = built.values;
         this._inputProxy = built.proxy;
+        this._inputMetaByKey = built.metaByKey;
     }
 
     private _getInputProxy(): Record<string, unknown> {

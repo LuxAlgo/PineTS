@@ -571,9 +571,9 @@ plot(src)
 //@version=6
 indicator("String Test")
 
-text = "Hello World"
-length = str.length(text)
-contains = str.contains(text, "Hello")
+txt = "Hello World"
+length = str.length(txt)
+contains = str.contains(txt, "Hello")
 
 plot(length)
         `;

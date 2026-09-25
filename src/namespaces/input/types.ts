@@ -20,4 +20,11 @@ export type InputOptions = {
      * (title is the secondary fallback). Absent for non-transpiled JS calls.
      */
     __varId?: string;
+    /**
+     * Transpiler-injected declaration id (`in_0`, `in_1`, …) assigned to every
+     * input call site of a Pine script, in declaration order. Checked before
+     * `__varId` by resolveInput; it is the only key that tells apart untitled
+     * inputs and inputs sharing a variable name.
+     */
+    __inputId?: string;
 };

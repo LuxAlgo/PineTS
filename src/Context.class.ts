@@ -30,6 +30,8 @@ import { BoxHelper } from './namespaces/box/BoxHelper';
 import { LinefillHelper } from './namespaces/linefill/LinefillHelper';
 import { PolylineHelper } from './namespaces/polyline/PolylineHelper';
 import { TableHelper } from './namespaces/table/TableHelper';
+import { FootprintHelper } from './namespaces/footprint/FootprintHelper';
+import { VolumeRowHelper } from './namespaces/footprint/VolumeRowHelper';
 import { Ticker } from './namespaces/Ticker';
 import type { IndicatorOptions } from './types/PineTypes';
 
@@ -544,6 +546,21 @@ export class Context {
         // Register all drawing helpers for streaming rollback and plot sync
         this._drawingHelpers = [labelHelper, lineHelper, boxHelper, linefillHelper, polylineHelper, tableHelper];
 
+        // footprint / volume_row namespaces — read-only views over the objects that
+        // request.footprint() returns (no drawings, nothing to roll back).
+        const footprintHelper = new FootprintHelper(this);
+        this.bindContextObject(
+            footprintHelper,
+            ['any', 'param', 'buy_volume', 'sell_volume', 'total_volume', 'delta', 'poc', 'vah', 'val', 'rows', 'get_row_by_price'],
+            'footprint',
+        );
+        const volumeRowHelper = new VolumeRowHelper(this);
+        this.bindContextObject(
+            volumeRowHelper,
+            ['any', 'param', 'up_price', 'down_price', 'buy_volume', 'sell_volume', 'total_volume', 'delta', 'has_buy_imbalance', 'has_sell_imbalance'],
+            'volume_row',
+        );
+
         // color namespace
         const colorHelper = new PineColor(this);
         this.bindContextObject(
@@ -604,6 +621,24 @@ export class Context {
     }
 
     //#region [Runtime functions] ===========================
+
+    /**
+     * Normalizes the right-hand side of a tuple declaration (`[a, b] = ...`) to the
+     * double-bracket tuple convention `[[a, b]]` expected by `init()`.
+     *
+     * Function returns and request.* results are already double-bracketed, but a
+     * tuple produced by an if / switch / loop expression arrives flat (`[a, b]`),
+     * and a local block that returned nothing (an `if` without `else`, a loop that
+     * never ran) arrives as na: Pine yields na for every item in that case.
+     * No Pine value is a JS array (Pine arrays, maps, UDTs are objects), so a flat
+     * array here is always a single-bracket tuple, never a series.
+     */
+    toTuple(value: any, arity: number): any[][] {
+        if (Array.isArray(value)) {
+            return Array.isArray(value[0]) ? value : [value];
+        }
+        return [new Array(arity).fill(NaN)];
+    }
 
     /**
      * this function is used to initialize the target variable with the source array
@@ -913,7 +948,10 @@ export class Context {
     public call(fn: Function, id: string, ...args: any[]) {
         this.pushId(id);
         try {
-            return fn(...args);
+            const result = fn(...args);
+            // Falling off the end of a Pine function (e.g. an `if` with no `else` whose
+            // test was false) yields `na`, not an absent value.
+            return result === undefined ? NaN : result;
         } finally {
             this.popId();
         }

@@ -289,6 +289,7 @@ PineTS aims for complete Pine Script® API compatibility. See the [full coverage
 ![ta](./.github/badges/api-ta.svg)
 ![math](./.github/badges/api-math.svg)
 ![request](./.github/badges/api-request.svg)
+![footprint](./.github/badges/api-footprint.svg)
 ![input](./.github/badges/api-input.svg)
 
 ### Data Structures

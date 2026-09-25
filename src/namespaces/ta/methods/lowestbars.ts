@@ -24,15 +24,20 @@ export function lowestbars(context: any) {
 
         for (let i = 0; i < length; i++) {
             const val = series.get(i);
-            
-            if (isNaN(val)) continue;
 
-            if (isNaN(minOffset) || val < minVal) {
+            // TradingView resets the window at na: only the bars since the most recent
+            // na take part, and an na on the current bar yields offset 0
+            // (tests/namespaces/ta/na-window-semantics.test.ts).
+            if (val === undefined || isNaN(val)) break;
+
+            // `<=` so that, scanning newest → oldest, an older bar with the same value
+            // overwrites: TradingView returns the offset of the OLDEST bar among ties.
+            if (isNaN(minOffset) || val <= minVal) {
                 minVal = val;
                 minOffset = -i;
             }
         }
 
-        return minOffset;
+        return isNaN(minOffset) ? 0 : minOffset;
     };
 }
