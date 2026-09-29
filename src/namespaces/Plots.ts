@@ -1,6 +1,6 @@
 import type { BackgroundColorOptions, BarColorOptions, FillOptions, PlotArrowOptions, PlotBarOptions, PlotCandleOptions, PlotOptions, PlotCharOptions, PlotShapeOptions, HlineOptions } from '../types/PineTypes';
 import { Series } from '../Series';
-import { parseArgsForPineParams, extractCallsiteId } from './utils';
+import { parseArgsForPineParams, extractCallsiteId, isNamedArgsBag } from './utils';
 import { silentInSecondary } from './silentInSecondary';
 
 //prettier-ignore
@@ -63,6 +63,19 @@ const HLINE_SIGNATURE = [
 const FILL_SIGNATURE = [
     'plot1', 'plot2', 'color', 'title', 'editable', 'show_last', 'fillgaps', 'display',
 ];
+
+//prettier-ignore
+const GRADIENT_FILL_SIGNATURE = [
+    'plot1', 'plot2', 'top_value', 'bottom_value', 'top_color', 'bottom_color', 'title', 'editable', 'show_last', 'fillgaps', 'display',
+];
+
+//prettier-ignore
+const GRADIENT_FILL_ARGS_TYPES = {
+    plot1: 'object', plot2: 'object', top_value: 'number', bottom_value: 'number', top_color: 'color', bottom_color: 'color',
+    title: 'string', editable: 'boolean', show_last: 'number', fillgaps: 'boolean', display: 'string',
+};
+
+const GRADIENT_FILL_KEYS = ['top_value', 'bottom_value', 'top_color', 'bottom_color'];
 
 //prettier-ignore
 const PLOT_ARGS_TYPES = {
@@ -483,24 +496,24 @@ export class FillHelper {
 
         // Detect gradient fill: fill(plot1, plot2, top_value, bottom_value, top_color, bottom_color, ...)
         // vs simple fill:       fill(plot1, plot2, color, title, ...)
-        // Positional form: 3rd arg (index 2) is a number (top_value).
-        // Named form: transpiler may bundle named args into an object at index 2
-        // containing top_value, bottom_value, top_color, bottom_color.
-        const isGradientPositional = args.length >= 6 && typeof args[2] === 'number';
-        const namedArgs = !isGradientPositional && args.length >= 3 && args[2] !== null
-            && typeof args[2] === 'object' && 'top_value' in args[2] ? args[2] : null;
-        const isGradientFill = isGradientPositional || namedArgs !== null;
+        // Positional form: the 3rd and 4th args are numbers (top_value,
+        // bottom_value; a simple fill's 4th is its title). Any argument may
+        // instead come by name, in the trailing named-args object the
+        // transpiler emits (`…, title="Grad2")` → `…, {title: "Grad2"})`).
+        const named = args.length > 0 && isNamedArgsBag(args[args.length - 1]) ? args[args.length - 1] : null;
+        const positional = named ? args.length - 1 : args.length;
+        const isGradientFill =
+            (named !== null && GRADIENT_FILL_KEYS.some((k) => k in named)) ||
+            (positional >= 4 && typeof args[2] === 'number' && typeof args[3] === 'number');
 
         if (isGradientFill) {
-            const plot1 = args[0];
-            const plot2 = args[1];
-            const top_value = namedArgs ? Series.from(namedArgs.top_value).get(0) : args[2];
-            const bottom_value = namedArgs ? Series.from(namedArgs.bottom_value).get(0) : args[3];
-            const top_color = namedArgs ? Series.from(namedArgs.top_color).get(0) : args[4];
-            const bottom_color = namedArgs ? Series.from(namedArgs.bottom_color).get(0) : args[5];
-            const title = namedArgs
-                ? (namedArgs.title || undefined)
-                : (args.length > 6 && typeof args[6] === 'string' ? args[6] : undefined);
+            const _parsed = parseArgsForPineParams<any>(args, GRADIENT_FILL_SIGNATURE, GRADIENT_FILL_ARGS_TYPES);
+            const { plot1, plot2, editable, show_last, fillgaps, display } = _parsed;
+            const top_value = Series.from(_parsed.top_value).get(0);
+            const bottom_value = Series.from(_parsed.bottom_value).get(0);
+            const top_color = Series.from(_parsed.top_color).get(0);
+            const bottom_color = Series.from(_parsed.bottom_color).get(0);
+            const title = typeof _parsed.title === 'string' && _parsed.title ? _parsed.title : undefined;
 
             const p1Key = plot1?._plotKey || plot1?.title;
             const p2Key = plot2?._plotKey || plot2?.title;
@@ -519,6 +532,7 @@ export class FillHelper {
                     options: {
                         plot1: p1Key,
                         plot2: p2Key,
+                        editable, show_last, fillgaps, display,
                         style: 'fill',
                         gradient: true,
                     },
