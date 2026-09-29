@@ -9,6 +9,7 @@ import {
     NAMESPACES_LIKE,
     ASYNC_METHODS,
     CALLSITE_ID_NAMESPACES,
+    CALLSITE_ID_FUNCTIONS,
     BUILTIN_METHOD_NAMES,
     ORDERFLOW_METHODS,
     FOOTPRINT_ROW_METHODS,
@@ -1879,6 +1880,23 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
             }
             return transformFunctionArgument(arg, CONTEXT_NAME, scopeManager);
         });
+
+        // Bare plot functions (bgcolor, barcolor, plotchar, …) get the same
+        // trailing `{ __callsiteId }` as plot.* calls, so untitled calls are
+        // keyed by their call site instead of all sharing "plot".
+        if (CALLSITE_ID_FUNCTIONS.includes(node.callee.name) && scopeManager.isContextBound(node.callee.name)) {
+            node.arguments.push({
+                type: 'ObjectExpression',
+                properties: [{
+                    type: 'Property',
+                    key: { type: 'Identifier', name: '__callsiteId' },
+                    value: scopeManager.getNextPlotCallId(),
+                    kind: 'init',
+                    computed: false,
+                    shorthand: false,
+                }],
+            });
+        }
 
         // Inject unique call ID for the function call only if it is a user-defined function
         // Built-in functions (like na, nz, bool) are context-bound and should not receive a call ID
