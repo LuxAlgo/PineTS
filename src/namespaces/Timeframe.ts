@@ -22,6 +22,10 @@ function normalizeTF(tf: string): string {
     // Direct map (case-sensitive first for '1M' vs '1m')
     if (NORMALIZE_MAP[tf]) return NORMALIZE_MAP[tf];
 
+    // An upper-case M unit is months ("3M", "12M"): don't let the lower-case
+    // lookup below read it as the minute alias ("3m" → "3").
+    if (/^\d+M$/.test(tf)) return tf;
+
     // Try lowercase (handles '1H', '4H', '1D', '1W' etc.)
     const lower = tf.toLowerCase();
     if (NORMALIZE_MAP[lower]) return NORMALIZE_MAP[lower];

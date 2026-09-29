@@ -9,15 +9,18 @@ import { PineRuntimeError } from '../errors/PineRuntimeError';
 
 /**
  * Normalize a Pine Script timeframe string to a canonical form.
- * e.g. "1D" → "D", "60" → "60", "1W" → "W", "" → ""
+ * e.g. "1D" → "D", "60" → "60", "1W" → "W", "3M" → "3M" (months), "" → ""
+ * An upper-case M is months; a lower-case "3m" is the minute alias → "3".
  */
 export function normalizeTimeframe(tf: string): string {
     if (!tf) return '';
-    const s = tf.trim().toUpperCase();
+    const trimmed = tf.trim();
+    const minutes = /^(\d+)m$/.exec(trimmed);
+    if (minutes) return minutes[1];
+    const s = trimmed.toUpperCase();
     if (s === '1D' || s === 'D') return 'D';
     if (s === '1W' || s === 'W') return 'W';
     if (s === '1M' || s === 'M') return 'M';
-    // Strip leading "1" from minute timeframes only if it's just "1" (1 minute)
     return s;
 }
 
@@ -36,10 +39,13 @@ export function alignToTimeframe(timestamp: number, tf: string): number {
     // Parse timeframe to minutes
     const tfMinutes = parseTimeframeMinutes(tf);
 
-    if (tf === 'M') {
-        // Monthly: floor to 1st of month 00:00 UTC
+    const months = tf === 'M' ? 1 : Number(/^(\d+)M$/.exec(tf)?.[1] ?? 0);
+    if (months > 0) {
+        // Monthly: floor to 1st of month 00:00 UTC; "nM" to the start of its
+        // n-month block counted from January ("3M" → quarters).
         const d = new Date(timestamp);
-        return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+        const month = d.getUTCMonth();
+        return Date.UTC(d.getUTCFullYear(), month - (month % months), 1);
     }
 
     if (tf === 'W') {

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //Pine Script Timeframes (canonical format: minutes as integers, D/W/M for day/week/month)
-export const TIMEFRAMES = ['1', '3', '5', '15', '30', '45', '60', '120', '180', '240', 'D', 'W', 'M'];
+// Ordered by duration; multi-month timeframes ("3M" = a quarter, "12M" = a year) follow "M".
+export const TIMEFRAMES = ['1', '3', '5', '15', '30', '45', '60', '120', '180', '240', 'D', 'W', 'M', '2M', '3M', '4M', '5M', '6M', '7M', '8M', '9M', '10M', '11M', '12M'];
 
 /**
  * Normalize a timeframe string to the canonical Pine Script format used in TIMEFRAMES.
@@ -19,6 +20,10 @@ export function normalizeTimeframe(tf: string): string {
 
     // Try direct map (case-sensitive first for '1M')
     if (TIMEFRAME_MAP[tf]) return TIMEFRAME_MAP[tf];
+
+    // An upper-case M unit is months ("3M" = a quarter): never fold it into
+    // the lower-case minute aliases below ("3m" → "3").
+    if (/^\d+M$/.test(tf)) return tf;
 
     // Try lowercase (handles '1H', '4H', '1D', '1W', etc.)
     const lower = tf.toLowerCase();
