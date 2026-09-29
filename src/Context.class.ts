@@ -143,6 +143,9 @@ export class Context {
     public viewportRight: number | undefined = undefined;
 
     public pineTSCode: Function | String;
+    /** The transpiled function this context runs (what request.security
+     *  secondaries run when their call site has no slice). */
+    public transpiledFn: Function | null = null;
 
     public inputs: Record<string, any> = {};
 
