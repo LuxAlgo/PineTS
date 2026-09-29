@@ -12,10 +12,18 @@
  * the source, which a `runPretranspiled()` caller doesn't even have
  * (`context.pineTSCode` is null there). Either way the secondary gets the
  * parent's inputs, so input overrides reach the requested expression.
+ *
+ * A slice that ran without evaluating this call's expression (a call-graph
+ * shape the slicer doesn't model) is not an answer: the whole script runs
+ * instead.
  */
 export async function runSecondary(context: any, pineTS: any, expressionName: unknown): Promise<any> {
     const exprNameStr = typeof expressionName === 'string' ? expressionName : '';
     const sliceKey = exprNameStr.match(/p\d+$/)?.[0] ?? exprNameStr;
     const slice = context._ltfTruncatedBodies?.[sliceKey];
-    return pineTS.runPretranspiled(slice ?? context.transpiledFn, context.inputs);
+    if (slice) {
+        const secContext = await pineTS.runPretranspiled(slice, context.inputs);
+        if (secContext.params?.[exprNameStr] !== undefined) return secContext;
+    }
+    return pineTS.runPretranspiled(context.transpiledFn, context.inputs);
 }

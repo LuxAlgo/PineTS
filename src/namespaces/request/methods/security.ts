@@ -243,7 +243,11 @@ export function security(context: any) {
                 return NaN;
             }
 
-            const value = secContext.params[_expression_name][secContextIdx];
+            // The secondary never evaluated the expression (it sits behind a
+            // condition that was false on every requested bar): na.
+            const values = secContext.params[_expression_name];
+            if (values === undefined) return NaN;
+            const value = values[secContextIdx];
 
             // Handle gaps for HTF (Higher Timeframe)
             if (!isLTF && _gaps) {
@@ -334,7 +338,9 @@ export function security(context: any) {
             return NaN;
         }
 
-        const value = secContext.params[_expression_name][secContextIdx];
+        const values = secContext.params[_expression_name];
+        if (values === undefined) return NaN;
+        const value = values[secContextIdx];
 
         // Handle gaps for HTF (Higher Timeframe) - First call
         if (!isLTF && _gaps) {
