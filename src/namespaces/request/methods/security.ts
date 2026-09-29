@@ -171,6 +171,20 @@ export function security(context: any) {
             return Array.isArray(resolved) ? [resolved] : resolved;
         }
 
+        // "Same" is CHART-TYPE aware (see the same-timeframe shortcut below).
+        const reqParts = typeof _symbol === 'string' ? splitTickerModifier(_symbol) : { symbol: _symbol, modifier: null };
+        const reqModifier = reqParts.modifier === 'standard' ? null : reqParts.modifier; // ";standard" ≡ no modifier
+        const isSameSymbol = !_symbol || _symbol === '' || (reqParts.symbol === ctxParts.symbol && reqModifier === chartModifier);
+
+        // An array data source holds the chart's own series only: nothing can
+        // load another symbol or timeframe for a secondary context.
+        if (Array.isArray(context.source) && !(isSameSymbol && context.timeframe && normalizeTimeframe(_timeframe) === normalizeTimeframe(context.timeframe))) {
+            throw new Error(
+                `request.security needs a market data provider to load ${_symbol || context.tickerId || 'the chart symbol'} "${_timeframe}": ` +
+                `an array data source only holds the chart's own symbol and timeframe`,
+            );
+        }
+
         const ctxTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(context.timeframe));
         const reqTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(_timeframe));
 
@@ -187,10 +201,7 @@ export function security(context: any) {
         // "Same" is also CHART-TYPE aware: the chart's data is its chart-typed view,
         // so on a Heikin-Ashi chart only "SYM;heikinashi" is the same series — a plain
         // "SYM" (e.g. via ticker.standard()) must fetch STANDARD data through a
-        // secondary context, and vice versa on a standard chart.
-        const reqParts = typeof _symbol === 'string' ? splitTickerModifier(_symbol) : { symbol: _symbol, modifier: null };
-        const reqModifier = reqParts.modifier === 'standard' ? null : reqParts.modifier; // ";standard" ≡ no modifier
-        const isSameSymbol = !_symbol || _symbol === '' || (reqParts.symbol === ctxParts.symbol && reqModifier === chartModifier);
+        // secondary context, and vice versa on a standard chart (isSameSymbol above).
 
         if (ctxTimeframeIdx === reqTimeframeIdx && isSameSymbol) {
             // Resolve any helper objects (TimeComponentHelper, NAHelper, Series, etc.)

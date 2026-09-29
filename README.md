@@ -269,6 +269,8 @@ plot(ta.sma(close, 10))
 `);
 ```
 
+An array holds one series and no symbol information. Pass a ticker and timeframe (`new PineTS(candles, 'AAPL', 'D')`) to fill `syminfo.ticker` / `syminfo.tickerid` and `timeframe.*`; the rest of `syminfo` takes defaults (`timezone` `"UTC"`, `mintick` `0.01`, empty strings and `na` elsewhere). `request.security()` / `request.security_lower_tf()` can only return the chart's own symbol and timeframe from an array; requesting another symbol or timeframe throws `request.security needs a market data provider …` — use a provider (built-in or a custom `IProvider`) for those.
+
 
 
 ## API Coverage

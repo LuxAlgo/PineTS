@@ -318,6 +318,15 @@ export function security_lower_tf(context: any) {
             }
         }
 
+        // An array data source holds the chart's own series only: nothing can
+        // load a lower timeframe for a secondary context.
+        if (Array.isArray(context.source) && !(context.timeframe && normalizeTimeframe(_timeframe) === normalizeTimeframe(context.timeframe))) {
+            throw new Error(
+                `request.security_lower_tf needs a market data provider to load ${_symbol || context.tickerId || 'the chart symbol'} "${_timeframe}": ` +
+                `an array data source only holds the chart's own symbol and timeframe`,
+            );
+        }
+
         const ctxTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(context.timeframe));
         const reqTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(_timeframe));
 
