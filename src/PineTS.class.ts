@@ -22,6 +22,30 @@ function getTimeframeDurationMs(timeframe: string | undefined): number {
 }
 
 /**
+ * syminfo for a series without provider symbol info (an array data source, or
+ * a provider whose getSymbolInfo failed): identified by the ticker PineTS was
+ * given, UTC, a 0.01 tick (the defaults the runtime already assumed when
+ * syminfo was missing); everything else empty / na.
+ */
+//prettier-ignore
+function defaultSymbolInfo(tickerId: string | undefined): ISymbolInfo {
+    const tickerid = String(tickerId ?? '');
+    const ticker = tickerid.includes(':') ? tickerid.slice(tickerid.indexOf(':') + 1) : tickerid;
+    const prefix = tickerid.includes(':') ? tickerid.slice(0, tickerid.indexOf(':')) : '';
+    return {
+        ticker, tickerid, prefix, root: ticker, main_tickerid: tickerid, current_contract: '', description: ticker, isin: '', type: '',
+        basecurrency: '', country: '', currency: '', timezone: 'UTC',
+        employees: NaN, industry: '', sector: '', shareholders: NaN, shares_outstanding_float: NaN, shares_outstanding_total: NaN,
+        expiration_date: NaN, session: '24x7', volumetype: '',
+        mincontract: NaN, minmove: 1, mintick: 0.01, pointvalue: 1, pricescale: 100,
+        recommendations_buy: NaN, recommendations_buy_strong: NaN, recommendations_date: NaN, recommendations_hold: NaN,
+        recommendations_sell: NaN, recommendations_sell_strong: NaN, recommendations_total: NaN,
+        target_price_average: NaN, target_price_date: NaN, target_price_estimates: NaN, target_price_high: NaN,
+        target_price_low: NaN, target_price_median: NaN,
+    };
+}
+
+/**
  * This class is a wrapper for the Pine Script language, it allows to run Pine Script code in a JavaScript environment
  */
 export class PineTS {
@@ -258,16 +282,20 @@ export class PineTS {
                     const symbolInfo = (source as IProvider)
                         .getSymbolInfo(tickerId)
                         .then((symbolInfo) => {
-                            this._syminfo = symbolInfo;
+                            this._syminfo = symbolInfo || defaultSymbolInfo(tickerId);
                             this._ready = true;
                             resolve(true);
                         })
                         .catch((error) => {
                             console.warn('Failed to get symbol info, using default values:', error);
+                            this._syminfo = defaultSymbolInfo(tickerId);
                             this._ready = true;
                             resolve(true);
                         });
                 } else {
+                    // An array source has no symbol info: scripts still read
+                    // syminfo.*, so fall back to a default.
+                    this._syminfo = defaultSymbolInfo(tickerId);
                     this._ready = true;
                     resolve(true);
                 }
