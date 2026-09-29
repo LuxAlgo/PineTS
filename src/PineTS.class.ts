@@ -457,6 +457,7 @@ export class PineTS {
 
         const context = this._initializeContext(null as any, inputs, this._isSecondaryContext);
         this._transpiledCode = transpiledFn;
+        context.transpiledFn = transpiledFn;
         // Preserve slice attribution on the context so any nested LTF
         // request inside the slice can keep using the same map.
         const slices = (transpiledFn as any)._ltfSlices;
@@ -486,6 +487,7 @@ export class PineTS {
 
         const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
         this._transpiledCode = prepared.fn;
+        context.transpiledFn = prepared.fn;
         // Propagate transpile-time slices (one per request.security_lower_tf
         // call site) onto the Context so the slow path of the LTF runtime
         // can pick the right truncated body to run in the secondary
@@ -531,6 +533,7 @@ export class PineTS {
 
         const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
         this._transpiledCode = prepared.fn;
+        context.transpiledFn = prepared.fn;
         if (prepared.ltfSlices) (context as any)._ltfTruncatedBodies = prepared.ltfSlices;
 
         const startIdx = this.data.length - periods;

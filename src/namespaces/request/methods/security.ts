@@ -6,6 +6,7 @@ import { splitTickerModifier, withTickerModifier } from '../../../tickerModifier
 import { TIMEFRAMES, normalizeTimeframe } from '../utils/TIMEFRAMES';
 import { findSecContextIdx } from '../utils/findSecContextIdx';
 import { findLTFContextIdx } from '../utils/findLTFContextIdx';
+import { runSecondary } from '../utils/runSecondary';
 import { parseArgsForPineParams } from '../../utils';
 
 // Pine signature (v5/v6):
@@ -242,7 +243,11 @@ export function security(context: any) {
                 return NaN;
             }
 
-            const value = secContext.params[_expression_name][secContextIdx];
+            // The secondary never evaluated the expression (it sits behind a
+            // condition that was false on every requested bar): na.
+            const values = secContext.params[_expression_name];
+            if (values === undefined) return NaN;
+            const value = values[secContextIdx];
 
             // Handle gaps for HTF (Higher Timeframe)
             if (!isLTF && _gaps) {
@@ -311,20 +316,9 @@ export function security(context: any) {
         // Mark as secondary context to prevent infinite recursion
         pineTS.markAsSecondary();
 
-        // Truncated-slice slow path (Phase 4): when the transpiler emitted
-        // a slice for THIS call's expression name, the secondary runs the
-        // prefix-of-statements ending at the call instead of the full
-        // user script. Slice keys are the bare static `pN`; for fn-nested
-        // calls the runtime `_expression_name` is the path-prefixed form
-        // `${$$.id}pN` (commit 812eb2d) — strip the prefix before lookup.
-        // Falls back to running the FULL user script when no slice is
-        // available.
-        const exprNameStr = typeof _expression_name === 'string' ? _expression_name : '';
-        const sliceKey = exprNameStr.match(/p\d+$/)?.[0] ?? exprNameStr;
-        const slice = (context as any)._ltfTruncatedBodies?.[sliceKey];
-        const secContext = slice
-            ? await pineTS.runPretranspiled(slice)
-            : await pineTS.run(context.pineTSCode);
+        // The call site's truncated slice (Phase 4), else the whole
+        // script — see runSecondary.
+        const secContext = await runSecondary(context, pineTS, _expression_name);
 
         context.cache[cacheKey] = { pineTS, context: secContext, dataVersion: context.dataVersion };
 
@@ -344,7 +338,9 @@ export function security(context: any) {
             return NaN;
         }
 
-        const value = secContext.params[_expression_name][secContextIdx];
+        const values = secContext.params[_expression_name];
+        if (values === undefined) return NaN;
+        const value = values[secContextIdx];
 
         // Handle gaps for HTF (Higher Timeframe) - First call
         if (!isLTF && _gaps) {
