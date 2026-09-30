@@ -99,6 +99,12 @@ export const CALLSITE_ID_NAMESPACES = [
     'strategy.exit',  // cadence-detection for persistent vs ephemeral exit-parameter capture
 ];
 
+// Plot functions called as bare identifiers (`bgcolor(...)`, not `plot.x(...)`)
+// that receive the same trailing `{ __callsiteId }` options object. Without
+// it, every UNTITLED call of any of them resolved to the key "plot" in
+// `context.plots` (see PlotHelper._resolvePlotKey), interleaving their data.
+export const CALLSITE_ID_FUNCTIONS = ['plotchar', 'plotshape', 'plotarrow', 'plotbar', 'plotcandle', 'bgcolor', 'barcolor'];
+
 // Factory methods that create objects with side effects (format: 'namespace.method')
 // When used inside `var` declarations, these calls are wrapped in arrow functions
 // so they are only evaluated on bar 0 (deferred evaluation via initVar thunk).

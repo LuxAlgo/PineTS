@@ -1174,7 +1174,9 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   }
   const p0 = $.param($.const.glb1_res, undefined, 'p0');
   const p1 = $.param("_plotchar", undefined, 'p1');
-  plotchar(p0, p1);
+  plotchar(p0, p1, {
+    __callsiteId: "#0"
+  });
   return {
     res: $.const.glb1_res,
     data: $.const.glb1_data
