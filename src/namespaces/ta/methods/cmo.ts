@@ -33,11 +33,13 @@ export function cmo(context: any) {
                 prevLossesWindow: [],
                 prevGainsSum: 0,
                 prevLossesSum: 0,
+                prevLength: undefined,
                 // Tentative state
                 currentGainsWindow: [],
                 currentLossesWindow: [],
                 currentGainsSum: 0,
                 currentLossesSum: 0,
+                currentLength: undefined,
             };
         }
 
@@ -50,6 +52,7 @@ export function cmo(context: any) {
                 state.prevLossesWindow = [...state.currentLossesWindow];
                 state.prevGainsSum = state.currentGainsSum;
                 state.prevLossesSum = state.currentLossesSum;
+                state.prevLength = state.currentLength;
             }
             state.lastIdx = context.idx;
         }
@@ -78,17 +81,40 @@ export function cmo(context: any) {
         const gain = mom >= 0 ? mom : 0;
         const loss = mom >= 0 ? 0 : -mom; 
 
-        // Use committed state
-        const gainsWindow = [...state.prevGainsWindow];
-        const lossesWindow = [...state.prevLossesWindow];
-        let gainsSum = state.prevGainsSum;
-        let lossesSum = state.prevLossesSum;
+        let gainsWindow: number[];
+        let lossesWindow: number[];
+        let gainsSum: number;
+        let lossesSum: number;
 
-        // Add to windows
-        gainsWindow.unshift(gain);
-        lossesWindow.unshift(loss);
-        gainsSum += gain;
-        lossesSum += loss;
+        if (state.prevLength !== undefined && state.prevLength !== length) {
+            // A series length changed: rebuild the windows from the source history
+            gainsWindow = [];
+            lossesWindow = [];
+            gainsSum = 0;
+            lossesSum = 0;
+            const series = Series.from(source);
+            for (let i = 0; i < length; i++) {
+                const m = series.get(i) - series.get(i + 1);
+                if (isNaN(m)) break;
+                gainsWindow.push(m >= 0 ? m : 0);
+                lossesWindow.push(m >= 0 ? 0 : -m);
+                gainsSum += gainsWindow[i];
+                lossesSum += lossesWindow[i];
+            }
+        } else {
+            // Use committed state
+            gainsWindow = [...state.prevGainsWindow];
+            lossesWindow = [...state.prevLossesWindow];
+            gainsSum = state.prevGainsSum;
+            lossesSum = state.prevLossesSum;
+
+            // Add to windows
+            gainsWindow.unshift(gain);
+            lossesWindow.unshift(loss);
+            gainsSum += gain;
+            lossesSum += loss;
+        }
+        state.currentLength = length;
 
         // Not enough data yet
         if (gainsWindow.length < length) {

@@ -69,7 +69,8 @@ export function close_all(context: any) {
         // catching the freshly-opened reversal trade. Matches TV's binding
         // of strategy.close_all() to the position at call time.
         const order: Order = {
-            id: 'close_all',
+            // TradingView's generated exit id (strategy.closedtrades.exit_id)
+            id: 'Close position order',
             direction: 0, // resolved at fill time
             qty: 0, // resolved at fill time (sum of |all open trades|)
             type: 'market',

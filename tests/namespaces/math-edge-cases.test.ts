@@ -279,7 +279,8 @@ describe('Math Edge Cases', () => {
             `;
 
             const { plots } = await pineTS.run(code);
-            expect(plots['p1'].data[0].value).toBe(7.2);
+            // TradingView rounds to 2 * precision decimals first: 7.24999 -> 7.25 -> 7.3
+            expect(plots['p1'].data[0].value).toBe(7.3);
             expect(plots['p1_half_up'].data[0].value).toBe(7.3);
             expect(plots['p1_half_neg'].data[0].value).toBe(-7.3);
             expect(plots['p6'].data[0].value).toBe(0.123457);

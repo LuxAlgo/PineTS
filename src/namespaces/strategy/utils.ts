@@ -156,17 +156,10 @@ export function calculateOrderQty(context: any, specifiedQty: number | undefined
         qtyValue = (qtyValue as Function)();
     }
 
-    // Pine's broker emulator truncates the computed qty to 6 decimal
-    // places. The precision is hardcoded — independent of the symbol's
-    // mincontract or pricescale. Truncation applies to every code path
-    // (specifiedQty, fixed, cash, percent_of_equity) so a downstream
-    // mark-to-market loop doesn't accumulate the sub-microscopic delta
-    // between the raw float and TV's reported size over many bars.
-    const QTY_PRECISION = 1e6;
-    const truncateQty = (q: number) => Math.floor(q * QTY_PRECISION) / QTY_PRECISION;
-
-    if (specifiedQty !== undefined && specifiedQty !== null) {
-        return truncateQty(Math.abs(specifiedQty));
+    // Every path (explicit qty, fixed, cash, percent_of_equity) is floored to the symbol's
+    // quantity step, as TradingView's broker emulator does. `qty = na` uses the default.
+    if (specifiedQty !== undefined && specifiedQty !== null && !Number.isNaN(specifiedQty)) {
+        return floorQty(context, Math.abs(specifiedQty));
     }
 
     let rawQty: number;
@@ -191,7 +184,57 @@ export function calculateOrderQty(context: any, specifiedQty: number | undefined
         default:
             rawQty = qtyValue;
     }
-    return truncateQty(rawQty);
+    return floorQty(context, rawQty);
+}
+
+/**
+ * The price cash / percent-of-equity sizing uses: the stop price of a stop or stop-limit order,
+ * the limit price of a limit order, else `fallback` (the signal bar's close). An na leg is absent.
+ */
+export function sizingPrice(stop: number | undefined, limit: number | undefined, fallback: number): number {
+    const isPrice = (p: number | undefined): p is number => typeof p === 'number' && Number.isFinite(p);
+    return isPrice(stop) ? stop : isPrice(limit) ? limit : fallback;
+}
+
+/**
+ * How far past a limit price the bar must trade for the limit to fill intrabar:
+ * `strategy(backtest_fill_limits_assumption = N)` ticks (0 by default).
+ */
+export function limitFillSlack(context: any): number {
+    const ticks = Number(context.strategy?.config?.backtest_fill_limits_assumption ?? 0);
+    if (!Number.isFinite(ticks) || ticks <= 0) return 0;
+    return ticks * (context.pine?.syminfo?.mintick ?? 0.01);
+}
+
+/**
+ * The smallest tradable quantity: `syminfo.mincontract` (0.00001 for BINANCE:BTCUSDT), or
+ * 0.000001 when the provider does not report one.
+ */
+export function qtyStep(context: any): number {
+    const mincontract = context.pine?.syminfo?.mincontract;
+    return typeof mincontract === 'number' && mincontract > 0 ? mincontract : 1e-6;
+}
+
+/**
+ * Floors a quantity to the symbol's quantity step, as TradingView sizes orders (a fixed
+ * 0.123456789 fills 0.12345, 1.99999999 fills 1.99999). The 1e-10 relative slack only absorbs
+ * binary noise in the division (0.15 / 0.00001 is 14999.999999999998).
+ */
+export function floorQty(context: any, qty: number): number {
+    if (!Number.isFinite(qty) || qty <= 0) return 0;
+    const step = qtyStep(context);
+    const steps = Math.floor((qty / step) * (1 + 1e-10));
+    const decimals = Math.min(10, Math.max(0, Math.ceil(-Math.log10(step))));
+    return Number((steps * step).toFixed(decimals));
+}
+
+/**
+ * Quantity closed by a partial exit (`qty_percent`): floored to the quantity step, at least one
+ * step (a 50% close of 0.00001 closes it), never more than the position.
+ */
+export function partialCloseQty(context: any, positionQty: number, percent: number): number {
+    const step = qtyStep(context);
+    return Math.min(positionQty, Math.max(step, floorQty(context, (positionQty * percent) / 100)));
 }
 
 /**
@@ -242,6 +285,8 @@ export function processStrategyOrders(context: any): void {
     // Peaks are NOT latched here; updateEquityPeaks runs once at the bar's end.
     markToMarket(context, openPrice);
 
+    const limitSlack = limitFillSlack(context);
+
     // Process each pending order that was placed on a previous bar
     for (const order of pending_orders) {
         if (order.status !== 'pending') continue;
@@ -267,14 +312,15 @@ export function processStrategyOrders(context: any): void {
                 break;
 
             case 'limit':
-                // Limit orders fill when price reaches the limit level
+                // Limit orders fill when price reaches the limit level (past it by
+                // backtest_fill_limits_assumption ticks)
                 if (order.limit !== undefined) {
                     const direction = parseDirection(order.direction);
-                    if (direction === 1 && lowPrice <= order.limit) {
+                    if (direction === 1 && lowPrice <= order.limit - limitSlack) {
                         // Long limit order - buy when price drops to limit
                         shouldFill = true;
                         fillPrice = order.limit;
-                    } else if (direction === -1 && highPrice >= order.limit) {
+                    } else if (direction === -1 && highPrice >= order.limit + limitSlack) {
                         // Short limit order - sell when price rises to limit
                         shouldFill = true;
                         fillPrice = order.limit;
@@ -297,89 +343,33 @@ export function processStrategyOrders(context: any): void {
                     }
                 }
                 break;
-        }
 
-        if (shouldFill) {
-            // Pre-fill risk check: block if any active risk rule violates.
-            if (isOrderBlockedByRisk(strategy, order)) {
-                order.status = 'cancelled';
-                continue;
-            }
-
-            // Apply slippage against the trade direction (longs fill higher,
-            // shorts fill lower). slippage is in ticks of syminfo.mintick.
-            const direction = parseDirection(order.direction);
-            fillPrice = applySlippage(context, direction, fillPrice);
-
-            // Pre-trade margin check (Pine broker emulator). When the
-            // required margin for the new position would exceed available
-            // equity at fill time, the order is silently dropped — no
-            // trade record, no log. For reversals the close leg always
-            // succeeds (frees its prior margin) and only the new open leg
-            // is checked. For pyramiding (same-direction adds), held
-            // margin from existing positions stays locked.
-            //
-            // Runs for ALL margin percentages. At 100% margin the required
-            // margin equals the full notional (qty * price * pointValue * 1),
-            // matching TV's broker-emulator behavior of rejecting entries
-            // whose notional exceeds available equity even with no leverage.
-            const marginPct = direction === 1 ? (strategy.config.margin_long ?? 100) : (strategy.config.margin_short ?? 100);
-            {
-                const oldSize = strategy.position_size;
-                const oldSign = Math.sign(oldSize);
-                const isReversal = oldSign !== 0 && oldSign !== direction;
-                const newOpenQty = isReversal ? Math.max(0, order.qty - Math.abs(oldSize)) : order.qty;
-
-                if (newOpenQty > 0) {
-                    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
-                    // Equity is already MtM'd at OPEN by markToMarket() at the
-                    // top of processStrategyOrders, so strategy.equity is the
-                    // current account value. Subtract margin held by positions
-                    // that will REMAIN after this order:
-                    //   - reversal: nothing remains from old position.
-                    //   - pyramiding (same dir): existing held margin stays.
-                    //   - fresh entry: nothing held to begin with.
-                    let heldMarginRemaining = 0;
-                    if (oldSign === direction) {
-                        heldMarginRemaining = computeHeldMargin(context, openPrice);
+            case 'stop-limit':
+                // Reaching the stop turns the order into a limit order (possibly filled on the
+                // same bar): it fills at the activation price when that is within the limit,
+                // else at the limit once price comes back to it.
+                if (order.stop !== undefined && order.limit !== undefined) {
+                    const direction = parseDirection(order.direction);
+                    let activation: number | undefined;
+                    if (order._stopTriggered) activation = openPrice;
+                    else if (direction === 1 ? highPrice >= order.stop : lowPrice <= order.stop) {
+                        order._stopTriggered = true;
+                        activation = direction === 1 ? Math.max(openPrice, order.stop) : Math.min(openPrice, order.stop);
                     }
-                    const availableEquity = strategy.equity - heldMarginRemaining;
-                    const requiredMargin = computeRequiredMargin(newOpenQty, fillPrice, marginPct, pointValue);
-
-                    if (requiredMargin > availableEquity) {
-                        // TV broker emulator: the margin check only guards the
-                        // OPEN leg. On a reversal, the close leg always
-                        // executes (it frees margin / realizes the position) —
-                        // TV's exit shows the reversal order's id as exit id
-                        // while no opposite position appears. Verified against
-                        // QA margin_calls xlsx: after a partial margin-call
-                        // liquidation, the remainder was closed by the next
-                        // reversal order whose open leg was margin-rejected.
-                        const qtyToClose = Math.min(Math.abs(oldSize), order.qty);
-                        if (isReversal && qtyToClose > 0) {
-                            closePartialPosition(context, qtyToClose, fillPrice, currentTime, {
-                                exitId: order.id,
-                                exitComment: order.comment,
-                            });
-                            order.status = 'filled';
-                            order.fill_price = fillPrice;
-                            order.fill_bar = context.idx;
-                            order.fill_time = currentTime;
-                        } else {
-                            order.status = 'cancelled';
+                    if (activation !== undefined) {
+                        if (direction === 1 ? activation <= order.limit : activation >= order.limit) {
+                            shouldFill = true;
+                            fillPrice = activation;
+                        } else if (direction === 1 ? lowPrice <= order.limit - limitSlack : highPrice >= order.limit + limitSlack) {
+                            shouldFill = true;
+                            fillPrice = order.limit;
                         }
-                        continue;
                     }
                 }
-            }
-
-            // Execute the order using the pre-calculated qty
-            executeOrder(context, order, fillPrice, currentTime);
-            order.status = 'filled';
-            order.fill_price = fillPrice;
-            order.fill_bar = context.idx;
-            order.fill_time = currentTime;
+                break;
         }
+
+        if (shouldFill) fillEntryOrder(context, order, fillPrice, currentTime, openPrice);
     }
 
     // Remove filled and cancelled orders
@@ -387,6 +377,149 @@ export function processStrategyOrders(context: any): void {
 
     // Refresh equity at CLOSE for processExitOrders' opening read.
     // Peaks are latched at the bar's end inside processExitOrders.
+    markToMarket(context, closePrice);
+    updateStrategyMetrics(context);
+}
+
+/**
+ * Fills an entry order at `fillPrice` (before slippage) after the risk and margin checks, or
+ * cancels it. `markPrice` values the positions that stay open for the margin check.
+ */
+function fillEntryOrder(context: any, order: Order, fillPrice: number, currentTime: number, markPrice: number): void {
+    const strategy: StrategyState = context.strategy;
+    // Pre-fill risk check: block if any active risk rule violates.
+    if (isOrderBlockedByRisk(strategy, order)) {
+        order.status = 'cancelled';
+        return;
+    }
+
+    // Apply slippage against the trade direction (longs fill higher,
+    // shorts fill lower). slippage is in ticks of syminfo.mintick and
+    // applies to market and stop orders only: a limit fills at its price.
+    const direction = parseDirection(order.direction);
+    if (order.type === 'market' || order.type === 'stop') fillPrice = applySlippage(context, direction, fillPrice);
+
+    // Pre-trade margin check (Pine broker emulator). When the
+    // required margin for the new position would exceed available
+    // equity at fill time, the order is silently dropped — no
+    // trade record, no log. For reversals the close leg always
+    // succeeds (frees its prior margin) and only the new open leg
+    // is checked. For pyramiding (same-direction adds), held
+    // margin from existing positions stays locked.
+    //
+    // Runs for ALL margin percentages. At 100% margin the required
+    // margin equals the full notional (qty * price * pointValue * 1),
+    // matching TV's broker-emulator behavior of rejecting entries
+    // whose notional exceeds available equity even with no leverage.
+    const marginPct = direction === 1 ? (strategy.config.margin_long ?? 100) : (strategy.config.margin_short ?? 100);
+    {
+        const oldSize = strategy.position_size;
+        const oldSign = Math.sign(oldSize);
+        const isReversal = oldSign !== 0 && oldSign !== direction;
+        const newOpenQty = isReversal ? Math.max(0, order.qty - Math.abs(oldSize)) : order.qty;
+
+        if (newOpenQty > 0) {
+            const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
+            // Equity is already MtM'd at OPEN by markToMarket() at the
+            // top of processStrategyOrders, so strategy.equity is the
+            // current account value. Subtract margin held by positions
+            // that will REMAIN after this order:
+            //   - reversal: nothing remains from old position.
+            //   - pyramiding (same dir): existing held margin stays.
+            //   - fresh entry: nothing held to begin with.
+            let heldMarginRemaining = 0;
+            if (oldSign === direction) {
+                heldMarginRemaining = computeHeldMargin(context, markPrice);
+            }
+            const availableEquity = strategy.equity - heldMarginRemaining;
+            const requiredMargin = computeRequiredMargin(newOpenQty, fillPrice, marginPct, pointValue);
+
+            if (requiredMargin > availableEquity) {
+                // TV broker emulator: the margin check only guards the
+                // OPEN leg. On a reversal, the close leg always
+                // executes (it frees margin / realizes the position) —
+                // TV's exit shows the reversal order's id as exit id
+                // while no opposite position appears. Verified against
+                // QA margin_calls xlsx: after a partial margin-call
+                // liquidation, the remainder was closed by the next
+                // reversal order whose open leg was margin-rejected.
+                const qtyToClose = Math.min(Math.abs(oldSize), order.qty);
+                if (isReversal && qtyToClose > 0) {
+                    closePartialPosition(context, qtyToClose, fillPrice, currentTime, {
+                        exitId: order.id,
+                        exitComment: order.comment,
+                    });
+                    order.status = 'filled';
+                    order.fill_price = fillPrice;
+                    order.fill_bar = context.idx;
+                    order.fill_time = currentTime;
+                } else {
+                    order.status = 'cancelled';
+                }
+                return;
+            }
+        }
+    }
+
+    // Execute the order using the pre-calculated qty
+    executeOrder(context, order, fillPrice, currentTime);
+    order.status = 'filled';
+    order.fill_price = fillPrice;
+    order.fill_bar = context.idx;
+    order.fill_time = currentTime;
+}
+
+/**
+ * Orders placed on this bar that fill at its close, after the script ran: every market order
+ * with `strategy(process_orders_on_close = true)`, and `strategy.close` / `close_all` with
+ * `immediately = true`. Limit, stop and `strategy.exit` orders keep working from the next bar.
+ */
+export function processOrdersOnClose(context: any): void {
+    const strategy: StrategyState = context.strategy;
+    if (!strategy || strategy.pending_orders.length === 0) return;
+    const onClose = strategy.config.process_orders_on_close === true;
+    const closePrice = Series.from(context.data.close).get(0);
+    const currentTime = Series.from(context.data.openTime).get(0);
+    const isMarketClose = (o: Order) =>
+        o.category === 'exit' &&
+        o.type === 'market' &&
+        o.profit === undefined &&
+        o.loss === undefined &&
+        o.limit === undefined &&
+        o.stop === undefined &&
+        o.trail_price === undefined &&
+        o.trail_points === undefined;
+
+    for (const order of strategy.pending_orders) {
+        if (order.status !== 'pending' || order.bar !== context.idx) continue;
+        if (isMarketClose(order)) {
+            if (!onClose && !order.immediately) continue;
+            let matching = strategy.opentrades.filter((t) => !order.from_entry || t.entry_id === order.from_entry);
+            if (order._intended_trade_ids) {
+                const snapshot = new Set(order._intended_trade_ids);
+                matching = matching.filter((t) => snapshot.has(t.id));
+            }
+            if (matching.length === 0) {
+                order.status = 'cancelled';
+                continue;
+            }
+            const matchingQty = matching.reduce((sum, t) => sum + Math.abs(t.size), 0);
+            let qtyToClose = matchingQty;
+            if (order.qty && order.qty > 0) qtyToClose = Math.min(order.qty, matchingQty);
+            else if (order.qty_percent && order.qty_percent > 0) qtyToClose = partialCloseQty(context, matchingQty, order.qty_percent);
+            const fillPrice = applySlippage(context, -Math.sign(matching[0].size), closePrice);
+            closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime, { exitId: order.id, exitComment: order.comment });
+            order.status = 'filled';
+            order.fill_price = fillPrice;
+            order.fill_bar = context.idx;
+            order.fill_time = currentTime;
+        } else if (onClose && (order.category ?? 'entry') === 'entry' && order.type === 'market') {
+            markToMarket(context, closePrice);
+            fillEntryOrder(context, order, closePrice, currentTime, closePrice);
+        }
+    }
+
+    strategy.pending_orders = strategy.pending_orders.filter((o) => o.status === 'pending');
     markToMarket(context, closePrice);
     updateStrategyMetrics(context);
 }
@@ -592,6 +725,8 @@ export function openTrade(
         status: 'open',
     };
 
+    // A strategy.exit qty_percent is a share of the trade's entry quantity, not of what is left.
+    trade._entry_qty = Math.abs(trade.size);
     strategy.opentrades.push(trade);
 
     // Latch the slippage-adjusted entry price of the FIRST trade ever opened —
@@ -1231,6 +1366,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
     const closePrice = Series.from(context.data.close).get(0);
     const currentTime = Series.from(context.data.openTime).get(0);
     const mintick = context.pine?.syminfo?.mintick ?? 0.01;
+    const limitSlack = limitFillSlack(context);
 
     // Two-phase evaluation (TV broker-emulator order precedence at the
     // bar's open):
@@ -1280,7 +1416,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             continue;
         }
 
-        const matchingQty = matching.reduce((sum, t) => sum + Math.abs(t.size), 0);
+        let matchingQty = matching.reduce((sum, t) => sum + Math.abs(t.size), 0);
         const matchingDir = Math.sign(matching[0].size); // direction of the position to close
 
         // ---- Market exits from close() / close_all() ----
@@ -1309,7 +1445,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             let qtyToClose = matchingQty;
             if (order.qty && order.qty > 0) qtyToClose = Math.min(order.qty, matchingQty);
             else if (order.qty_percent && order.qty_percent > 0) {
-                qtyToClose = matchingQty * (order.qty_percent / 100);
+                qtyToClose = partialCloseQty(context, matchingQty, order.qty_percent);
             }
 
             closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime, {
@@ -1324,6 +1460,15 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
         }
 
         // ---- Conditional exits from exit() ----
+        // An exit id fills once per trade: after `strategy.exit("tp1", "L", qty_percent = 50)`
+        // has closed half of a trade, calling it again does not close half of the rest.
+        matching = matching.filter((t) => !t._exits_filled?.has(order.id));
+        if (matching.length === 0) {
+            if (phase === 'intrabar') order.status = 'cancelled';
+            continue;
+        }
+        matchingQty = matching.reduce((sum, t) => sum + Math.abs(t.size), 0);
+        const sizesBefore = new Map(matching.map((t) => [t, Math.abs(t.size)]));
         // PER-TRADE exit brackets (TV broker-emulator semantics): when a
         // strategy.exit matches multiple open trades (pyramiding), TV
         // creates an independent exit bracket for EACH trade:
@@ -1368,7 +1513,11 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
         // of entry will still fire at the bar's open via gap-fill when
         // the open is past the trigger. Dropping wrong-sided legs here
         // would miss that.
-        if (!order._isPersistent) {
+        //
+        // An exit placed while its trade was already open keeps its levels: TradingView fills
+        // a stop / limit that is already breached at the next open (a sell stop above the
+        // market, a long take-profit below it).
+        if (!order._isPersistent && !order._coversOpenTrade) {
             if (absSl !== undefined) {
                 const slValid = isLong ? absSl < avgEntry : absSl > avgEntry;
                 if (!slValid) absSl = undefined;
@@ -1497,8 +1646,11 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             // In the pre-entry 'open' phase only GAP conditions count (the
             // bar opened already past the trigger); intra-bar crossings
             // belong to the 'intrabar' phase.
+            // The take-profit leg is a limit order: intrabar it needs price past it by
+            // backtest_fill_limits_assumption ticks.
             const tpHit =
-                tp !== undefined && (phase === 'open' ? (isLong ? openPrice >= tp : openPrice <= tp) : isLong ? highPrice >= tp : lowPrice <= tp);
+                tp !== undefined &&
+                (phase === 'open' ? (isLong ? openPrice >= tp : openPrice <= tp) : isLong ? highPrice >= tp + limitSlack : lowPrice <= tp - limitSlack);
             const slHit =
                 sl !== undefined && (phase === 'open' ? (isLong ? openPrice <= sl : openPrice >= sl) : isLong ? lowPrice <= sl : highPrice >= sl);
 
@@ -1528,7 +1680,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                 }
             }
             if (kind === 'profit') {
-                const openPastTp = isLong ? openPrice >= (tp as number) : openPrice <= (tp as number);
+                const openPastTp = isLong ? openPrice >= (tp as number) + limitSlack : openPrice <= (tp as number) - limitSlack;
                 tpEvents.push({ qty: tQty, price: openPastTp ? openPrice : (tp as number), kind: 'profit', tradeId: t.id });
             }
         }
@@ -1628,7 +1780,9 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             let capRemaining = matchingQty;
             if (order.qty && order.qty > 0) capRemaining = Math.min(order.qty, matchingQty);
             else if (order.qty_percent && order.qty_percent > 0) {
-                capRemaining = matchingQty * (order.qty_percent / 100);
+                // qty_percent of the trades' entry quantity (two 25% exits on 8 contracts close 2 each)
+                const entryQty = matching.reduce((sum, t) => sum + (t._entry_qty ?? Math.abs(t.size)), 0);
+                capRemaining = Math.min(matchingQty, partialCloseQty(context, entryQty, order.qty_percent));
             }
 
             const remainingMatchingQty = () =>
@@ -1641,8 +1795,9 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                 const remaining = remainingMatchingQty();
                 if (remaining <= 1e-9) break;
                 const qtyThis = Math.min(ev.qty === Infinity ? remaining : ev.qty, capRemaining, remaining);
-                // Apply slippage to the trigger price (closing side direction).
-                const fillPrice = applySlippage(context, -matchingDir, ev.price);
+                // Slippage (closing side direction) applies to the stop and trailing legs;
+                // the take-profit leg is a limit order and fills at its price.
+                const fillPrice = ev.kind === 'profit' ? ev.price : applySlippage(context, -matchingDir, ev.price);
 
                 // Resolve which per-leg comment to stamp on the closed
                 // trade. strategy.exit() exposes comment_profit /
@@ -1684,6 +1839,10 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                 order.fill_price = lastFill;
                 order.fill_bar = context.idx;
                 order.fill_time = currentTime;
+            }
+            // Trades this order reduced: it (and a later call with its id) no longer applies to them.
+            for (const [t, before] of sizesBefore) {
+                if (Math.abs(t.size) < before) (t._exits_filled ??= new Set()).add(order.id);
             }
         }
     }

@@ -1,7 +1,12 @@
 export class Series {
+    /** Value of a read before the first bar: na, or `false` for a Pine v6 bool series (v6 bools are never na). */
+    public beforeStart: any = NaN;
+
     constructor(public data: any[], public offset: number = 0) { }
 
     public get(index: number): any {
+        // Pine reads an `na` offset as 0: `close[na]` is the current bar.
+        if (index == null || Number.isNaN(index)) index = 0;
         // Pine history offsets are integers by definition; a fractional lookback
         // only arises from int-division divergence (e.g. `src[depth/2]`: Pine
         // computes int 5, JS `/` yields 5.5 — see RC2). Truncate the combined
@@ -11,9 +16,8 @@ export class Series {
         let lookback = this.offset + index;
         if (!Number.isInteger(lookback)) lookback = Math.trunc(lookback);
         const realIndex = this.data.length - 1 - lookback;
-        if (realIndex < 0 || realIndex >= this.data.length) {
-            return NaN;
-        }
+        if (realIndex < 0) return this.beforeStart;
+        if (realIndex >= this.data.length) return NaN;
         return this.data[realIndex];
     }
 

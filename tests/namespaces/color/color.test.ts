@@ -72,7 +72,7 @@ describe('Color Namespace', () => {
             const no_alpha = color.new('#FF0000');
             // 0% transparency = fully opaque (alpha byte FF)
             const zero_alpha = color.new('#FF0000', 0);
-            // 50% transparency (alpha byte 7F due to floating-point: 2.55*50=127.49...)
+            // 50% transparency: alpha byte round(255 * 50 / 100) = 128 = 0x80, as on TradingView
             const half_alpha = color.new('#FF0000', 50);
             // 100% transparency = fully transparent (alpha byte 00)
             const full_alpha = color.new('#FF0000', 100);
@@ -84,7 +84,7 @@ describe('Color Namespace', () => {
 
         expect(last(result.no_alpha)).toBe('#FF0000');
         expect(last(result.zero_alpha)).toBe('#FF0000FF');
-        expect(last(result.half_alpha)).toBe('#FF00007F');
+        expect(last(result.half_alpha)).toBe('#FF000080');
         expect(last(result.full_alpha)).toBe('#FF000000');
     });
 
@@ -102,8 +102,8 @@ describe('Color Namespace', () => {
 
         const { result } = await pineTS.run(sourceCode);
 
-        // color.red = #F23645, 50% transparency -> alpha = 127 = 0x7F (floating-point rounding)
-        expect(last(result.red_50)).toBe('#F236457F');
+        // color.red = #F23645, 50% transparency -> alpha = 128 = 0x80
+        expect(last(result.red_50)).toBe('#F2364580');
         // color.white = #FFFFFF, 100% transparency -> alpha = 0 = 0x00
         expect(last(result.white_100)).toBe('#FFFFFF00');
     });
@@ -165,7 +165,7 @@ describe('Color Namespace', () => {
 
             // Also test with a named color double-wrap
             const red_opaque = color.new(color.red(), 0);   // → "#F23645FF"
-            const red_semi = color.new(red_opaque, 50);      // → should be "#F236457F"
+            const red_semi = color.new(red_opaque, 50);      // → should be "#F2364580"
 
             return { first_pass, second_pass, red_opaque, red_semi };
         };
@@ -175,7 +175,7 @@ describe('Color Namespace', () => {
         expect(last(result.first_pass)).toBe('#00ff00FF');
         expect(last(result.second_pass)).toBe('#00ff0026');  // replaced alpha, not appended
         expect(last(result.red_opaque)).toBe('#F23645FF');
-        expect(last(result.red_semi)).toBe('#F236457F');     // replaced alpha, not appended
+        expect(last(result.red_semi)).toBe('#F2364580');     // replaced alpha, not appended
     });
 
     it('color.new() should apply transparency to rgba() string input', async () => {
@@ -195,8 +195,8 @@ describe('Color Namespace', () => {
         const { result } = await pineTS.run(sourceCode);
 
         expect(last(result.rgba_input)).toBe('rgba(100, 200, 50, 0.7)');
-        // 50% transparency → alpha = 127 → 0x7F
-        expect(last(result.with_alpha)).toBe('#64c8327F');
+        // 50% transparency → alpha = 128 → 0x80
+        expect(last(result.with_alpha)).toBe('#64c83280');
     });
 
     // ── color.rgb() ─────────────────────────────────────────────────
@@ -245,8 +245,8 @@ describe('Color Namespace', () => {
 
         expect(last(result.at_bottom)).toBe('#000000');
         expect(last(result.at_top)).toBe('#FFFFFF');
-        // Midpoint of #000000 and #FFFFFF = #808080 (128, 128, 128)
-        expect(last(result.at_mid)).toBe('#808080');
+        // Midpoint of #000000 and #FFFFFF: 127.5 per channel, truncated to #7F7F7F as on TradingView
+        expect(last(result.at_mid)).toBe('#7F7F7F');
         expect(last(result.below)).toBe('#000000');
         expect(last(result.above)).toBe('#FFFFFF');
     });
@@ -270,7 +270,8 @@ describe('Color Namespace', () => {
 
         expect(last(result.r_hex)).toBe(255);
         expect(last(result.r_rgba)).toBe(100);
-        expect(last(result.r_na)).toBeNaN();
+        // na reads as transparent black on TradingView
+        expect(last(result.r_na)).toBe(0);
     });
 
     it('color.g() should extract green component (0-255)', async () => {
@@ -323,7 +324,7 @@ describe('Color Namespace', () => {
             const t_hex_00 = color.t('#FF000000');
             // rgba with alpha 0.5 -> transparency = 50
             const t_rgba = color.t('rgba(255, 0, 0, 0.5)');
-            // na input -> NaN
+            // na input -> 100 (na reads as transparent black on TradingView)
             const t_na = color.t(NaN);
 
             return { t_opaque, t_hex_ff, t_hex_00, t_rgba, t_na };
@@ -335,7 +336,7 @@ describe('Color Namespace', () => {
         expect(last(result.t_hex_ff)).toBe(0);
         expect(last(result.t_hex_00)).toBe(100);
         expect(last(result.t_rgba)).toBe(50);
-        expect(last(result.t_na)).toBeNaN();
+        expect(last(result.t_na)).toBe(100);
     });
 
     // ── color.any() — type-cast ─────────────────────────────────────
@@ -401,9 +402,9 @@ describe('Color Namespace', () => {
 
         const { result } = await pineTS.run(sourceCode);
 
-        // Midpoint between red(255,0,0) and blue(0,0,255) = (128,0,128)
-        expect(last(result.r)).toBe(128);
+        // Midpoint between red(255,0,0) and blue(0,0,255): 127.5 truncated = (127,0,127)
+        expect(last(result.r)).toBe(127);
         expect(last(result.g)).toBe(0);
-        expect(last(result.b)).toBe(128);
+        expect(last(result.b)).toBe(127);
     });
 });

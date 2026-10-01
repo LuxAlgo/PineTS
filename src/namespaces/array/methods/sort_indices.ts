@@ -2,14 +2,12 @@
 
 import { PineArrayObject, PineArrayType } from '../PineArrayObject';
 import { order } from '../../Types';
+import { sortValueReader, sortedIndices } from '../utils';
+
 export function sort_indices(context: any) {
-    return (id: PineArrayObject, _order: order = order.ascending): PineArrayObject => {
-        const indices = id.array.map((_, index) => index);
-        indices.sort((a, b) => {
-            const valA = isNaN(id.array[a]) ? Infinity : id.array[a];
-            const valB = isNaN(id.array[b]) ? Infinity : id.array[b];
-            return _order === order.ascending ? valA - valB : valB - valA;
-        });
-        return new PineArrayObject(indices, PineArrayType.int, context);
+    return (id: PineArrayObject, _order: order = order.ascending, sort_field?: string | number): PineArrayObject => {
+        const values = Array.from(id.array);
+        const key = sortValueReader(values, sort_field);
+        return new PineArrayObject(sortedIndices(key ? values.map(key) : values, _order), PineArrayType.int, context);
     };
 }

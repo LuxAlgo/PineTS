@@ -127,6 +127,25 @@ function resolveColor(color: any): any {
     return color;
 }
 
+const isNa = (v: any) => v == null || (typeof v === 'number' && isNaN(v));
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** TradingView's result for a gradient it cannot compute (na or flat range). */
+const TRANSPARENT_BLACK = '#00000000';
+
+/**
+ * `[r, g, b, a]` of a color argument as TradingView holds it: alpha is a byte (a = A / 255) and an na
+ * color is transparent black. Returns null for a value that is not a color.
+ */
+function colorComponents(color: any): [number, number, number, number] | null {
+    color = resolveColor(color);
+    if (isNa(color)) return [0, 0, 0, 0];
+    const rgba = resolveColorToRgba(color);
+    if (!rgba) return null;
+    return [rgba[0], rgba[1], rgba[2], Math.round(rgba[3] * 255) / 255];
+}
+
 /**
  * PineColor implements the Pine Script `color` namespace.
  *
@@ -157,137 +176,107 @@ export class PineColor {
     // ── color.new(color, alpha?) ──────────────────────────────────────
     new(color: any, a?: number) {
         color = resolveColor(color);
-        // If not a string (e.g. NaN for na), return as-is
-        if (!color || typeof color !== 'string') return color;
+        a = resolveColor(a);
+        if (a === undefined) return color;
 
-        // Treat NaN transparency as "no transparency specified" (keep original color)
-        if (typeof a === 'number' && isNaN(a)) a = undefined;
+        // TradingView truncates the transparency to an integer in 0..100; na is fully transparent.
+        a = isNa(a) ? 100 : clamp(Math.trunc(a), 0, 100);
+        // An na color is transparent black, so color.new(na, 50) is half-transparent black.
+        if (isNa(color)) color = '#000000';
+        if (typeof color !== 'string') return color;
+
+        // TradingView stores the transparency as an alpha byte, rounded half up.
+        const alpha = Math.round((255 * (100 - a)) / 100).toString(16).padStart(2, '0').toUpperCase();
 
         // Handle hexadecimal colors
         if (color.startsWith('#')) {
             const hex = color.slice(1);
             // Strip existing alpha if present (#RRGGBBAA → #RRGGBB) before appending new alpha
             const hexRgb = hex.length === 8 ? hex.slice(0, 6) : hex;
-            return a != null
-                ? `#${hexRgb}${Math.round((255 / 100) * (100 - a))
-                      .toString(16)
-                      .padStart(2, '0')
-                      .toUpperCase()}`
-                : `#${hex}`;
-        } else {
-            const hex = COLOR_CONSTANTS[color];
-            if (hex) {
-                return a != null
-                    ? `#${hex.slice(1)}${Math.round((255 / 100) * (100 - a))
-                          .toString(16)
-                          .padStart(2, '0')
-                          .toUpperCase()}`
-                    : hex;
-            }
-
-            // Handle rgb(r,g,b) and rgba(r,g,b,a) strings — extract components
-            // to avoid invalid nested formats like "rgba(rgb(207,23,23), 0.3)"
-            const rgbMatch = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/);
-            if (rgbMatch) {
-                const r = rgbMatch[1];
-                const g = rgbMatch[2];
-                const b = rgbMatch[3];
-                if (a != null) {
-                    // Convert to #RRGGBBAA hex for consistency with hex path
-                    const rh = parseInt(r).toString(16).padStart(2, '0');
-                    const gh = parseInt(g).toString(16).padStart(2, '0');
-                    const bh = parseInt(b).toString(16).padStart(2, '0');
-                    const ah = Math.round((255 / 100) * (100 - a)).toString(16).padStart(2, '0').toUpperCase();
-                    return `#${rh}${gh}${bh}${ah}`;
-                }
-                return color; // no alpha change, return as-is
-            }
-
-            // Fallback for unknown format
-            return a != null
-                ? `rgba(${color}, ${(100 - a) / 100})`
-                : color;
+            return `#${hexRgb}${alpha}`;
         }
+        const named = COLOR_CONSTANTS[color];
+        if (named) return `#${named.slice(1)}${alpha}`;
+
+        // Handle rgb(r,g,b) and rgba(r,g,b,a) strings — extract components
+        // to avoid invalid nested formats like "rgba(rgb(207,23,23), 0.3)"
+        const rgbMatch = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/);
+        if (rgbMatch) {
+            const [rh, gh, bh] = [rgbMatch[1], rgbMatch[2], rgbMatch[3]].map((c) => parseInt(c).toString(16).padStart(2, '0'));
+            return `#${rh}${gh}${bh}${alpha}`;
+        }
+
+        // Fallback for unknown format
+        return `rgba(${color}, ${(100 - a) / 100})`;
     }
 
     // ── color.rgb(r, g, b, a?) ────────────────────────────────────────
     rgb(r: number, g: number, b: number, a?: number) {
-        // Treat NaN transparency as "no transparency" (fully opaque)
-        if (typeof a === 'number' && isNaN(a)) a = undefined;
-        return a != null ? `rgba(${r}, ${g}, ${b}, ${(100 - a) / 100})` : `rgb(${r}, ${g}, ${b})`;
+        // TradingView truncates each component and clamps it to 0..255; an na component is 0.
+        const channel = (v: any) => {
+            v = resolveColor(v);
+            return isNa(v) ? 0 : clamp(Math.trunc(v), 0, 255);
+        };
+        const [rr, gg, bb] = [channel(r), channel(g), channel(b)];
+        a = resolveColor(a);
+        if (a === undefined) return `rgb(${rr}, ${gg}, ${bb})`;
+        // The transparency is kept fractional (stored as an alpha byte); na is fully transparent.
+        const t = isNa(a) ? 100 : clamp(a, 0, 100);
+        return `rgba(${rr}, ${gg}, ${bb}, ${(100 - t) / 100})`;
     }
 
     // ── color.from_gradient(value, bottom_value, top_value, bottom_color, top_color) ──
     from_gradient(value: any, bottom_value: any, top_value: any, bottom_color: any, top_color: any): any {
-        // Resolve Series/functions for all args
         value = resolveColor(value);
         bottom_value = resolveColor(bottom_value);
         top_value = resolveColor(top_value);
-        bottom_color = resolveColor(bottom_color);
-        top_color = resolveColor(top_color);
 
-        // If any numeric arg is na (NaN/null/undefined), return na.
-        // NaN is the runtime's na sentinel (see NAHelper.__value), so na colors
-        // keep a single consistent representation end-to-end.
-        if (value == null || (typeof value === 'number' && isNaN(value))) return NaN;
-        if (bottom_value == null || (typeof bottom_value === 'number' && isNaN(bottom_value))) return NaN;
-        if (top_value == null || (typeof top_value === 'number' && isNaN(top_value))) return NaN;
-        // If either color is na, return na
-        if (bottom_color == null || (typeof bottom_color === 'number' && isNaN(bottom_color))) return NaN;
-        if (top_color == null || (typeof top_color === 'number' && isNaN(top_color))) return NaN;
-
-        // Clamp position between 0 and 1
-        let t = 0;
-        if (top_value !== bottom_value) {
-            t = (value - bottom_value) / (top_value - bottom_value);
+        // TradingView returns transparent black (not na) for an na value or bound and for a flat range.
+        if (isNa(value) || isNa(bottom_value) || isNa(top_value) || top_value === bottom_value) return TRANSPARENT_BLACK;
+        // Reversed bounds give the bottom color whatever the value.
+        if (top_value < bottom_value) {
+            bottom_color = resolveColor(bottom_color);
+            return isNa(bottom_color) ? TRANSPARENT_BLACK : bottom_color;
         }
-        t = Math.max(0, Math.min(1, t));
 
-        // Parse both colors to RGBA
-        const bc = parseColorToRGBA(typeof bottom_color === 'string' ? bottom_color : '#000000') || [0, 0, 0, 1];
-        const tc = parseColorToRGBA(typeof top_color === 'string' ? top_color : '#FFFFFF') || [255, 255, 255, 1];
+        const bc = colorComponents(bottom_color) ?? [0, 0, 0, 0];
+        const tc = colorComponents(top_color) ?? [0, 0, 0, 0];
 
-        // Linear interpolation
-        const r = bc[0] + (tc[0] - bc[0]) * t;
-        const g = bc[1] + (tc[1] - bc[1]) * t;
-        const b = bc[2] + (tc[2] - bc[2]) * t;
-        const a = bc[3] + (tc[3] - bc[3]) * t;
+        // Premultiplied-alpha interpolation, channels and alpha truncated. The weights are computed as
+        // w0 = 1 - t, w1 = 1 - w0 to reproduce TradingView's rounding at exact integer results.
+        const t = clamp((value - bottom_value) / (top_value - bottom_value), 0, 1);
+        const w0 = 1 - t;
+        const w1 = 1 - w0;
+        const a = bc[3] * w0 + tc[3] * w1;
+        if (a === 0) return TRANSPARENT_BLACK;
+        const channel = (i: number) => Math.trunc((bc[i] * bc[3] * w0 + tc[i] * tc[3] * w1) / a);
 
-        return rgbaToHex(r, g, b, a);
+        return rgbaToHex(channel(0), channel(1), channel(2), Math.trunc(a * 255) / 255);
     }
 
     // ── Component extraction ──────────────────────────────────────────
 
-    /** Extract red component (0-255) from a color string. Returns na if unparsable. */
+    // An na color reads as transparent black (0, 0, 0, transparency 100), as on TradingView.
+
+    /** Extract red component (0-255). Returns na if the value is not a color. */
     r(color: any): number {
-        color = resolveColor(color);
-        if (!color || typeof color !== 'string') return NaN;
-        const rgba = parseColorToRGBA(color);
-        return rgba ? rgba[0] : NaN;
+        return colorComponents(color)?.[0] ?? NaN;
     }
 
-    /** Extract green component (0-255) from a color string. Returns na if unparsable. */
+    /** Extract green component (0-255). Returns na if the value is not a color. */
     g(color: any): number {
-        color = resolveColor(color);
-        if (!color || typeof color !== 'string') return NaN;
-        const rgba = parseColorToRGBA(color);
-        return rgba ? rgba[1] : NaN;
+        return colorComponents(color)?.[1] ?? NaN;
     }
 
-    /** Extract blue component (0-255) from a color string. Returns na if unparsable. */
+    /** Extract blue component (0-255). Returns na if the value is not a color. */
     b(color: any): number {
-        color = resolveColor(color);
-        if (!color || typeof color !== 'string') return NaN;
-        const rgba = parseColorToRGBA(color);
-        return rgba ? rgba[2] : NaN;
+        return colorComponents(color)?.[2] ?? NaN;
     }
 
-    /** Extract transparency (0-100, Pine scale) from a color string. Returns na if unparsable. */
+    /** Extract transparency (0-100, Pine scale), rounded from the alpha byte. Returns na if the value is not a color. */
     t(color: any): number {
-        color = resolveColor(color);
-        if (!color || typeof color !== 'string') return NaN;
-        const rgba = parseColorToRGBA(color);
-        return rgba ? Math.round(100 - rgba[3] * 100) : NaN;
+        const rgba = colorComponents(color);
+        return rgba ? Math.round((1 - rgba[3]) * 100) : NaN;
     }
 
     // ── Named color constants ─────────────────────────────────────────

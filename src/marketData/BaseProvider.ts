@@ -2,39 +2,17 @@
 
 import { IProvider, ISymbolInfo, BaseProviderConfig } from './IProvider';
 import { Kline, normalizeCloseTime } from './types';
-import { selectSubTimeframe, aggregateCandles, getAggregationRatio } from './aggregation';
+import { selectSubTimeframe, aggregateCandles, getAggregationRatio, getApproximateRatio } from './aggregation';
 import { stripTickerModifier } from '../tickerModifier';
+import { canonicalTimeframe, parseTimeframe, timeframeBarStart } from '../timeframe';
 
 /**
  * Normalize a user-supplied timeframe key to the canonical form used
- * by `getSupportedTimeframes()` and `TIMEFRAME_SECONDS`.
- *
- * Canonical forms: seconds as 'NS', minutes as plain integers,
- * calendar periods as D/W/M.
+ * by `getSupportedTimeframes()`: seconds as 'NS', minutes as plain integers,
+ * calendar periods as D/W/M with an optional multiplier ('2D', '12M').
  */
-const TF_NORMALIZE: Record<string, string> = {
-    // Lowercase / Binance-style aliases
-    '1s': '1S', '5s': '5S', '10s': '10S', '15s': '15S', '30s': '30S',
-    '1m': '1', '3m': '3', '5m': '5', '15m': '15', '30m': '30', '45m': '45',
-    '1h': '60', '2h': '120', '3h': '180', '4h': '240',
-    '1d': 'D', '1w': 'W',
-    // Uppercase aliases
-    '1D': 'D', '1W': 'W', '1M': 'M', '4H': '240',
-    // Pass-through canonical keys
-    'D': 'D', 'W': 'W', 'M': 'M',
-};
-
 function normalizeTimeframeKey(timeframe: string): string {
-    // Direct match (case-sensitive for '1M' vs '1m')
-    if (TF_NORMALIZE[timeframe] !== undefined) return TF_NORMALIZE[timeframe];
-    // Try lowercase
-    const lower = timeframe.toLowerCase();
-    if (TF_NORMALIZE[lower] !== undefined) return TF_NORMALIZE[lower];
-    // Already a canonical number ('1', '60', '240', etc.)
-    if (/^\d+$/.test(timeframe)) return timeframe;
-    // Second-based ('30S', etc.)
-    if (/^\d+S$/i.test(timeframe)) return timeframe.toUpperCase();
-    return timeframe;
+    return canonicalTimeframe(timeframe) ?? timeframe;
 }
 
 /**
@@ -139,6 +117,14 @@ export abstract class BaseProvider<TConfig extends BaseProviderConfig = BaseProv
         ]);
     }
 
+    /**
+     * Whether aggregated bars follow TradingView's UTC calendar grid (see `aggregateCandles`).
+     * Override to return true in providers of UTC 24/7 markets.
+     */
+    protected aggregatesOnCalendarGrid(): boolean {
+        return false;
+    }
+
     // ── Market data orchestrator ────────────────────────────────────────
 
     /**
@@ -183,15 +169,20 @@ export abstract class BaseProvider<TConfig extends BaseProviderConfig = BaseProv
         // Inflate limit to account for aggregation ratio
         const subLimit = this._computeSubLimit(normalizedTf, subTimeframe, limit);
 
+        // Start at the open of the bar that contains sDate, so the first bar is complete.
+        const calendarGrid = this.aggregatesOnCalendarGrid();
+        const target = parseTimeframe(normalizedTf);
+        const subSDate = calendarGrid && sDate !== undefined && target ? timeframeBarStart(sDate, target) : sDate;
+
         // Fetch sub-candles
         const subCandles = await this._getMarketDataNative(
-            tickerId, subTimeframe, subLimit, sDate, eDate,
+            tickerId, subTimeframe, subLimit, subSDate, eDate,
         );
 
         if (subCandles.length === 0) return [];
 
         // Aggregate
-        const aggregated = aggregateCandles(subCandles, normalizedTf, subTimeframe);
+        const aggregated = aggregateCandles(subCandles, normalizedTf, subTimeframe, { calendarGrid });
 
         // Apply limit to the aggregated result
         if (limit && limit > 0 && aggregated.length > limit) {
@@ -234,10 +225,9 @@ export abstract class BaseProvider<TConfig extends BaseProviderConfig = BaseProv
 
         const ratio = getAggregationRatio(targetTf, subTf);
         if (ratio === Infinity) {
-            // Calendar-based: generous estimate
-            if (targetTf === 'W') return limit * 7 + 14;
-            if (targetTf === 'M') return limit * 31 + 31;
-            return limit * 30;
+            // Calendar-based: average length plus two bars of buffer
+            const average = getApproximateRatio(targetTf, subTf);
+            return Math.ceil(limit * average) + 2 * Math.ceil(average);
         }
 
         // Fixed ratio + small buffer for alignment edge cases

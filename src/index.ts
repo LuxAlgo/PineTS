@@ -20,7 +20,7 @@ export type { Kline, FootprintBar, FootprintLevel, PeriodType } from './marketDa
 export { computeNextPeriodStart, localTimeToUTC, computeSessionClose, TIMEFRAME_SECONDS, TIMEFRAME_PERIOD_INFO } from './marketData/types';
 export { aggregateCandles, selectSubTimeframe, getAggregationRatio } from './marketData/aggregation';
 
-export { splitTickerModifier, stripTickerModifier, withTickerModifier } from './tickerModifier';
+export { splitTickerModifier, stripTickerModifier, withTickerModifier, decodeTickerId, encodeTickerId } from './tickerModifier';
 
 export { PineTS, Context, Provider, Indicator, PineRuntimeError };
 export type { IPineInput, IPineProp, PineInputType, PineInputDisplay, PinePropType, PreparedScript } from './Indicator';

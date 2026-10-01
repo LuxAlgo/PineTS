@@ -36,17 +36,20 @@ export function dev(context: any) {
             state.lastIdx = context.idx;
         }
 
-        const currentValue = Series.from(source).get(0) || 0;
+        const currentValue = Series.from(source).get(0);
 
         const window = [...state.prevWindow];
         let sum = state.prevSum;
 
+        // The window keeps na values (TradingView's dev is na while one is inside it); they add 0
+        // to the running sum.
+        const num = (v: any) => (v === null || v === undefined || Number.isNaN(v) ? 0 : v);
         window.unshift(currentValue);
-        sum += currentValue;
+        sum += num(currentValue);
 
         while (window.length > length) {
             const oldValue = window.pop();
-            sum -= oldValue;
+            sum -= num(oldValue);
         }
 
         // Track actual call count for callsite-correct backfill
@@ -56,7 +59,7 @@ export function dev(context: any) {
             while (window.length < length) {
                 const val = series.get(window.length);
                 window.push(val);
-                sum += val;
+                sum += num(val);
             }
         }
 
@@ -64,7 +67,7 @@ export function dev(context: any) {
         state.currentSum = sum;
         state.currentCallCount = callCount;
 
-        if (window.length < length) {
+        if (window.length < length || window.some((v) => v === null || v === undefined || Number.isNaN(v))) {
             return NaN;
         }
 

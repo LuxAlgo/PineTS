@@ -3,8 +3,8 @@
 /**
  * Intraday Intensity Index (III)
  *
- * Formula:
- * (2 * close - high - low) / ((high - low) * volume)
+ * Formula (as TradingView computes it; its reference manual shows a division by volume):
+ * (2 * close - high - low) / (high - low) * volume
  */
 export function iii(context: any) {
     return (_callId?: string) => {
@@ -18,13 +18,12 @@ export function iii(context: any) {
         }
 
         const range = high - low;
-        const denominator = range * volume;
 
-        if (denominator === 0) {
+        if (range === 0) {
             return context.precision(0);
         }
 
-        const iii = (2 * close - high - low) / denominator;
+        const iii = ((2 * close - high - low) / range) * volume;
         return context.precision(iii);
     };
 }

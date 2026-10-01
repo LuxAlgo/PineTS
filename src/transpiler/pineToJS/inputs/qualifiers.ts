@@ -34,7 +34,7 @@ const maxQual = (...qs: Qualifier[]): Qualifier => qs.reduce((a, b) => (RANK[b] 
 
 const BUILTIN_VARIABLES: Record<string, Qualified> = {};
 const define = (qual: Qualifier, type: ValueType, names: string[]) => names.forEach((n) => (BUILTIN_VARIABLES[n] = { qual, type }));
-define('series', 'float', ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4']);
+define('series', 'float', ['open', 'high', 'low', 'close', 'volume', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'ask', 'bid']);
 define('series', 'int', [
     'bar_index',
     'last_bar_index',

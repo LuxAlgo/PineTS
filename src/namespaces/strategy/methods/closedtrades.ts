@@ -29,6 +29,8 @@ export function closedtrades(context: any) {
         const at = (i: any): Trade | undefined => list[Number(i)];
 
         const result: any = {
+            // Scalar for consumers that store or plot the value (Series.from, $.param).
+            __value: list.length,
             valueOf() { return list.length; },
             toString() { return String(list.length); },
             [Symbol.toPrimitive]() { return list.length; },

@@ -145,12 +145,10 @@ describe('Timeframe Namespace', () => {
         });
 
         expect(result).toBeDefined();
-        // 60s -> 1 minute
-        expect(last(result.tf_1min)).toBe(1);
-        // 300s -> 5 minutes
-        expect(last(result.tf_5min)).toBe(5);
-        // 3600s -> 60 minutes
-        expect(last(result.tf_1hour)).toBe(60);
+        // Minutes are timeframe strings on TradingView, not numbers
+        expect(last(result.tf_1min)).toBe('1');
+        expect(last(result.tf_5min)).toBe('5');
+        expect(last(result.tf_1hour)).toBe('60');
         // 86400s -> 1D
         expect(last(result.tf_1day)).toBe('1D');
         // 1 week -> 1W
@@ -179,7 +177,7 @@ describe('Timeframe Namespace', () => {
         expect(last(result.sec_5min)).toBe(300);
         expect(last(result.sec_1D)).toBe(86400);
         expect(last(result.sec_1W)).toBe(604800);
-        expect(last(result.sec_1M)).toBe(2592000); // 30 days approximation
+        expect(last(result.sec_1M)).toBe(2628003); // TradingView: 365 / 12 days
         expect(last(result.sec_30S)).toBe(30);
         expect(last(result.sec_60min)).toBe(3600);
     });

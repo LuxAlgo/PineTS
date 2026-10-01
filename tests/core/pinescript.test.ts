@@ -593,7 +593,8 @@ describe('PineScript Language', () => {
 
         const expected = {
             val: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
-            nestedAccess: [undefined, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+            // Bar 0: index[1] is na, and an na offset reads the current bar (val[0]).
+            nestedAccess: [1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
         };
 
         expect(deepEqual(context.result, expected)).toBe(true);
@@ -1943,9 +1944,10 @@ describe('PineScript Language', () => {
         console.log('>>> TEST: Array Indexing');
         console.log('>>> result: ', context.result);
 
+        // array.new<T>(5) holds 5 na elements on TradingView
         const expected = {
-            first: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            second: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            first: Array(20).fill(NaN),
+            second: Array(20).fill(NaN),
             seventh: [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20],
         };
 

@@ -18,9 +18,10 @@ import { Series } from '../../../Series';
  * @returns Stochastic value (0-100)
  *
  * @remarks
- * - NaN values in the source series are ignored
  * - Returns NaN during initialization period (when not enough data)
- * - Returns NaN if highest equals lowest (to avoid division by zero)
+ * - A bar whose value would be NaN because of an na input (source, high, low) repeats the previous value
+ * - A flat range (highest equal to lowest) repeats the previous value when the source equals it and
+ *   is NaN otherwise
  */
 export function stoch(context: any) {
     return (source: any, high: any, low: any, _length: any, _callId?: string) => {
@@ -36,9 +37,11 @@ export function stoch(context: any) {
                 // Committed state
                 prevHighWindow: [],
                 prevLowWindow: [],
+                prevStoch: NaN,
                 // Tentative state
                 currentHighWindow: [],
                 currentLowWindow: [],
+                currentStoch: NaN,
             };
         }
 
@@ -49,6 +52,7 @@ export function stoch(context: any) {
             if (state.lastIdx >= 0) {
                 state.prevHighWindow = [...state.currentHighWindow];
                 state.prevLowWindow = [...state.currentLowWindow];
+                state.prevStoch = state.currentStoch;
             }
             state.lastIdx = context.idx;
         }
@@ -57,14 +61,6 @@ export function stoch(context: any) {
         const currentSource = Series.from(source).get(0);
         const currentHigh = Series.from(high).get(0);
         const currentLow = Series.from(low).get(0);
-
-        // Handle NaN inputs - skip this bar
-        if (isNaN(currentSource) || isNaN(currentHigh) || isNaN(currentLow)) {
-            // Propagate state
-            state.currentHighWindow = [...state.prevHighWindow];
-            state.currentLowWindow = [...state.prevLowWindow];
-            return NaN;
-        }
 
         const highWindow = [...state.prevHighWindow];
         const lowWindow = [...state.prevLowWindow];
@@ -83,34 +79,47 @@ export function stoch(context: any) {
         state.currentHighWindow = highWindow;
         state.currentLowWindow = lowWindow;
 
+        // As on TradingView, a bar whose stochastic is na (na source, na high / low, not enough bars)
+        // repeats the previous value.
+        const result = (value: number) => {
+            if (Number.isNaN(value)) {
+                state.currentStoch = state.prevStoch;
+                return state.prevStoch;
+            }
+            state.currentStoch = value;
+            return context.precision(value);
+        };
+
         // Not enough data yet
         if (highWindow.length < length) {
-            return NaN;
+            return result(NaN);
         }
 
-        // Calculate highest high and lowest low over the period
-        let highest = highWindow[0];
-        let lowest = lowWindow[0];
-
-        for (let i = 1; i < length; i++) {
-            if (highWindow[i] > highest) {
-                highest = highWindow[i];
+        // Highest high and lowest low like ta.highest / ta.lowest: only the bars since the most
+        // recent na in the window take part, and an na on the current bar makes them na.
+        const extreme = (window: number[], higher: boolean) => {
+            let best = NaN;
+            for (let i = 0; i < length; i++) {
+                const v = window[i];
+                if (Number.isNaN(v)) break;
+                if (Number.isNaN(best) || (higher ? v > best : v < best)) best = v;
             }
-            if (lowWindow[i] < lowest) {
-                lowest = lowWindow[i];
-            }
-        }
+            return best;
+        };
+        const highest = extreme(highWindow, true);
+        const lowest = extreme(lowWindow, false);
 
         // Calculate stochastic
         const range = highest - lowest;
-        
-        // Avoid division by zero
+
+        // A flat range repeats the previous value when the source sits on it; otherwise it is na and
+        // that na is not replaced by the previous value (TradingView).
         if (range === 0) {
+            if (currentSource === lowest) return result(NaN);
+            state.currentStoch = NaN;
             return NaN;
         }
 
-        const stochastic = 100 * (currentSource - lowest) / range;
-
-        return context.precision(stochastic);
+        return result((100 * (currentSource - lowest)) / range);
     };
 }

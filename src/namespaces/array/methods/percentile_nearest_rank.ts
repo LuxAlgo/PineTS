@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { PineArrayObject } from '../PineArrayObject';
+import { checkPercentage, isNa } from '../utils';
 
 export function percentile_nearest_rank(context: any) {
     return (id: PineArrayObject, percentage: number): number => {
+        if (isNa(percentage)) return NaN;
+        checkPercentage(percentage, 'array.percentile_nearest_rank');
         const array = id.array;
         const totalCount = array.length;
         if (totalCount === 0) return NaN;
@@ -20,9 +23,6 @@ export function percentile_nearest_rank(context: any) {
         if (validValues.length === 0) return NaN;
 
         validValues.sort((a, b) => a - b);
-
-        if (percentage < 0) percentage = 0;
-        if (percentage > 100) percentage = 100;
 
         // Nearest Rank Method
         // Use total array length (including NaNs) for calculation to match Pine Script behavior

@@ -15,8 +15,8 @@
         "syminfo.ticker": true,
         "syminfo.tickerid": true,
         "syminfo.type": true,
-        "syminfo.prefix()": false,
-        "syminfo.ticker()": false
+        "syminfo.prefix()": true,
+        "syminfo.ticker()": true
     },
     "Company Data": {
         "syminfo.employees": true,

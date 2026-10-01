@@ -1,14 +1,16 @@
 import { PineArrayObject } from '../PineArrayObject';
+import { sortValueReader } from '../utils';
 
 export function binary_search(context: any) {
-    return (id: PineArrayObject, value: any): number => {
+    return (id: PineArrayObject, value: any, sort_field?: string | number): number => {
         const array = id.array;
+        const key = sortValueReader(array, sort_field) ?? ((v: any) => v);
         let low = 0;
         let high = array.length - 1;
 
         while (low <= high) {
             const mid = Math.floor((low + high) / 2);
-            const midVal = array[mid];
+            const midVal = key(array[mid]);
 
             if (midVal === value) {
                 return mid;
@@ -24,4 +26,3 @@ export function binary_search(context: any) {
         return -1;
     };
 }
-

@@ -8,11 +8,11 @@ export function new_fn(context: Context) {
     return <T>(size?: number, initial_value?: T): PineArrayObject => {
         const safeSize = (typeof size === 'number' && size > 0 && !isNaN(size)) ? Math.floor(size) : 0;
         // When no initial_value is provided, create an untyped (any) array.
-        // The generic type parameter (e.g. <supertrend>, <float>) is lost during
+        // The generic type parameter (e.g. <supertrend>, <chart.point>) is lost during
         // transpilation, so we can't infer the element type — 'any' accepts all values.
-        // Pine Script fills with 0 when size > 0 and no initial_value is given.
+        // Pine Script fills with na when size > 0 and no initial_value is given.
         if (initial_value === undefined) {
-            const arr = safeSize ? Array(safeSize).fill(0) : [];
+            const arr = safeSize ? Array(safeSize).fill(NaN) : [];
             return new PineArrayObject(arr, PineArrayType.any, context);
         }
         return new PineArrayObject(

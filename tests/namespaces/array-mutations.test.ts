@@ -294,7 +294,7 @@ describe('Array Methods - Mutations', () => {
             expect(plots['val4'].data[0].value).toBe(5); // Not filled
         });
 
-        it('should handle fill on empty array', async () => {
+        it('fill on an empty array is a runtime error', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, startDate, endDate);
 
             const code = `
@@ -303,13 +303,11 @@ describe('Array Methods - Mutations', () => {
                 let arr = array.new_int(0);
                 array.fill(arr, 42);
                 
-                let size = array.size(arr);
-                
-                plotchar(size, 'size');
+                plotchar(array.size(arr), 'size');
             `;
 
-            const { plots } = await pineTS.run(code);
-            expect(plots['size'].data[0].value).toBe(0);
+            // TradingView: "In 'array.fill()' function. Index 0 is out of bounds, array size is 0."
+            await expect(pineTS.run(code)).rejects.toThrow('Index 0 is out of bounds, array size is 0.');
         });
     });
 

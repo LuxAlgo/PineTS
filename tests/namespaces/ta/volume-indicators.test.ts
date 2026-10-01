@@ -393,54 +393,23 @@ describe('Technical Analysis - Volume Indicators', () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'W', null, new Date('2018-12-10').getTime(), new Date('2020-01-27').getTime());
 
         const sourceCode = (context) => {
-            const { close, volume } = context.data;
+            const { close, high, low, volume } = context.data;
             const { ta, plotchar } = context.pine;
 
-            const res = ta.iii;
-            plotchar(res, 'plot');
-
-            return { res };
+            plotchar(ta.iii, 'plot');
+            plotchar(close, 'close');
+            plotchar(high, 'high');
+            plotchar(low, 'low');
+            plotchar(volume, 'volume');
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode);
+        const values = (key: string) => plots[key].data.map((d) => d.value);
+        const [iii, c, h, l, v] = ['plot', 'close', 'high', 'low', 'volume'].map(values);
 
-        let _plotdata = plots['plot']?.data;
-        const startDate = new Date('2019-05-20').getTime();
-        const endDate = new Date('2019-09-16').getTime();
-
-        let plotdata_str = '';
-        for (let i = 0; i < _plotdata.length; i++) {
-            const time = _plotdata[i].time;
-            if (time < startDate || time > endDate) {
-                continue;
-            }
-
-            const str_time = new Date(time).toISOString().slice(0, -1) + '-00:00';
-            const data = _plotdata[i].value;
-            plotdata_str += `[${str_time}]: ${data}\n`;
-        }
-
-        const expected_plot = `[2019-05-20T00:00:00.000-00:00]: 0.0000581211
-[2019-05-27T00:00:00.000-00:00]: 0.0000240676
-[2019-06-03T00:00:00.000-00:00]: -0.0000496513
-[2019-06-10T00:00:00.000-00:00]: 0.000040621
-[2019-06-17T00:00:00.000-00:00]: 0.0000382562
-[2019-06-24T00:00:00.000-00:00]: -0.000025698
-[2019-07-01T00:00:00.000-00:00]: 0.000026313
-[2019-07-08T00:00:00.000-00:00]: -0.0000452859
-[2019-07-15T00:00:00.000-00:00]: 0.0000222175
-[2019-07-22T00:00:00.000-00:00]: -0.0000433466
-[2019-07-29T00:00:00.000-00:00]: 0.0000688913
-[2019-08-05T00:00:00.000-00:00]: -0.0000076322
-[2019-08-12T00:00:00.000-00:00]: -0.0000200193
-[2019-08-19T00:00:00.000-00:00]: -0.0000226185
-[2019-08-26T00:00:00.000-00:00]: -0.0000258624
-[2019-09-02T00:00:00.000-00:00]: 0.0000081159
-[2019-09-09T00:00:00.000-00:00]: 0.000031318
-[2019-09-16T00:00:00.000-00:00]: 0.0000074194`;
-
-        console.log('expected_plot', expected_plot);
-        console.log('plotdata_str', plotdata_str);
-        expect(plotdata_str.trim()).toEqual(expected_plot.trim());
+        // TradingView computes (2 * close - high - low) / (high - low) * volume (its manual shows a
+        // division by volume); checked on BINANCE:BTCUSDT 1h.
+        expect(iii.length).toBeGreaterThan(50);
+        iii.forEach((x, i) => expect(x).toBeCloseTo(((2 * c[i] - h[i] - l[i]) / (h[i] - l[i])) * v[i], 4));
     });
 });

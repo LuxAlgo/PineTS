@@ -36,7 +36,15 @@ export function rma(context: any) {
             state.lastIdx = context.idx;
         }
 
-        const currentValue = Series.from(source).get(0) || 0;
+        const currentValue = Series.from(source).get(0);
+
+        // An na bar returns na and leaves the average as it was (TradingView skips it, like ta.ema).
+        if (currentValue === null || currentValue === undefined || Number.isNaN(currentValue)) {
+            state.currentRma = state.prevRma;
+            state.currentInitSum = state.prevInitSum;
+            state.currentInitCount = state.prevInitCount;
+            return NaN;
+        }
 
         // Use committed state for calculation
         let initCount = state.prevInitCount;

@@ -33,7 +33,7 @@ async function generateIndex() {
                 return name === 'new' ? { file: name, export: 'new_fn', classProp: 'new' } : { file: name, export: name, classProp: name };
             });
 
-        const staticMethods = ['new', 'new_bool', 'new_box', 'new_color', 'new_float', 'new_int', 'new_label', 'new_line', 'new_linefill', 'new_string', 'new_table', 'from', 'param'];
+        const staticMethods = ['new', 'new_bool', 'new_box', 'new_color', 'new_float', 'new_int', 'new_label', 'new_line', 'new_linefill', 'new_string', 'new_table', 'from', '__from_int', 'param'];
 
         // --- Generate PineArrayObject.ts ---
         const objectMethods = methods.filter((m) => !staticMethods.includes(m.classProp));
@@ -71,6 +71,7 @@ async function generateIndex() {
 // Run: npm run generate:array-index
 
 ${objectImports}
+import { tostringElements } from './format';
 
 ${pineArrayTypeEnum}
 
@@ -81,8 +82,13 @@ ${objectPrivateProps}
 ${objectInitProps}
     }
 
+    // Element count for JavaScript callers (PineTS syntax: \`line.all.length\`); Pine uses size().
+    get length(): number {
+        return this.array.length;
+    }
+
     toString(): string {
-        return '[' + this.array.toString().replace(/,/g, ', ') + ']';
+        return '[' + tostringElements(this).join(', ') + ']';
     }
 
     [Symbol.iterator]() {

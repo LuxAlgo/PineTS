@@ -41,8 +41,11 @@ function formatWithTimezone(timestamp: number, offsetMinutes: number) {
 export class Log {
     constructor(private context: Context) {}
 
+    // A message without arguments is printed as written; with arguments it is formatted
+    // like str.format (Java MessageFormat), as on TradingView.
     private logFormat(message: string, ...args: any[]) {
-        return message.replace(/{(\d+)}/g, (match, index) => args[index]);
+        if (args.length === 0) return message;
+        return this.context.pine.str.format(message, ...args);
     }
 
     param(source: any, index: number = 0, name?: string) {

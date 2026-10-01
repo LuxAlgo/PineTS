@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { crossPair } from '../utils/naAware';
 
 /**
  * Cross Detection
@@ -18,15 +19,8 @@ import { Series } from '../../../Series';
  */
 export function cross(context: any) {
     return (source1: any, source2: any, _callId?: string) => {
-        const series1 = Series.from(source1);
-        const series2 = Series.from(source2);
-
-        // Stateless calculation (accesses past data via Series)
-        
-        const current1 = series1.get(0);
-        const current2 = series2.get(0);
-        const prev1 = series1.get(1);
-        const prev2 = series2.get(1);
+        // The previous values come from the most recent earlier bar where both were non-na.
+        const [current1, current2, prev1, prev2] = crossPair(context, _callId, Series.from(source1), Series.from(source2));
 
         // If any value is NaN, return false
         if (isNaN(current1) || isNaN(current2) || isNaN(prev1) || isNaN(prev2)) {

@@ -27,6 +27,8 @@ export function opentrades(context: any) {
         };
 
         const result: any = {
+            // Scalar for consumers that store or plot the value (Series.from, $.param).
+            __value: list.length,
             valueOf() { return list.length; },
             toString() { return String(list.length); },
             [Symbol.toPrimitive]() { return list.length; },

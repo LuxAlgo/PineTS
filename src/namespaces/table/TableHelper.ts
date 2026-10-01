@@ -135,8 +135,18 @@ export class TableHelper {
             this._resolve(force_overlay) ?? false,
         );
         tbl._setHelper(this);
+        this._takePosition(tbl);
         this._tables.push(tbl);
         return tbl;
+    }
+
+    // TradingView shows one table per position: the newest one (or the one last moved there).
+    // The table it replaces is gone, which also keeps the table list bounded when a script
+    // creates a table on every bar.
+    private _takePosition(tbl: TableObject): void {
+        for (const other of this._tables) {
+            if (other !== tbl && !other._deleted && other.position === tbl.position) other._deleted = true;
+        }
     }
 
     // Pine `table(arg)` is a type cast / typed-na, NOT a constructor.
@@ -322,14 +332,12 @@ export class TableHelper {
         // na coordinates: silent no-op (matches the cell-access behavior).
         if (isNaN(sc) || isNaN(sr) || isNaN(ec) || isNaN(er)) return;
 
-        // Mark all cells in the region as merged, pointing to the start cell
+        // Mark all cells in the region as merged, pointing to the start cell. Written to the
+        // cells themselves: a cell already merged by an overlapping region is re-pointed.
         for (let r = sr; r <= er; r++) {
             for (let c = sc; c <= ec; c++) {
                 if (r === sr && c === sc) continue; // Skip the origin cell
-                tbl.setCell(c, r, {
-                    _merged: true,
-                    _merge_parent: [sc, sr],
-                });
+                tbl.markMerged(c, r, sc, sr);
             }
         }
 
@@ -400,6 +408,7 @@ export class TableHelper {
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
         tbl.position = this._resolve(position) || tbl.position;
+        this._takePosition(tbl);
     }
 
     @silentInSecondary

@@ -32,8 +32,9 @@ describe('Array Calculations & Statistics', () => {
         const expected_variance_biased = [922322990.5924416, 802805242.4571244, 869034022.0606892, 789146979.8976, 813743002.4447612];
 
         expect(part_avg).toEqual(expected_avg);
-        expect(part_variance).toEqual(expected_variance);
-        expect(part_variance_biased).toEqual(expected_variance_biased);
+        // Values around 1e9 carry float noise in their last digit; compare to 2 decimals (~5e-12 relative).
+        part_variance.forEach((v, i) => expect(v).toBeCloseTo(expected_variance[i], 2));
+        part_variance_biased.forEach((v, i) => expect(v).toBeCloseTo(expected_variance_biased[i], 2));
     });
 
     it('AVG, VARIANCE from Array Object', async () => {
@@ -66,8 +67,9 @@ describe('Array Calculations & Statistics', () => {
         const expected_variance_biased = [922322990.5924416, 802805242.4571244, 869034022.0606892, 789146979.8976, 813743002.4447612];
 
         expect(part_avg).toEqual(expected_avg);
-        expect(part_variance).toEqual(expected_variance);
-        expect(part_variance_biased).toEqual(expected_variance_biased);
+        // Values around 1e9 carry float noise in their last digit; compare to 2 decimals (~5e-12 relative).
+        part_variance.forEach((v, i) => expect(v).toBeCloseTo(expected_variance[i], 2));
+        part_variance_biased.forEach((v, i) => expect(v).toBeCloseTo(expected_variance_biased[i], 2));
     });
 
     it('SUM, STDEV', async () => {

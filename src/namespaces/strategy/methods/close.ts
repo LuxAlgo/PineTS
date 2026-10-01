@@ -81,7 +81,8 @@ export function close(context: any) {
         // the order instead of catching a freshly-opened trade that
         // happens to share the entry id.
         const order: Order = {
-            id: `close_${targetId}`,
+            // TradingView's generated exit id (strategy.closedtrades.exit_id)
+            id: `Close entry(s) order ${targetId}`,
             direction: 0, // resolved at fill time from matching position sign
             qty: 0, // resolved at fill time from matching trades
             type: 'market',

@@ -57,26 +57,20 @@ export function cci(context: any) {
 
         const currentValue = Series.from(source).get(0);
 
-        // Handle NaN input
-        if (isNaN(currentValue)) {
-            // Update tentative state with previous values (no change effectively, or should we reset?)
-            // Standard Pine behavior usually propagates NaN. For rolling window, we probably skip or push NaN?
-            // If input is NaN, CCI is usually NaN.
-            return NaN;
-        }
-
         // Use committed state
         const window = [...state.prevWindow];
         let sum = state.prevSum;
 
-        // Add current value to window
+        // The window keeps na values (TradingView's cci, through ta.dev, is na while one is inside
+        // it); they add 0 to the running sum.
+        const num = (v: any) => (v === null || v === undefined || Number.isNaN(v) ? 0 : v);
         window.unshift(currentValue);
-        sum += currentValue;
+        sum += num(currentValue);
 
         // Remove oldest value if window exceeds length
         while (window.length > length) {
             const oldValue = window.pop();
-            sum -= oldValue;
+            sum -= num(oldValue);
         }
 
         // Track actual call count for callsite-correct backfill
@@ -97,7 +91,7 @@ export function cci(context: any) {
         state.currentCallCount = callCount;
 
         // Not enough data yet
-        if (window.length < length) {
+        if (window.length < length || window.some((v) => v === null || v === undefined || Number.isNaN(v))) {
             return NaN;
         }
 

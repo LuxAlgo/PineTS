@@ -2,12 +2,13 @@
 
 import { PineMapObject } from '../PineMapObject';
 import { Context } from '../../../Context.class';
+import { resolveMapKey } from '../utils';
 
 export function remove(context: Context) {
     return (id: PineMapObject, key: any) => {
-        const val = id.map.get(key);
-        const existed = id.map.delete(key);
+        const k = resolveMapKey(id.map, key);
+        const val = id.map.get(k);
+        const existed = id.map.delete(k);
         return existed ? val : NaN;
     };
 }
-

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 LuxAlgo
 
-import { calculateOrderQty, parseDirection } from '../utils';
+import { calculateOrderQty, parseDirection, sizingPrice } from '../utils';
 import { Order } from '../types';
 import { Series } from '../../../Series';
 import { parseArgsForPineParams } from '../../utils';
@@ -66,11 +66,14 @@ export function order(context: any) {
             return val;
         };
 
+        // An na price leg is absent (`limit = na` places a market order); `qty = na` uses the default.
+        const isNaValue = (v: any) => (typeof v === 'number' && Number.isNaN(v)) || (typeof v === 'object' && v !== null && '__value' in v);
+        const priceLeg = (v: any) => (isNaValue(v) ? undefined : v);
         const idValue       = extractValue(parsed.id);
         const directionVal  = extractValue(parsed.direction);
-        const qtyValue      = extractValue(parsed.qty);
-        const limitValue    = extractValue(parsed.limit);
-        const stopValue     = extractValue(parsed.stop);
+        const qtyValue      = priceLeg(extractValue(parsed.qty));
+        const limitValue    = priceLeg(extractValue(parsed.limit));
+        const stopValue     = priceLeg(extractValue(parsed.stop));
         const ocaName       = extractValue(parsed.oca_name);
         const ocaType       = extractValue(parsed.oca_type);
         const commentValue  = extractValue(parsed.comment);
@@ -80,10 +83,13 @@ export function order(context: any) {
 
         // Reference price for qty conversion (cash / percent_of_equity sizing).
         // The order itself fills at the NEXT bar's open, but qty is locked in
-        // at the call site using the current close — matching TradingView's
-        // backtest accounting.
+        // at the call site using the current close (the stop price of a stop or
+        // stop-limit order, the limit price of a limit order) — matching
+        // TradingView's backtest accounting.
         const currentPrice = Series.from(context.data.close).get(0);
-        const calculatedQty = calculateOrderQty(context, qtyValue, dir, currentPrice);
+        const calculatedQty = calculateOrderQty(context, qtyValue, dir, sizingPrice(stopValue, limitValue, currentPrice));
+        // An order smaller than the symbol's minimum quantity is rejected.
+        if (calculatedQty <= 0) return undefined;
 
         // Determine order type from which price levels are set.
         let orderType: 'market' | 'limit' | 'stop' | 'stop-limit' = 'market';

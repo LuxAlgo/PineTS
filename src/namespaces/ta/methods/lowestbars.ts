@@ -10,6 +10,12 @@ import { Series } from '../../../Series';
  */
 export function lowestbars(context: any) {
     return (source: any, _length: any, _callId?: string) => {
+        // ta.lowestbars(length): the call id lands in the length slot
+        if (typeof _length === 'string' && _callId === undefined) {
+            _callId = _length;
+            _length = source;
+            source = context.data.low;
+        }
         const length = Series.from(_length).get(0);
         const series = Series.from(source);
 

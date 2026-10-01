@@ -17,12 +17,12 @@ Symbol information namespace providing metadata about the current trading symbol
 | `syminfo.isin`             | ✅     | ISIN code (empty for crypto)                              |
 | `syminfo.main_tickerid`    | ✅     | Main ticker identifier                                    |
 | `syminfo.prefix`           | ✅     | Exchange identifier (e.g., "BINANCE")                     |
-| `syminfo.root`             | ✅     | Base asset/root symbol (e.g., "BTC")                      |
+| `syminfo.root`             | ✅     | Root symbol; for crypto the ticker (e.g., "BTCUSDT")      |
 | `syminfo.ticker`           | ✅     | Symbol name (e.g., "BTCUSDT", "BTCUSDT.P")                |
 | `syminfo.tickerid`         | ✅     | Exchange:Symbol format (e.g., "BINANCE:BTCUSDT"); carries the chart-type modifier on a non-standard chart (e.g., "BINANCE:BTCUSDT;heikinashi" — see note) |
 | `syminfo.type`             | ✅     | Instrument type ("crypto" or "futures")                   |
-| `syminfo.prefix()`         |        | Prefix function                                           |
-| `syminfo.ticker()`         |        | Ticker function                                           |
+| `syminfo.prefix()`         | ✅     | Prefix function                                           |
+| `syminfo.ticker()`         | ✅     | Ticker function                                           |
 
 ### Currency & Location
 

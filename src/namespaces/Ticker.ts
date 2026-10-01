@@ -2,7 +2,27 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { Series } from '../Series';
-import { splitTickerModifier, stripTickerModifier, withTickerModifier } from '../tickerModifier';
+import { decodeTickerId, encodeTickerId, splitTickerModifier, stripTickerModifier, withTickerModifier, TickerModifiers } from '../tickerModifier';
+
+const MODIFIER_PARAMS = ['session', 'adjustment', 'backadjustment', 'settlement_as_close'];
+
+const isNamedArgs = (a: any) => a !== null && typeof a === 'object' && Object.getPrototypeOf(a) === Object.prototype;
+
+/** Positional arguments by parameter name, merged with the trailing named-arguments object if any. */
+function argsByName(args: any[], names: string[]): Record<string, any> {
+    const out: Record<string, any> = {};
+    args.forEach((a, i) => {
+        if (isNamedArgs(a)) Object.assign(out, a);
+        else if (i < names.length && a !== undefined) out[names[i]] = a;
+    });
+    return out;
+}
+
+/** A tickerid split into its chart-type suffix (`;heikinashi`) and the rest (plain or encoded). */
+function splitChartType(tickerId: string): { base: string; chartType: string | null } {
+    const { modifier } = splitTickerModifier(tickerId);
+    return modifier ? { base: tickerId.slice(0, tickerId.lastIndexOf(';')), chartType: modifier } : { base: tickerId, chartType: null };
+}
 
 /**
  * Pine Script `ticker.*` namespace.
@@ -22,13 +42,13 @@ import { splitTickerModifier, stripTickerModifier, withTickerModifier } from '..
  * (Renko, Kagi, Line Break, Point & Figure) remain plain-symbol stubs —
  * no data source we route to can construct those bars.
  *
- * For the plain "no-modifier" cases — which cover virtually every
- * real-world Pine script — the returned tickerid strings match
- * TradingView's exact log output, so automation tests pass strictly.
- * Non-default `adjustment` values trigger TV's encoded
- * `={"adjustment":"…","symbol":"…"}` form; PineTS only emits the
- * plain symbol there (since `request.security` doesn't honor
- * adjustment either). Document as a known divergence.
+ * SESSION / ADJUSTMENT modifiers (`ticker.new` / `ticker.modify` / `ticker.inherit`)
+ * produce TradingView's encoded form `={"adjustment":"…","session":"…","symbol":"…"}`,
+ * so the strings match TradingView's. The data sources don't honor them:
+ * `request.security` and the providers decode the symbol and serve the
+ * standard session. Combined with a chart-type modifier, the chart type
+ * stays a `;heikinashi` suffix after the encoded id (TradingView nests both
+ * in one encoded object).
  */
 export class Ticker {
     constructor(private context: any) {}
@@ -53,37 +73,64 @@ export class Ticker {
      * without a TV datafeed and are dropped, as before.
      */
     inherit(_from_tickerid: any, symbol: any): string {
-        const from = this._coerce(_from_tickerid);
+        const { base, chartType } = splitChartType(this._coerce(_from_tickerid));
         const sym = stripTickerModifier(this._coerce(symbol));
-        const { modifier } = splitTickerModifier(from);
-        return modifier && modifier !== 'standard' ? withTickerModifier(sym, modifier) : sym;
+        const id = encodeTickerId(sym, decodeTickerId(base).modifiers);
+        return chartType && chartType !== 'standard' ? `${id};${chartType}` : id;
     }
 
     /**
-     * ticker.new(prefix, ticker, session?, adjustment?, ...) → simple string
+     * ticker.new(prefix, ticker, session?, adjustment?, backadjustment?, settlement_as_close?) → simple string
      *
-     * Returns "prefix:ticker". Modifier arguments are accepted but
-     * ignored — see class-level note. Returns an empty string if
-     * either prefix or ticker is empty (matches TV).
+     * Returns "prefix:ticker", or TradingView's encoded form
+     * `={"session":"extended","symbol":"prefix:ticker"}` when a modifier is set. Returns
+     * the other part if either prefix or ticker is empty.
      */
-    new(prefix: any, ticker: any, _session?: any, _adjustment?: any,
-        _backadjustment?: any, _settlement_as_close?: any): string {
-        const p = this._coerce(prefix);
-        const t = this._coerce(ticker);
-        if (!p) return t;
-        if (!t) return p;
-        return `${p}:${t}`;
+    new(prefix: any, ticker: any, ...rest: any[]): string {
+        const a = argsByName([prefix, ticker, ...rest], ['prefix', 'ticker', ...MODIFIER_PARAMS]);
+        const p = this._coerce(a.prefix);
+        const t = this._coerce(a.ticker);
+        const symbol = !p ? t : !t ? p : `${p}:${t}`;
+        return encodeTickerId(symbol, this._applyModifiers({}, a));
     }
 
     /**
-     * ticker.modify(tickerid, session?, adjustment?, ...) → simple string
+     * ticker.modify(tickerid, session?, adjustment?, backadjustment?, settlement_as_close?) → simple string
      *
-     * Returns the tickerid unchanged — modifier args are accepted but
-     * ignored.
+     * Sets the given modifiers on `tickerid` (plain or encoded), keeping the others.
      */
-    modify(tickerid: any, _session?: any, _adjustment?: any,
-        _backadjustment?: any, _settlement_as_close?: any): string {
-        return this._coerce(tickerid);
+    modify(tickerid: any, ...rest: any[]): string {
+        const a = argsByName([tickerid, ...rest], ['tickerid', ...MODIFIER_PARAMS]);
+        const { base, chartType } = splitChartType(this._coerce(a.tickerid));
+        const { symbol, modifiers } = decodeTickerId(base);
+        const id = encodeTickerId(symbol, this._applyModifiers(modifiers, a));
+        return chartType ? `${id};${chartType}` : id;
+    }
+
+    /**
+     * Apply session / adjustment arguments to `modifiers` as TradingView encodes them:
+     * `session.regular` and `backadjustment.off` remove the key, `backadjustment.on` is
+     * `"default"`, `settlement_as_close.on/off` are `true` / `false`, and `inherit` or an
+     * omitted argument keeps the current value.
+     */
+    private _applyModifiers(modifiers: TickerModifiers, a: Record<string, any>): TickerModifiers {
+        const m: TickerModifiers = { ...modifiers };
+        const opt = (v: any) => {
+            const s = v === undefined ? '' : this._coerce(v);
+            return s === '' ? undefined : s;
+        };
+        const session = opt(a.session);
+        if (session === 'regular') delete m.session;
+        else if (session !== undefined) m.session = session;
+        const adjustment = opt(a.adjustment);
+        if (adjustment !== undefined) m.adjustment = adjustment;
+        const back = opt(a.backadjustment);
+        if (back === 'on') m.backadjustment = 'default';
+        else if (back === 'off') delete m.backadjustment;
+        const settlement = opt(a.settlement_as_close);
+        if (settlement === 'on') m['settlement-as-close'] = true;
+        else if (settlement === 'off') m['settlement-as-close'] = false;
+        return m;
     }
 
     /**

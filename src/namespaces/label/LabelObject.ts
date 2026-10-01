@@ -74,21 +74,24 @@ export class LabelObject {
     set_style(style: string): void { if (this._helper) this._helper.set_style(this, style); else if (!this._deleted) this.style = style; }
     set_textalign(textalign: string): void { if (this._helper) this._helper.set_textalign(this, textalign); else if (!this._deleted) this.textalign = textalign; }
     set_tooltip(tooltip: string): void { if (this._helper) this._helper.set_tooltip(this, tooltip); else if (!this._deleted) this.tooltip = tooltip; }
-    set_xloc(xloc: string): void { if (this._helper) this._helper.set_xloc(this, xloc); else if (!this._deleted) this.xloc = xloc; }
+    set_xloc(x: number, xloc: string): void { if (this._helper) this._helper.set_xloc(this, x, xloc); else if (!this._deleted) { this.x = x; this.xloc = xloc; } }
     set_yloc(yloc: string): void { if (this._helper) this._helper.set_yloc(this, yloc); else if (!this._deleted) this.yloc = yloc; }
     set_point(point: any): void { if (this._helper) this._helper.set_point(this, point); }
     set_text_font_family(family: string): void { if (this._helper) this._helper.set_text_font_family(this, family); else if (!this._deleted) this.text_font_family = family; }
     set_text_formatting(formatting: string): void { if (this._helper) this._helper.set_text_formatting(this, formatting); else if (!this._deleted) this.text_formatting = formatting; }
 
-    get_x(): number { return this.x; }
-    get_y(): number { return this.y; }
-    get_text(): string { return this.text; }
+    get_x(): number { return this._deleted ? NaN : this.x; }
+    get_y(): number { return this._deleted ? NaN : this.y; }
+    get_text(): string { return this._deleted ? '' : this.text; }
 
     delete(): void {
         this._deleted = true;
     }
 
-    copy(): LabelObject {
+    // The method form (`x.copy()`) goes through the helper, which registers the copy.
+    copy(): LabelObject { return this._helper ? this._helper.copy(this) : this._clone(); }
+
+    _clone(): LabelObject {
         const lbl = new LabelObject(
             this.x,
             this.y,

@@ -53,6 +53,10 @@ const JS_GLOBAL_OBJECTS = new Set([
 export function normalizePineBaseType(pineType: string | undefined): string | undefined {
     if (!pineType || typeof pineType !== 'string') return undefined;
     let s = pineType.trim();
+    // `float[]` / `chart.point[]` are the array shorthand of `array<float>` / `array<chart.point>`;
+    // both must resolve to the same base type or a `method` declared with one spelling never
+    // matches a receiver declared with the other.
+    if (s.endsWith('[]')) return 'array';
     const lt = s.indexOf('<');
     if (lt >= 0) s = s.slice(0, lt);
     const parts = s.split(/\s+/).filter(Boolean);
@@ -393,9 +397,31 @@ export class ScopeManager {
         this.varStaticTypes.delete(varName);
     }
 
+    /**
+     * JS names of every user `method` sharing one Pine name (overloads on different receiver
+     * types), in declaration order. The first keeps `$M_<name>`, later ones get `$M_<name>$<n>`.
+     */
+    private methodCandidates: Map<string, string[]> = new Map();
+
+    addMethodCandidate(pineName: string, jsName: string): void {
+        const list = this.methodCandidates.get(pineName) ?? [];
+        if (!list.includes(jsName)) list.push(jsName);
+        this.methodCandidates.set(pineName, list);
+    }
+
+    getMethodCandidates(pineName: string): string[] {
+        return this.methodCandidates.get(pineName) ?? [];
+    }
+
     setMethodReceiverType(pineName: string, pineType: string): void {
         const base = normalizePineBaseType(pineType);
         if (base) this.methodReceiverTypes.set(pineName, base);
+    }
+
+    /** True when some user `method` is declared with `typeName` as its receiver type. */
+    isMethodReceiverTypeName(typeName: string): boolean {
+        for (const t of this.methodReceiverTypes.values()) if (t === typeName) return true;
+        return false;
     }
 
     getMethodReceiverType(pineName: string): string | undefined {

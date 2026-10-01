@@ -97,8 +97,10 @@ export function tsi(context: any) {
 
         const currentSource = Series.from(source).get(0);
 
-        // Handle NaN input
+        // An na bar leaves the averages as they were, and the change on the next bar is na too (it
+        // needs the value before it), as on TradingView.
         if (isNaN(currentSource)) {
+            state.currentSource = NaN;
             return NaN;
         }
 

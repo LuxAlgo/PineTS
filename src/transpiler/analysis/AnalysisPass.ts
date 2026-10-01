@@ -56,6 +56,67 @@ export function transformNestedArrowFunctions(ast: any): void {
 }
 
 /**
+ * Rename function parameters that share a user function's name (`g(double) => double(double)`).
+ * In Pine a call always resolves to the function, but in the emitted JS the parameter would
+ * shadow it. Every reference in the function is renamed except call callees; the matching
+ * `fn.__pineParamTypes__` keys follow.
+ */
+export function renameParamsShadowingFunctions(ast: any): void {
+    const functionNames = new Set<string>();
+    walk.simple(ast, {
+        FunctionDeclaration(node: any) {
+            if (node.id?.name) functionNames.add(node.id.name);
+        },
+    });
+    if (functionNames.size === 0) return;
+
+    const paramName = (p: any) => (p.type === 'AssignmentPattern' ? p.left : p);
+    const renamedByFunction = new Map<string, Map<string, string>>();
+
+    walk.simple(ast, {
+        FunctionDeclaration(fn: any) {
+            const renames = new Map<string, string>();
+            for (const p of fn.params) {
+                const id = paramName(p);
+                if (id?.type === 'Identifier' && functionNames.has(id.name)) {
+                    renames.set(id.name, `${id.name}_$arg`);
+                    id.name = `${id.name}_$arg`;
+                }
+            }
+            if (renames.size === 0) return;
+            renamedByFunction.set(fn.id.name, renames);
+            walk.ancestor(fn.body, {
+                Identifier(node: any, _state: any, ancestors: any[]) {
+                    const newName = renames.get(node.name);
+                    if (!newName) return;
+                    const parent = ancestors[ancestors.length - 2];
+                    if (parent?.type === 'CallExpression' && parent.callee === node) return;
+                    if (parent?.type === 'MemberExpression' && parent.property === node && !parent.computed) return;
+                    if (parent?.type === 'Property' && parent.key === node && !parent.computed) return;
+                    if (parent?.type === 'FunctionDeclaration' && parent.id === node) return;
+                    node.name = newName;
+                },
+            });
+        },
+    });
+
+    // fn.__pineParamTypes__ = { double: 'float' } -> { double_$arg: 'float' }
+    walk.simple(ast, {
+        AssignmentExpression(node: any) {
+            const left = node.left;
+            if (left?.type !== 'MemberExpression' || left.property?.name !== '__pineParamTypes__') return;
+            const renames = renamedByFunction.get(left.object?.name);
+            if (!renames || node.right?.type !== 'ObjectExpression') return;
+            for (const prop of node.right.properties) {
+                const key = prop.key?.type === 'Identifier' ? prop.key.name : prop.key?.value;
+                const newName = renames.get(key);
+                if (newName) prop.key = { type: 'Literal', value: newName };
+            }
+        },
+    });
+}
+
+/**
  * Pre-walk the AST to populate the UDT registry on the ScopeManager.
  *
  * Two registries are populated:
@@ -96,6 +157,9 @@ export function preProcessUdtRegistry(ast: any, scopeManager: ScopeManager): voi
                         }
                     }
                     scopeManager.addUdtTypeName(decl.id.name, fields);
+                    // Lets the transformer tell the runtime which type this factory builds, when a
+                    // user method is declared on it (see `Context.callMethod`).
+                    decl.init._udtName = decl.id.name;
                 }
             }
         },
@@ -559,6 +623,8 @@ export function runAnalysisPass(ast: any, scopeManager: ScopeManager): string | 
                 expr.right?.value === true) {
                 const jsName = expr.left.object.name;
                 const pineName = jsName.startsWith('$M_') ? jsName.slice(3) : jsName;
+                // Overloads on other receiver types are emitted as `$M_<name>$<n>`.
+                scopeManager.addMethodCandidate(pineName.replace(/\$\d+$/, ''), jsName);
                 scopeManager.addUserMethod(pineName);
                 // Also expose the Pine name as a "user function" so the call-site
                 // check `isUserFunction(methodName) && isUserMethod(methodName)`
@@ -597,6 +663,35 @@ export function runAnalysisPass(ast: any, scopeManager: ScopeManager): string | 
                     });
 
                     if (isForLoop) return;
+
+                    // Inside a function emitted for a Pine `switch` / `if` / loop used as a value,
+                    // declarations stay JS locals: destructure the tuple in place, without the
+                    // temp + per-element split (a block would hide the names from the next lines).
+                    const innermostFunction = [...ancestors]
+                        .reverse()
+                        .find((a: any) => a !== node && (a.type === 'FunctionDeclaration' || a.type === 'FunctionExpression' || a.type === 'ArrowFunctionExpression'));
+                    const insideValueFunction =
+                        innermostFunction && innermostFunction.type !== 'FunctionDeclaration' && !(innermostFunction.type === 'ArrowFunctionExpression' && innermostFunction.start === 0);
+                    if (insideValueFunction) {
+                        decl.init = {
+                            type: 'MemberExpression',
+                            object: {
+                                type: 'CallExpression',
+                                callee: {
+                                    type: 'MemberExpression',
+                                    object: { type: 'Identifier', name: CONTEXT_NAME },
+                                    property: { type: 'Identifier', name: 'toTuple' },
+                                    computed: false,
+                                },
+                                arguments: [decl.init, { type: 'Literal', value: decl.id.elements.length }],
+                                // A runtime helper, not a Pine call: its arguments are not series params.
+                                _transformed: true,
+                            },
+                            property: { type: 'Literal', value: 0 },
+                            computed: true,
+                        };
+                        return;
+                    }
 
                     // Generate a unique temporary variable name
                     const tempVarName = scopeManager.generateTempVar();

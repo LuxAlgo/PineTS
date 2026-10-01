@@ -66,17 +66,21 @@ export class LineObject {
     set_first_point(point: any): void { if (this._helper) this._helper.set_first_point(this, point); }
     set_second_point(point: any): void { if (this._helper) this._helper.set_second_point(this, point); }
 
-    get_x1(): number { return this.x1; }
-    get_y1(): number { return this.y1; }
-    get_x2(): number { return this.x2; }
-    get_y2(): number { return this.y2; }
+    get_x1(): number { return this._deleted ? NaN : this.x1; }
+    get_y1(): number { return this._deleted ? NaN : this.y1; }
+    get_x2(): number { return this._deleted ? NaN : this.x2; }
+    get_y2(): number { return this._deleted ? NaN : this.y2; }
     get_price(x: number): number { if (this._helper) return this._helper.get_price(this, x); return NaN; }
 
     delete(): void {
-        this._deleted = true;
+        if (this._helper) this._helper.delete(this);
+        else this._deleted = true;
     }
 
-    copy(): LineObject {
+    // The method form (`x.copy()`) goes through the helper, which registers the copy.
+    copy(): LineObject { return this._helper ? this._helper.copy(this) : this._clone(); }
+
+    _clone(): LineObject {
         const ln = new LineObject(
             this.x1,
             this.y1,

@@ -213,6 +213,7 @@ describe('Str Namespace', () => {
         expect(last(result.tz_offset)).toBe('+0000');
         // NY in March is on DST (EDT, UTC-04:00) → 14:05 UTC = 10:05 local
         expect(last(result.tz_ny)).toBe('2024-03-19 10:05 -0400');
-        expect(last(result.nan_input)).toBe('NaN');
+        // TradingView formats an na time as the epoch
+        expect(last(result.nan_input)).toBe('1970');
     });
 });

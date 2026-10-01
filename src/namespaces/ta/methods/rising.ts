@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { consecutiveMoves } from '../utils/naAware';
 
 /**
  * Rising Detection
@@ -21,24 +22,9 @@ export function rising(context: any) {
         const length = Series.from(_length).get(0);
         const series = Series.from(source);
 
-        // Check consecutive increases for length bars
-        // For length=2: check if source[0] > source[1] && source[1] > source[2]
-        for (let i = 0; i < length; i++) {
-            const current = series.get(i);
-            const next = series.get(i + 1);
-            
-            // If either value is NaN, return false
-            if (isNaN(current) || isNaN(next)) {
-                return false;
-            }
-
-            // If not increasing, return false
-            if (current <= next) {
-                return false;
-            }
-        }
-
-        return true;
+        // Consecutive moves as TradingView counts them: a pair touching an na value neither
+        // extends nor breaks the run.
+        return consecutiveMoves(context, _callId, series, length, true);
     };
 }
 

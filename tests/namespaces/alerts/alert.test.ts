@@ -107,13 +107,13 @@ describe('Alert System', () => {
     });
 
     describe('alert() - frequency constants', () => {
-        it('should expose alert.freq_* constants', async () => {
+        it('should expose alert.freq_* constants with TradingView values', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
             const code = (context: any) => {
                 const { alert, plotchar } = context.pine;
-                plotchar(alert.freq_all === 'alert.freq_all' ? 1 : 0, 'all');
-                plotchar(alert.freq_once_per_bar === 'alert.freq_once_per_bar' ? 1 : 0, 'opb');
-                plotchar(alert.freq_once_per_bar_close === 'alert.freq_once_per_bar_close' ? 1 : 0, 'opbc');
+                plotchar(alert.freq_all === 'all' ? 1 : 0, 'all');
+                plotchar(alert.freq_once_per_bar === 'once_per_bar' ? 1 : 0, 'opb');
+                plotchar(alert.freq_once_per_bar_close === 'once_per_bar_close' ? 1 : 0, 'opbc');
             };
 
             const { plots } = await pineTS.run(code);
@@ -202,7 +202,7 @@ plot(close)
             expect(ctx.alerts.length).toBeGreaterThan(0);
             expect(ctx.alerts[0].type).toBe('alert');
             expect(ctx.alerts[0].message).toBe('Bullish bar!');
-            expect(ctx.alerts[0].freq).toBe('alert.freq_once_per_bar');
+            expect(ctx.alerts[0].freq).toBe('once_per_bar');
         });
     });
 

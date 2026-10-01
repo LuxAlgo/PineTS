@@ -17,9 +17,7 @@ export function hma(context: any) {
         const wma1 = wmaFn(source, halfPeriod, _callId ? `${_callId}_wma1` : undefined);
         const wma2 = wmaFn(source, period, _callId ? `${_callId}_wma2` : undefined);
 
-        if (isNaN(wma1) || isNaN(wma2)) {
-            return NaN;
-        }
+        const rawIsNa = isNaN(wma1) || isNaN(wma2);
 
         // Create synthetic source for final WMA: 2*wma1 - wma2
         // We need to feed this into WMA calculation
@@ -83,6 +81,16 @@ export function hma(context: any) {
 
         // Use committed window
         const window = [...state.prevWindow];
+
+        // An na bar (source na, so both inner WMAs are na) returns na and weighs the last raw value
+        // in its slot, like `ta.wma` on an na source. Before the first raw value nothing is kept.
+        if (rawIsNa) {
+            if (!window.length) return NaN;
+            window.unshift(window[0]);
+            while (window.length > sqrtPeriod) window.pop();
+            state.currentWindow = window;
+            return NaN;
+        }
         window.unshift(rawHma);
 
         if (window.length < sqrtPeriod) {

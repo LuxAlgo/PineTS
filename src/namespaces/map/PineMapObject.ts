@@ -15,6 +15,8 @@ import { values as values_factory } from './methods/values';
 
 export class PineMapObject {
     public map: Map<any, any>;
+    // 'string' for map<K, string>, whose missing keys read as the na string ("")
+    public valueType?: string;
     private _clear: any;
     private _contains: any;
     private _copy: any;

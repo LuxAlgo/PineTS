@@ -39,7 +39,7 @@ export function stdev(context: Context) {
             variance = (variance * count) / (count - 1);
         }
 
-        if (!biased && count === 1) return 0;
+        if (!biased && count === 1) return NaN;
 
         return context.precision(Math.sqrt(variance));
     };

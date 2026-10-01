@@ -1,35 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { PineArrayObject } from '../PineArrayObject';
+import { isNa, outOfBounds } from '../utils';
 
 export function percentrank(context: any) {
     return (id: PineArrayObject, index: number): number => {
-        if (id.array.length === 0) return NaN;
+        const size = id.array.length;
+        if (size === 0) return NaN;
+        if (index < 0 || index >= size) outOfBounds(index, size, 'array.percentrank');
 
-        const idx = Math.floor(index);
+        const value = id.array[Math.floor(index)];
+        if (isNa(value)) return NaN;
 
-        // Check bounds
-        if (idx < 0 || idx >= id.array.length) return NaN;
-
-        const value = Number(id.array[idx]);
-
-        // If reference value is NaN, result is NaN
-        if (isNaN(value) || value === null || value === undefined) return NaN;
-
-        let lessThan = 0;
-
+        // Elements <= the reference value, the reference itself excluded, over size - 1 (na elements count
+        // in the size but never in the numerator).
+        let atOrBelow = 0;
         for (const item of id.array) {
-            const val = Number(item);
-            if (!isNaN(val) && val !== null && val !== undefined) {
-                if (val < value) {
-                    lessThan++;
-                }
-            }
+            if (!isNa(item) && item <= value) atOrBelow++;
         }
 
-        const divisor = id.array.length - 1;
+        const divisor = size - 1;
         if (divisor <= 0) return NaN;
 
-        return (lessThan / divisor) * 100;
+        return ((atOrBelow - 1) / divisor) * 100;
     };
 }

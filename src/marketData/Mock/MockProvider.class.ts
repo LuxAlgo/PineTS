@@ -204,6 +204,10 @@ export class MockProvider extends BaseProvider<MockProviderConfig> {
         return new Set(['1', '3', '5', '15', '30', '45', '60', '120', '180', '240', 'D', 'W', 'M']);
     }
 
+    protected aggregatesOnCalendarGrid(): boolean {
+        return true;
+    }
+
     /**
      * Implements _getMarketDataNative
      *
@@ -339,7 +343,7 @@ export class MockProvider extends BaseProvider<MockProviderConfig> {
                 ticker: tickerId, // KEEP ORIGINAL including .P if present!
                 tickerid: `BINANCE:${tickerId}`, // Also keep .P here
                 prefix: 'BINANCE',
-                root: baseAsset, // Just the base asset: "BTC"
+                root: tickerId, // TradingView: the ticker itself ("BTCUSDT", "BTCUSDT.P")
                 description: description,
                 type: marketType,
                 main_tickerid: `BINANCE:${tickerId}`,
@@ -360,34 +364,34 @@ export class MockProvider extends BaseProvider<MockProviderConfig> {
                 mincontract: minQty,
 
                 // Session & Market
-                session: '24x7',
+                session: 'regular',
                 volumetype: 'base',
-                expiration_date: symbolData.deliveryDate || 0,
+                expiration_date: symbolData.deliveryDate || NaN,
 
-                // Company Data (N/A for crypto)
-                employees: 0,
+                // Company data, ratings and price targets: na for crypto, as on TradingView
+                employees: NaN,
                 industry: '',
                 sector: '',
-                shareholders: 0,
-                shares_outstanding_float: 0,
-                shares_outstanding_total: 0,
+                shareholders: NaN,
+                shares_outstanding_float: NaN,
+                shares_outstanding_total: NaN,
 
                 // Analyst Ratings (N/A for crypto)
-                recommendations_buy: 0,
-                recommendations_buy_strong: 0,
-                recommendations_date: 0,
-                recommendations_hold: 0,
-                recommendations_sell: 0,
-                recommendations_sell_strong: 0,
-                recommendations_total: 0,
+                recommendations_buy: NaN,
+                recommendations_buy_strong: NaN,
+                recommendations_date: NaN,
+                recommendations_hold: NaN,
+                recommendations_sell: NaN,
+                recommendations_sell_strong: NaN,
+                recommendations_total: NaN,
 
                 // Price Targets (N/A for crypto)
-                target_price_average: 0,
-                target_price_date: 0,
-                target_price_estimates: 0,
-                target_price_high: 0,
-                target_price_low: 0,
-                target_price_median: 0,
+                target_price_average: NaN,
+                target_price_date: NaN,
+                target_price_estimates: NaN,
+                target_price_high: NaN,
+                target_price_low: NaN,
+                target_price_median: NaN,
             };
 
             return symbolInfo;

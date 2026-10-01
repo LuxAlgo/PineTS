@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { PineArrayObject } from '../PineArrayObject';
+import { isNa } from '../utils';
 
 export function mode(context: any) {
     return (id: PineArrayObject) => {
-        if (id.array.length === 0) return NaN;
-
         const counts = new Map();
         let maxFreq = 0;
 
         for (const val of id.array) {
+            if (isNa(val)) continue;
             // We might need to handle precision/epsilon for floats?
             // Pine Script might use exact match for mode.
             const count = (counts.get(val) || 0) + 1;
@@ -38,6 +38,6 @@ export function mode(context: any) {
             return 0;
         });
 
-        return modes[0];
+        return modes.length ? modes[0] : NaN;
     };
 }

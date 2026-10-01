@@ -3,7 +3,9 @@
 import { Series } from '../Series';
 import { Context } from '..';
 import { PineArrayObject, PineArrayType } from './array/PineArrayObject';
+import { joinElements } from './array/format';
 import { getDatePartsInTimezone } from './Time';
+import { formatFloat, formatNumberPattern, formatVolume } from './numberFormat';
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -12,6 +14,24 @@ const DAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 
 const pad = (n: number, len: number) => String(n).padStart(len, '0');
 
+// Named number formats of str.format placeholders ({0,number,integer}, …), as DecimalFormat patterns.
+const MESSAGE_NUMBER_FORMATS: Record<string, string> = { '': '#,##0.###', integer: '#,##0', percent: '#,##0%', currency: '$#,##0.00' };
+
+const isNa = (v: any) => v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v));
+
+// An na string is the empty string: `str.length(string(na))` is 0, `"a" + string(na)` is "a".
+const text = (v: any): string => (isNa(v) ? '' : String(v));
+
+// A plain decimal number, after trimming whitespace (no exponent, hex, binary or Infinity).
+const DECIMAL_NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)$/;
+
+/** Text of a str.format argument without a format type, as Java's MessageFormat prints it. */
+function messageArgument(val: any): string {
+    if (typeof val === 'number') return Number.isNaN(val) ? 'NaN' : formatNumberPattern(val, MESSAGE_NUMBER_FORMATS[''], 'halfEven');
+    if (val instanceof PineArrayObject) return '[' + joinElements(val).join(', ') + ']';
+    return String(val);
+}
+
 export class Str {
     constructor(private context: Context) {}
 
@@ -19,81 +39,60 @@ export class Str {
         return Series.from(source).get(index);
     }
     tostring(value: any, formatStr?: string) {
-        if (typeof value !== 'number' || isNaN(value) || !formatStr) {
-            return String(value);
+        if (typeof value !== 'number') {
+            return typeof value === 'string' ? value : String(value);
         }
+        // Without a format, floats print at most 10 decimals and no exponent below 1e21.
+        if (!formatStr) return formatFloat(value);
 
-        // Named format: mintick
+        // format.mintick: the symbol's tick decimals, rounded half up.
         if (formatStr === 'mintick') {
             const mintick = this.context.pine?.syminfo?.mintick || 0.01;
             const decimals = Math.max(0, -Math.floor(Math.log10(mintick)));
-            return value.toFixed(decimals);
+            return formatNumberPattern(value, decimals ? '0.' + '0'.repeat(decimals) : '0', 'halfUp');
         }
 
-        // Named format: integer
-        if (formatStr === 'integer') {
-            return String(Math.round(value));
-        }
-
-        // Named format: percent
+        // format.percent appends "%" to the value with 2 decimals (no ×100).
         if (formatStr === 'percent') {
-            return (value * 100).toFixed(2) + '%';
+            return formatNumberPattern(value, '0.00', 'halfUp') + '%';
         }
 
-        // Named format: price — same as mintick
-        if (formatStr === 'price') {
-            const mintick = this.context.pine?.syminfo?.mintick || 0.01;
-            const decimals = Math.max(0, -Math.floor(Math.log10(mintick)));
-            return value.toFixed(decimals);
-        }
-
-        // Named format: volume
+        // format.volume: 1.235M, 2.5B, 12K, 999.
         if (formatStr === 'volume') {
-            return String(Math.round(value));
+            return formatVolume(value);
         }
 
-        // Pattern-based format: "#", "#.#", "#.##", "0.000", etc.
-        // Count decimal places from the pattern
-        const dotIdx = formatStr.indexOf('.');
-        if (dotIdx >= 0) {
-            const decimalPart = formatStr.substring(dotIdx + 1);
-            const decimals = decimalPart.length;
-            return value.toFixed(decimals);
-        }
-
-        // No decimal point in format → integer
-        if (formatStr.includes('#') || formatStr.includes('0')) {
-            return String(Math.round(value));
-        }
-
-        return String(value);
+        // Any other string is a DecimalFormat pattern: "#", "#.##", "0.000", "#,##0.0", "0 bars", …
+        // (format.price / format.inherit and other text without digits are a literal prefix.)
+        return formatNumberPattern(value, formatStr, 'halfUp');
     }
     tonumber(value: any) {
-        return Number(value);
+        const s = text(value).replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
+        return DECIMAL_NUMBER.test(s) ? Number(s) : NaN;
     }
     lower(value: string) {
-        return String(value).toLowerCase();
+        return text(value).toLowerCase();
     }
     upper(value: string) {
-        return String(value).toUpperCase();
+        return text(value).toUpperCase();
     }
     trim(value: string) {
-        return String(value).trim();
+        return text(value).trim();
     }
     repeat(source: string, repeat: number, separator: string = '') {
         return Array(repeat)
-            .fill(source)
-            .join(separator || '');
+            .fill(text(source))
+            .join(text(separator));
     }
     replace_all(source: string, target: string, replacement: string) {
-        return String(source).replaceAll(target, replacement);
+        return text(source).replaceAll(text(target), text(replacement));
     }
 
     //occurense is the nth occurrence to replace
     replace(source: string, target: string, replacement: string, occurrence: number = 0) {
-        const str = String(source);
-        const tgt = String(target);
-        const repl = String(replacement);
+        const str = text(source);
+        const tgt = text(target);
+        const repl = text(replacement);
         const occ = Math.floor(Number(occurrence)) || 0;
 
         if (tgt === '') return str;
@@ -115,30 +114,30 @@ export class Str {
     }
 
     contains(source: string, target: string) {
-        return String(source).includes(target);
+        return text(source).includes(text(target));
     }
     endswith(source: string, target: string) {
-        return String(source).endsWith(target);
+        return text(source).endsWith(text(target));
     }
     startswith(source: string, target: string) {
-        return String(source).startsWith(target);
+        return text(source).startsWith(text(target));
     }
     pos(source: string, target: string) {
-        const idx = String(source).indexOf(target);
+        const idx = text(source).indexOf(text(target));
         return idx === -1 ? NaN : idx;
     }
     length(source: string) {
-        return String(source).length;
+        return text(source).length;
     }
     match(source: string, pattern: string) {
-        return String(source).match(new RegExp(pattern));
+        return text(source).match(new RegExp(pattern));
     }
 
     split(source: string, separator: string) {
-        return new PineArrayObject(String(source).split(separator), PineArrayType.string, this.context);
+        return new PineArrayObject(text(source).split(text(separator)), PineArrayType.string, this.context);
     }
     substring(source: string, begin_pos: number, end_pos: number) {
-        return String(source).substring(begin_pos, end_pos);
+        return text(source).substring(begin_pos, end_pos);
     }
 
     /**
@@ -147,10 +146,8 @@ export class Str {
      * Text inside single quotes is treated as a literal; '' produces a literal '.
      */
     format_time(time: any, format: string = "yyyy-MM-dd'T'HH:mm:ssZ", timezone?: string) {
-        if (time === null || time === undefined || (typeof time === 'number' && isNaN(time))) {
-            return 'NaN';
-        }
-        const ts = Number(time);
+        // TradingView formats an na time as the epoch (1970-01-01).
+        const ts = isNa(time) ? 0 : Number(time);
         const tz = timezone || this.context.pine?.syminfo?.timezone || 'UTC';
         const parts = getDatePartsInTimezone(ts, tz);
 
@@ -244,14 +241,80 @@ export class Str {
         return result;
     }
 
+    /**
+     * Java MessageFormat, as TradingView runs it: `{0}`, `{0,number}`,
+     * `{0,number,integer|percent|currency|<pattern>}`, `''` for a quote and `'...'` for literal
+     * text. A placeholder without an argument stays `{n}`; a malformed placeholder is a runtime
+     * error with Java's message. Date, time and choice placeholders are left as written.
+     */
     format(message: string, ...args: any[]) {
-        // Handle both simple {0} and extended {0,number,#.##} patterns
-        return message.replace(/\{(\d+)(?:,number,([^}]+))?\}/g, (match, index, fmt) => {
-            const val = args[index];
-            if (fmt && typeof val === 'number' && !isNaN(val)) {
-                return this.tostring(val, fmt);
+        const pattern = text(message);
+        let out = '';
+        let inQuote = false;
+        let i = 0;
+        while (i < pattern.length) {
+            const ch = pattern[i];
+            if (ch === "'") {
+                if (pattern[i + 1] === "'") {
+                    out += "'";
+                    i += 2;
+                } else {
+                    inQuote = !inQuote;
+                    i++;
+                }
+                continue;
             }
-            return String(val);
-        });
+            if (ch !== '{' || inQuote) {
+                out += ch;
+                i++;
+                continue;
+            }
+            // Argument: index[,type[,style]] up to the matching '}'
+            const segments = ['', '', ''];
+            let part = 0;
+            let depth = 0;
+            let quoted = false;
+            let j = i + 1;
+            for (; j < pattern.length; j++) {
+                const c = pattern[j];
+                if (quoted) {
+                    segments[part] += c;
+                    if (c === "'") quoted = false;
+                } else if (c === ',' && part < 2) part++;
+                else if (c === '{') {
+                    depth++;
+                    segments[part] += c;
+                } else if (c === '}') {
+                    if (depth === 0) break;
+                    depth--;
+                    segments[part] += c;
+                } else if (c === ' ') {
+                    if (part !== 1 || segments[1].length > 0) segments[part] += c;
+                } else {
+                    if (c === "'") quoted = true;
+                    segments[part] += c;
+                }
+            }
+            if (j >= pattern.length) throw new Error('Unmatched braces in the pattern.');
+            out += this._formatArgument(segments, pattern.slice(i, j + 1), args);
+            i = j + 1;
+        }
+        return out;
+    }
+
+    private _formatArgument([index, type, style]: string[], raw: string, args: any[]): string {
+        if (!/^[+-]?\d+$/.test(index)) throw new Error(`can't parse argument number: ${index}`);
+        const n = Number(index);
+        if (n < 0) throw new Error(`negative argument number: ${index}`);
+        const kind = type.trim().toLowerCase();
+        if (kind !== '' && kind !== 'number') {
+            if (kind === 'date' || kind === 'time' || kind === 'choice') return raw;
+            throw new Error(`unknown format type: ${type}`);
+        }
+        if (n >= args.length || args[n] === undefined) return `{${n}}`;
+        const val = args[n];
+        if (kind === '' || typeof val !== 'number') return messageArgument(val);
+        if (Number.isNaN(val)) return 'NaN';
+        return formatNumberPattern(val, MESSAGE_NUMBER_FORMATS[style.trim().toLowerCase()] ?? style, 'halfEven');
     }
 }

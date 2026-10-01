@@ -593,7 +593,7 @@ describe('Request ', () => {
             }
 
             const str_time = new Date(time).toISOString().slice(0, -1) + '-00:00';
-            const res = `[${_plotdata[i].value.join(', ')}]`;
+            const res = `[${_plotdata[i].value.array.join(', ')}]`;
             plotdata_str += `[${str_time}]: ${res}\n`;
         }
 
@@ -639,7 +639,7 @@ describe('Request ', () => {
             }
 
             const str_time = new Date(time).toISOString().slice(0, -1) + '-00:00';
-            const res = `[${_plotdata[i].value.join(', ')}]`;
+            const res = `[${_plotdata[i].value.array.join(', ')}]`;
             plotdata_str += `[${str_time}]: ${res}\n`;
         }
 

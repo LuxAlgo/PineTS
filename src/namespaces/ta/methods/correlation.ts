@@ -1,54 +1,43 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { nonNaWindow } from '../utils/nonNaWindow';
 
 /**
  * Correlation Coefficient
  *
  * Describes the degree to which two series tend to deviate from their ta.sma() values.
- * r = cov(X, Y) / (stdev(X) * stdev(Y))
+ * r = (sma(x*y) - sma(x)*sma(y)) / sqrt((sma(x^2) - sma(x)^2) * (sma(y^2) - sma(y)^2))
+ *
+ * Each of the five averages skips its own na values, as TradingView computes it. When one series
+ * has an na inside the window the averages cover different bars, so the result can fall outside
+ * [-1, 1]; that is TradingView's value too.
  */
 export function correlation(context: any) {
     return (source1: any, source2: any, _length: any, _callId?: string) => {
         const length = Series.from(_length).get(0);
         const s1 = Series.from(source1);
         const s2 = Series.from(source2);
+        const key = _callId || `correlation_${length}`;
 
-        if (context.idx < length - 1) {
-            return NaN;
-        }
+        const mean = (suffix: string, valueAt: (k: number) => number) => {
+            const w = nonNaWindow(context, `${key}_${suffix}`, valueAt, length);
+            if (!w) return NaN;
+            let sum = 0;
+            for (const v of w.values) sum += v;
+            return sum / length;
+        };
+        const mx = mean('x', (k) => s1.get(k));
+        const my = mean('y', (k) => s2.get(k));
+        const mxy = mean('xy', (k) => s1.get(k) * s2.get(k));
+        const mxx = mean('xx', (k) => s1.get(k) * s1.get(k));
+        const myy = mean('yy', (k) => s2.get(k) * s2.get(k));
+        if ([mx, my, mxy, mxx, myy].some((v) => Number.isNaN(v))) return NaN;
 
-        let sumX = 0;
-        let sumY = 0;
-        let sumXY = 0;
-        let sumX2 = 0;
-        let sumY2 = 0;
-        let count = 0;
+        const varX = mxx - mx * mx;
+        const varY = myy - my * my;
+        if (varX <= 0 || varY <= 0) return context.precision(0);
 
-        for (let i = 0; i < length; i++) {
-            const x = s1.get(i);
-            const y = s2.get(i);
-
-            if (isNaN(x) || isNaN(y)) continue;
-
-            sumX += x;
-            sumY += y;
-            sumXY += x * y;
-            sumX2 += x * x;
-            sumY2 += y * y;
-            count++;
-        }
-
-        if (count < 2) return NaN; // Need at least 2 points
-
-        const numerator = count * sumXY - sumX * sumY;
-        const denominatorX = count * sumX2 - sumX * sumX;
-        const denominatorY = count * sumY2 - sumY * sumY;
-
-        if (denominatorX <= 0 || denominatorY <= 0) return context.precision(0);
-
-        const r = numerator / Math.sqrt(denominatorX * denominatorY);
-        return context.precision(r);
+        return context.precision((mxy - mx * my) / Math.sqrt(varX * varY));
     };
 }
-

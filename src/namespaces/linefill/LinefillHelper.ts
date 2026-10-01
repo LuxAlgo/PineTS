@@ -96,12 +96,15 @@ export class LinefillHelper {
     // a duplicate. This prevents accumulation when linefill.new() is called
     // every bar without explicitly deleting the old fill.
     @silentInSecondary
-    new(line1: LineObject, line2: LineObject, color: any): LinefillObject {
+    new(line1: LineObject, line2: LineObject, color: any): LinefillObject | null {
         // Resolve thunks: in `var` UDT declarations, line.new() calls are hoisted
         // as thunks (functions). Resolve them here so LinefillObject stores actual
         // LineObjects, not unresolved functions.
         const resolvedLine1 = this._resolve(line1) as LineObject;
         const resolvedLine2 = this._resolve(line2) as LineObject;
+        // A linefill needs two lines: with an na line TradingView draws nothing and
+        // linefill.all does not hold it.
+        if (!(resolvedLine1 instanceof LineObject) || !(resolvedLine2 instanceof LineObject)) return null;
         // Extract color from named-args object if the transpiler bundled it
         const rawColor = color && typeof color === 'object' && !Array.isArray(color) && 'color' in color
             ? color.color : color;
@@ -127,7 +130,21 @@ export class LinefillHelper {
         const lf = new LinefillObject(resolvedLine1, resolvedLine2, resolvedColor);
         lf._createdAtBar = this.context.idx;
         this._linefills.push(lf);
+        this._enforceMaxCount();
         return lf;
+    }
+
+    // Linefills share the max_lines_count limit; the oldest are deleted first.
+    private _enforceMaxCount(): void {
+        const maxCount = this.context.indicator?.max_lines_count ?? 50;
+        let excess = this._linefills.filter((lf) => !lf._deleted).length - maxCount;
+        for (const lf of this._linefills) {
+            if (excess <= 0) break;
+            if (!lf._deleted) {
+                lf._deleted = true;
+                excess--;
+            }
+        }
     }
 
     // linefill() direct call — mapped via NAMESPACES_LIKE → linefill.any()
@@ -152,7 +169,8 @@ export class LinefillHelper {
         }
     }
 
-    // linefill.get_line1(id) → series line
+    // linefill.get_line1(id) → series line (still the line after the linefill is deleted;
+    // na when that line itself was deleted, since a deleted line is na)
     get_line1(id: LinefillObject): LineObject | undefined {
         return id ? id.line1 : undefined;
     }
@@ -166,6 +184,13 @@ export class LinefillHelper {
     @silentInSecondary
     delete(id: LinefillObject): void {
         if (id) id._deleted = true;
+    }
+
+    // Called by line.delete: the linefills of a deleted line are deleted with it.
+    deleteForLine(line: LineObject): void {
+        for (const lf of this._linefills) {
+            if (!lf._deleted && (lf.line1 === line || lf.line2 === line)) lf._deleted = true;
+        }
     }
 
     // linefill.all — all active linefill objects

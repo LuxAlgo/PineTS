@@ -93,18 +93,22 @@ export class NAHelper {
         if (val === null || val === undefined) return true;
         // For numbers, check NaN (Pine Script na for numeric types)
         if (typeof val === 'number') return val !== val;
-        // Objects (arrays, UDTs, etc.) and strings are never na
+        // The na string is the empty string: na("") is true on TradingView.
+        if (val === '') return true;
+        // A deleted drawing (line, label, box, linefill, polyline, table) is na.
+        if (typeof val === 'object' && val._deleted === true) return true;
+        // Other objects (arrays, UDTs, etc.) and other strings are never na
         return false;
     }
 }
 
 /**
- * Alert frequency constants (Pine Script alert.freq_* enum values).
+ * Alert frequency constants (Pine Script alert.freq_* values, as TradingView prints them).
  */
 export const ALERT_FREQ = {
-    freq_all: 'alert.freq_all',
-    freq_once_per_bar: 'alert.freq_once_per_bar',
-    freq_once_per_bar_close: 'alert.freq_once_per_bar_close',
+    freq_all: 'all',
+    freq_once_per_bar: 'once_per_bar',
+    freq_once_per_bar_close: 'once_per_bar_close',
 };
 
 /**
@@ -142,7 +146,9 @@ export class AlertHelper {
     @silentInSecondary
     any(message: any, freq?: any, opts?: any): void {
         const msg = Series.from(message).get(0);
-        const f = freq ? Series.from(freq).get(0) : ALERT_FREQ.freq_once_per_bar;
+        // Earlier PineTS versions used 'alert.freq_all', ...: accept those strings too.
+        const given = freq ? Series.from(freq).get(0) : ALERT_FREQ.freq_once_per_bar;
+        const f = typeof given === 'string' && given.startsWith('alert.freq_') ? given.slice('alert.freq_'.length) : given;
 
         // Extract callsite ID: from transpiler-injected __callsiteId, or fallback counter
         let callsiteId: string;
@@ -240,7 +246,8 @@ export class Core {
 
     na(series: any) {
         const val = Series.from(series).get(0);
-        return val === null || val === undefined || (typeof val === 'number' && isNaN(val));
+        // The na string is the empty string: na("") is true on TradingView. A deleted drawing is na.
+        return val === null || val === undefined || val === '' || (typeof val === 'number' && isNaN(val)) || (typeof val === 'object' && val._deleted === true);
     }
     nz(series: any, replacement: number = 0) {
         const val = Series.from(series).get(0);
@@ -251,7 +258,8 @@ export class Core {
         const _s = Series.from(series);
         for (let i = 0; i < _s.length; i++) {
             const val = _s.get(i);
-            if (!isNaN(val)) {
+            // `isNaN('#FF0000')` is true, so colors need an explicit na test.
+            if (val != null && !(typeof val === 'number' && isNaN(val))) {
                 return val;
             }
         }
@@ -484,15 +492,18 @@ export class Core {
         //Pine Script seems to be throwing an error for any argument that is not a string
         //the following implementation might need to be updated in the future
         const val = Series.from(series).get(0);
+        // string(na) is the na string, which is the empty string.
+        if (val === null || val === undefined || (typeof val === 'number' && isNaN(val))) return '';
         return val.toString();
     }
 
-    Type(definition: Record<string, string | [string, any]>) {
+    Type(definition: Record<string, string | [string, any]>, typeName?: string) {
         // Extract field names, types, and defaults from definition.
         // Fields can be either 'type' (no default) or ['type', defaultValue].
         const definitionKeys = Object.keys(definition);
         const fieldTypes: Record<string, string> = {};
         const fieldDefaults: Record<string, any> = {};
+        const pineVersion = this.context?.pineVersion;
         for (const key of definitionKeys) {
             let val: any = definition[key];
             // $.param() wraps ['type', default] arrays in Series — unwrap them
@@ -510,6 +521,9 @@ export class Core {
         }
 
         const UDT: any = {
+            // The Pine type name, when the transpiler passed it (only for types that carry a user
+            // `method`): lets `Context.callMethod` recognise an instance of this type.
+            __name__: typeName,
             new: function (...args: any[]) {
                 // Map positional args to field names, applying defaults for missing args
                 const mappedArgs: Record<string, any> = {};
@@ -551,6 +565,17 @@ export class Core {
                         mappedArgs[key] = Series.from(fieldDefaults[key]).get(0);
                     }
                     // else: field remains absent (na/undefined)
+
+                    // An na string field holds the na string, which is the empty string.
+                    if (/(^|\s)string$/.test(fieldTypes[key] ?? '')) {
+                        const v = mappedArgs[key];
+                        if (v === undefined || v === null || (typeof v === 'number' && isNaN(v))) mappedArgs[key] = '';
+                    }
+                    // A v6 bool is never na: an unset bool field is false.
+                    if (pineVersion >= 6 && /(^|\s)bool$/.test(fieldTypes[key] ?? '')) {
+                        const v = mappedArgs[key];
+                        if (v === undefined || v === null || (typeof v === 'number' && isNaN(v))) mappedArgs[key] = false;
+                    }
                 }
                 return new PineTypeObject(mappedArgs, this.context, UDT);
             },

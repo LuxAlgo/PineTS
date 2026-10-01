@@ -4,7 +4,8 @@ import { PineTS, Provider } from 'index';
 describe('Array indexOf with NaN/na Values', () => {
     const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'W', null, new Date('2019-01-01').getTime(), new Date('2019-02-01').getTime());
 
-    it('indexof finds na values in array', async () => {
+    // TradingView: na is never equal to an element, na included (array.from(1.0, na).indexof(na) is -1).
+    it('indexof does not find na values', async () => {
         const { result } = await pineTS.run(($) => {
             const { na, array } = $.pine;
 
@@ -13,11 +14,10 @@ describe('Array indexOf with NaN/na Values', () => {
             return { idx };
         });
 
-        // indexOf should find NaN at index 0
-        expect(result.idx[0]).toBe(0);
+        expect(result.idx[0]).toBe(-1);
     });
 
-    it('indexof finds na among mixed values', async () => {
+    it('indexof does not find na among mixed values', async () => {
         const { result } = await pineTS.run(($) => {
             const { close } = $.data;
             const { na, array } = $.pine;
@@ -31,8 +31,7 @@ describe('Array indexOf with NaN/na Values', () => {
             return { idx };
         });
 
-        // na is at index 2
-        expect(result.idx[0]).toBe(2);
+        expect(result.idx[0]).toBe(-1);
     });
 
     it('indexof returns -1 when na not present', async () => {
@@ -84,5 +83,23 @@ describe('Array indexOf with NaN/na Values', () => {
         // min is 0 (|0.5 - 0.5|), at index 1
         expect(result.idx[0]).toBe(1);
         expect(result.minVal[0]).toBe(0);
+    });
+
+    it('min/indexof pattern finds the minimum when the array holds na', async () => {
+        const { result } = await pineTS.run(($) => {
+            const { na, array } = $.pine;
+
+            let dist = array.new_float(0);
+            dist.push(na);
+            dist.push(0.4);
+            dist.push(0.1);
+            let minVal = dist.min();
+            let idx = dist.indexof(minVal);
+            return { idx, minVal };
+        });
+
+        // min skips na on TradingView, so indexof finds the smallest value
+        expect(result.minVal[0]).toBe(0.1);
+        expect(result.idx[0]).toBe(2);
     });
 });

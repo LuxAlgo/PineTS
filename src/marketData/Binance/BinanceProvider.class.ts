@@ -211,7 +211,14 @@ export class BinanceProvider extends BaseProvider<BinanceProviderConfig> {
 
                 const data = await this._fetchRawChunk(tickerId, timeframe, 1000, currentStart, chunkEnd);
 
-                if (data.length === 0) break;
+                if (data.length === 0) {
+                    // Nothing in this chunk: the range may start before the symbol was listed.
+                    // Jump to the first candle after currentStart instead of giving up.
+                    const [first] = await this._fetchRawChunk(tickerId, timeframe, 1, currentStart);
+                    if (!first || first.openTime >= endTime || first.openTime <= currentStart) break;
+                    currentStart = first.openTime;
+                    continue;
+                }
 
                 allData = allData.concat(data);
 
@@ -267,6 +274,10 @@ export class BinanceProvider extends BaseProvider<BinanceProviderConfig> {
         return new Set(['1', '3', '5', '15', '30', '60', '120', '240', 'D', 'W', 'M']);
     }
 
+    protected aggregatesOnCalendarGrid(): boolean {
+        return true;
+    }
+
     protected async _getMarketDataNative(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<Kline[]> {
         try {
             // Check cache first
@@ -288,7 +299,7 @@ export class BinanceProvider extends BaseProvider<BinanceProviderConfig> {
             }
 
             // Determine if we need to paginate
-            const needsPagination = this.shouldPaginate(timeframe, limit, sDate, eDate);
+            const needsPagination = this.shouldPaginate(limit, sDate, eDate);
 
             if (needsPagination) {
                 if (sDate && eDate) {
@@ -325,25 +336,15 @@ export class BinanceProvider extends BaseProvider<BinanceProviderConfig> {
     /**
      * Determines if pagination is needed based on the parameters
      */
-    private shouldPaginate(timeframe: string, limit?: number, sDate?: number, eDate?: number): boolean {
+    private shouldPaginate(limit?: number, sDate?: number, eDate?: number): boolean {
         // If limit is explicitly > 1000, we need pagination
         if (limit && limit > 1000) {
             return true;
         }
 
-        // If we have both start and end dates, calculate required candles
-        if (sDate && eDate) {
-            const interval = timeframe_to_binance[timeframe.toUpperCase()];
-
-            const intervalDuration = INTERVAL_DURATION_MS[interval];
-            if (intervalDuration) {
-                const requiredCandles = Math.ceil((eDate - sDate) / intervalDuration);
-                // Need pagination if date range requires more than 1000 candles
-                return requiredCandles > 1000;
-            }
-        }
-
-        return false;
+        // A date range always goes through getMarketDataInterval, even when it fits in one
+        // request: a single request without `limit` only gets Binance's default of 500 candles.
+        return !!(sDate && eDate);
     }
 
     async getSymbolInfo(tickerId: string): Promise<ISymbolInfo> {
@@ -418,7 +419,7 @@ export class BinanceProvider extends BaseProvider<BinanceProviderConfig> {
                 ticker: tickerId, // KEEP ORIGINAL including .P if present!
                 tickerid: `BINANCE:${tickerId}`, // Also keep .P here
                 prefix: 'BINANCE',
-                root: baseAsset, // Just the base asset: "BTC"
+                root: tickerId, // TradingView: the ticker itself ("BTCUSDT", "BTCUSDT.P")
                 description: description,
                 type: marketType,
                 main_tickerid: `BINANCE:${tickerId}`,
@@ -439,34 +440,34 @@ export class BinanceProvider extends BaseProvider<BinanceProviderConfig> {
                 mincontract: minQty,
 
                 // Session & Market
-                session: '24x7',
+                session: 'regular',
                 volumetype: 'base',
-                expiration_date: symbolData.deliveryDate || 0,
+                expiration_date: symbolData.deliveryDate || NaN,
 
-                // Company Data (N/A for crypto)
-                employees: 0,
+                // Company data, ratings and price targets: na for crypto, as on TradingView
+                employees: NaN,
                 industry: '',
                 sector: '',
-                shareholders: 0,
-                shares_outstanding_float: 0,
-                shares_outstanding_total: 0,
+                shareholders: NaN,
+                shares_outstanding_float: NaN,
+                shares_outstanding_total: NaN,
 
                 // Analyst Ratings (N/A for crypto)
-                recommendations_buy: 0,
-                recommendations_buy_strong: 0,
-                recommendations_date: 0,
-                recommendations_hold: 0,
-                recommendations_sell: 0,
-                recommendations_sell_strong: 0,
-                recommendations_total: 0,
+                recommendations_buy: NaN,
+                recommendations_buy_strong: NaN,
+                recommendations_date: NaN,
+                recommendations_hold: NaN,
+                recommendations_sell: NaN,
+                recommendations_sell_strong: NaN,
+                recommendations_total: NaN,
 
                 // Price Targets (N/A for crypto)
-                target_price_average: 0,
-                target_price_date: 0,
-                target_price_estimates: 0,
-                target_price_high: 0,
-                target_price_low: 0,
-                target_price_median: 0,
+                target_price_average: NaN,
+                target_price_date: NaN,
+                target_price_estimates: NaN,
+                target_price_high: NaN,
+                target_price_low: NaN,
+                target_price_median: NaN,
             };
 
             return symbolInfo;

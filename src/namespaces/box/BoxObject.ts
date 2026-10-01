@@ -108,10 +108,10 @@ export class BoxObject {
     set_text_font_family(family: string): void { if (this._helper) this._helper.set_text_font_family(this, family); else if (!this._deleted) this.text_font_family = family; }
     set_text_formatting(formatting: string): void { if (this._helper) this._helper.set_text_formatting(this, formatting); else if (!this._deleted) this.text_formatting = formatting; }
 
-    get_left(): number { return this.left; }
-    get_right(): number { return this.right; }
-    get_top(): number { return this.top; }
-    get_bottom(): number { return this.bottom; }
+    get_left(): number { return this._deleted ? NaN : this.left; }
+    get_right(): number { return this._deleted ? NaN : this.right; }
+    get_top(): number { return this._deleted ? NaN : this.top; }
+    get_bottom(): number { return this._deleted ? NaN : this.bottom; }
 
     delete(): void {
         this._deleted = true;
@@ -131,7 +131,10 @@ export class BoxObject {
         };
     }
 
-    copy(): BoxObject {
+    // The method form (`x.copy()`) goes through the helper, which registers the copy.
+    copy(): BoxObject { return this._helper ? this._helper.copy(this) : this._clone(); }
+
+    _clone(): BoxObject {
         const b = new BoxObject(
             this.left, this.top, this.right, this.bottom,
             this.xloc, this.extend,

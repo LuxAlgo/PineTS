@@ -2,11 +2,13 @@
 
 import { PineMapObject } from '../PineMapObject';
 import { Context } from '../../../Context.class';
+import { resolveMapKey } from '../utils';
 
 export function put(context: Context) {
     return (id: PineMapObject, key: any, value: any) => {
-        const prev = id.map.get(key);
-        id.map.set(key, value);
+        const k = resolveMapKey(id.map, key);
+        const prev = id.map.get(k);
+        id.map.set(k, value);
         return prev === undefined ? NaN : prev;
     };
 }

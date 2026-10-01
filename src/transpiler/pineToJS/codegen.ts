@@ -11,6 +11,10 @@ import { CONTEXT_PINE_VARS, NAMESPACE_COLLISION_NAMES, JS_RESERVED_WORDS } from 
 // transpiler incorrectly treating them as namespace references (e.g., color.__value()).
 const CONFLICTING_NAMES = new Set(CONTEXT_PINE_VARS);
 
+// `string`, `series string`, `simple string`, ...
+const isStringType = (varType: any) => typeof varType === 'string' && /(^|\s)string$/.test(varType);
+const isNaIdentifier = (node: any) => node?.type === 'Identifier' && node.name === 'na';
+
 export class CodeGenerator {
     private indent: number;
     private indentStr: string;
@@ -29,9 +33,17 @@ export class CodeGenerator {
     // follow the `_$N` rename — unlike variable collisions, where `fill(...)`
     // still means the built-in.
     private userFunctionCollisions: Set<string>;
+    // Renamed user FUNCTIONS (collision or reserved name) -> their JS name, for calls made
+    // where a same-named parameter hides the entry in the rename map.
+    private userFunctionRenames: Map<string, string>;
     // UDT names that were renamed because they are JS reserved words
     // (`type new`). Type annotation strings naming them are rewritten too.
     private renamedTypeNames: Set<string>;
+    // Number of methods emitted so far per Pine name (overloads on different receiver types).
+    private methodNameCounts: Map<string, number> = new Map();
+    // Per function scope (script body first): whether a variable name is a string.
+    // `na` stored in a string variable is the na string, which is the empty string.
+    private stringVarScopes: Array<Map<string, boolean>> = [new Map()];
     constructor(options: { indentStr?: string; sourceCode?: string; includeSourceComments?: boolean } = {}) {
         this.indent = 0;
         this.indentStr = options.indentStr || '  ';
@@ -43,6 +55,7 @@ export class CodeGenerator {
         this.paramRenameCounter = 0;
         this.functionParams = new Map();
         this.userFunctionCollisions = new Set();
+        this.userFunctionRenames = new Map();
         this.renamedTypeNames = new Set();
     }
 
@@ -81,6 +94,7 @@ export class CodeGenerator {
         this.lastCommentedLine = -1;
         this.functionParams = new Map();
         this.userFunctionCollisions = new Set();
+        this.userFunctionRenames = new Map();
 
         if (ast.type === 'Program') {
             // Pre-scan: collect user-defined function parameter lists and
@@ -267,6 +281,7 @@ export class CodeGenerator {
                 if (!renameMap.has(node.id.name)) {
                     renameMap.set(node.id.name, `${node.id.name}_$${this.paramRenameCounter++}`);
                 }
+                this.userFunctionRenames.set(node.id.name, renameMap.get(node.id.name)!);
                 // Remember that this collision name is a user FUNCTION so that
                 // bare call sites `name(...)` follow the rename (see
                 // renameVariableRefsInAST). Overloads share one entry.
@@ -379,6 +394,10 @@ export class CodeGenerator {
                     node.callee.name = renameMap.get(node.callee.name)!;
                 }
                 // else: skip callee
+            } else if (node.callee?.type === 'Identifier' && this.userFunctionRenames.has(node.callee.name)) {
+                // A parameter of the enclosing function has the same name (`f(timeframe) =>
+                // timeframe(timeframe)`): a call still resolves to the renamed user function.
+                node.callee.name = this.userFunctionRenames.get(node.callee.name)!;
             } else {
                 this.renameVariableRefsInAST(node.callee, renameMap);
             }
@@ -556,6 +575,12 @@ export class CodeGenerator {
             case 'ReturnStatement':
                 return this.generateReturnStatement(node);
             case 'BlockStatement':
+                if (node._sequence) {
+                    // `a = 1, b = 2`: the statements belong to the enclosing block, so no braces
+                    // (they would hide the names from the next lines inside a switch-arm function).
+                    for (const stmt of node.body) this.generateStatement(stmt);
+                    return;
+                }
                 return this.generateBlockStatement(node);
             case 'TypeDefinition':
                 return this.generateTypeDefinition(node);
@@ -781,7 +806,16 @@ export class CodeGenerator {
         // not allow `$` in identifiers, so this prefix is collision-proof.
         // The call-site rewrite (ExpressionTransformer) and the marker reader
         // (AnalysisPass) both know about the prefix.
-        const jsFnName = isMethod ? `$M_${node.id.name}` : node.id.name;
+        // Pine allows several methods of one name on different receiver types
+        // (`method set(line ln, ...)` and `method set(box bx, ...)`). They would
+        // all hoist to the same JS function, so the second and later overloads get
+        // a `$<n>` suffix; AnalysisPass registers them all under the Pine name.
+        let jsFnName = node.id.name;
+        if (isMethod) {
+            const seen = (this.methodNameCounts.get(node.id.name) ?? 0) + 1;
+            this.methodNameCounts.set(node.id.name, seen);
+            jsFnName = seen === 1 ? `$M_${node.id.name}` : `$M_${node.id.name}$${seen}`;
+        }
 
         this.write('function ');
         this.write(jsFnName);
@@ -791,15 +825,20 @@ export class CodeGenerator {
         // receiver for methods. The receiver is passed explicitly by the
         // call-site rewrite, so it must appear in the param list.
         const params = node.params;
+        const stringVars = new Map<string, boolean>();
 
         for (let i = 0; i < params.length; i++) {
             const param = params[i];
             if (param.type === 'Identifier') {
                 this.write(param.name);
+                stringVars.set(param.name, isStringType(param.varType));
             } else if (param.type === 'AssignmentPattern') {
+                const isString = isStringType(param.left.varType);
+                stringVars.set(param.left.name, isString);
                 this.write(param.left.name);
                 this.write(' = ');
-                this.generateExpression(param.right);
+                if (isString && isNaIdentifier(param.right)) this.write('""');
+                else this.generateExpression(param.right);
             }
             if (i < params.length - 1) {
                 this.write(', ');
@@ -807,7 +846,12 @@ export class CodeGenerator {
         }
 
         this.write(') ');
-        this.generateBlockStatement(node.body, false);
+        this.stringVarScopes.push(stringVars);
+        try {
+            this.generateBlockStatement(node.body, false);
+        } finally {
+            this.stringVarScopes.pop();
+        }
         this.write('\n');
 
         // Emit method marker so the transpile phase can distinguish Pine `method`
@@ -909,9 +953,15 @@ export class CodeGenerator {
                 this.write(']');
             }
 
+            const isString =
+                decl.id.type === 'Identifier' &&
+                (decl.id.varType ? isStringType(decl.id.varType) : decl.init?.type === 'Literal' && typeof decl.init.value === 'string');
+            if (decl.id.type === 'Identifier') this.stringVarScopes[this.stringVarScopes.length - 1].set(decl.id.name, isString);
+
             if (decl.init) {
                 this.write(' = ');
-                this.generateExpression(decl.init);
+                if (isString && isNaIdentifier(decl.init)) this.write('""');
+                else this.generateExpression(decl.init);
             }
 
             this.write(';\n');
@@ -1450,7 +1500,8 @@ export class CodeGenerator {
             // required so the int/float type inference can distinguish `2` from
             // `2.0` (`int / int` truncates in Pine, `int / float` does not).
             const s = String(node.value);
-            if (typeof node.raw === 'string' && node.raw.includes('.') && !/[.eE]/.test(s)) {
+            // An exponent (`10e6`) also makes a float literal.
+            if (typeof node.raw === 'string' && /[.eE]/.test(node.raw) && !/[.eE]/.test(s)) {
                 this.write(s + '.0');
             } else {
                 this.write(s);
@@ -1537,7 +1588,19 @@ export class CodeGenerator {
 
         this.write(op);
         this.write(' ');
-        this.generateExpression(node.right);
+        if (op === '=' && node.left.type === 'Identifier' && isNaIdentifier(node.right) && this.isStringVariable(node.left.name)) {
+            this.write('""');
+        } else {
+            this.generateExpression(node.right);
+        }
+    }
+
+    private isStringVariable(name: string): boolean {
+        for (let i = this.stringVarScopes.length - 1; i >= 0; i--) {
+            const known = this.stringVarScopes[i].get(name);
+            if (known !== undefined) return known;
+        }
+        return false;
     }
 
     // Generate UpdateExpression
@@ -2135,6 +2198,7 @@ export class CodeGenerator {
         this.indent--;
         this.write(this.indentStr.repeat(this.indent));
         this.write('}\n'); // end switch
+        this.writeNaForMissingDefault(node);
 
         this.indent--;
         this.write(this.indentStr.repeat(this.indent));
@@ -2209,10 +2273,27 @@ export class CodeGenerator {
                 this.write('\n');
             }
         }
+        this.writeNaForMissingDefault(node);
 
         this.indent--;
         this.write(this.indentStr.repeat(this.indent));
         this.write('})()');
+    }
+
+    // A switch used as a value is na when no arm matches and there is no default arm
+    // (the na string, "", when every arm is a string literal).
+    writeNaForMissingDefault(node) {
+        if (node.cases.some((c) => !c.test)) return;
+        const armValue = (c: any) => {
+            const last = c.statements?.length ? c.statements[c.statements.length - 1] : null;
+            return last ? (last.type === 'ExpressionStatement' ? last.expression : null) : c.consequent;
+        };
+        const stringArms = node.cases.length > 0 && node.cases.every((c) => {
+            const v = armValue(c);
+            return v?.type === 'Literal' && typeof v.value === 'string';
+        });
+        this.write(this.indentStr.repeat(this.indent));
+        this.write(stringArms ? 'return "";\n' : 'return na;\n');
     }
 
     // Generate switch without discriminant as if/else if/else chain (for statement context)

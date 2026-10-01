@@ -2,10 +2,10 @@
 
 import { PineMapObject } from '../PineMapObject';
 import { Context } from '../../../Context.class';
+import { resolveMapKey } from '../utils';
 
 export function contains(context: Context) {
     return (id: PineMapObject, key: any) => {
-        return id.map.has(key);
+        return id.map.has(resolveMapKey(id.map, key));
     };
 }
-

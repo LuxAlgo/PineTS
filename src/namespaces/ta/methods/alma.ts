@@ -12,26 +12,47 @@ import { Series } from '../../../Series';
  * @param period - The number of periods (window size)
  * @param offset - Position of Gaussian peak (0-1, default 0.85). Higher = more responsive
  * @param sigma - Width of Gaussian curve (default 6). Higher = smoother
+ * @param floor - Floor the peak position `offset * (period - 1)` (default false)
  * 
  * Formula:
- * - m = offset * (period - 1)
+ * - m = offset * (period - 1)   (floored when `floor` is true)
  * - s = period / sigma
  * - weight[i] = exp(-((i - m)^2) / (2 * s^2))
  * - ALMA = sum(weight[i] * price[i]) / sum(weight[i])
  */
 export function alma(context: any) {
-    return (source: any, _period: any, _offset: any, _sigma: any, _callId?: string) => {
+    return (source: any, _period: any, _offset: any, _sigma: any, ...rest: any[]) => {
+        // The transpiler appends the call id after the optional `floor` argument.
+        const _callId: string | undefined = typeof rest[rest.length - 1] === 'string' ? rest.pop() : undefined;
         const period = Series.from(_period).get(0);
         const offset = Series.from(_offset).get(0);
         const sigma = Series.from(_sigma).get(0);
+        const floor = rest.length > 0 && !!Series.from(rest[0]).get(0);
 
         // Incremental ALMA calculation using rolling window
         if (!context.taState) context.taState = {};
-        const stateKey = _callId || `alma_${period}_${offset}_${sigma}`;
+        const stateKey = _callId || `alma_${period}_${offset}_${sigma}_${floor}`;
 
         if (!context.taState[stateKey]) {
-            // Pre-calculate weights (they're constant for given parameters)
-            const m = offset * (period - 1);
+            context.taState[stateKey] = { 
+                lastIdx: -1,
+                // Committed state
+                prevWindow: [],
+                prevCallCount: 0,
+                // Tentative state (working window)
+                currentWindow: [],
+                currentCallCount: 0,
+                // Weights for `weightsKey`; a series length recomputes them
+                weightsKey: '',
+                weights: [],
+            };
+        }
+
+        const state = context.taState[stateKey];
+
+        const weightsKey = `${period}_${offset}_${sigma}_${floor}`;
+        if (state.weightsKey !== weightsKey) {
+            const m = floor ? Math.floor(offset * (period - 1)) : offset * (period - 1);
             const s = period / sigma;
             const weights = [];
             let weightSum = 0;
@@ -46,20 +67,9 @@ export function alma(context: any) {
             for (let i = 0; i < weights.length; i++) {
                 weights[i] /= weightSum;
             }
-
-            context.taState[stateKey] = { 
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevCallCount: 0,
-                // Tentative state (working window)
-                currentWindow: [],
-                currentCallCount: 0,
-                weights: weights // weights are constant
-            };
+            state.weights = weights;
+            state.weightsKey = weightsKey;
         }
-
-        const state = context.taState[stateKey];
 
         // Commit logic
         if (context.idx > state.lastIdx) {

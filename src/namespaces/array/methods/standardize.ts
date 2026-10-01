@@ -10,7 +10,7 @@ export function standardize(context: any) {
         if (isNaN(stdev)) {
             return new PineArrayObject(
                 id.array.map(() => NaN),
-                PineArrayType.int,
+                PineArrayType.float,
                 context
             );
         }
@@ -20,14 +20,14 @@ export function standardize(context: any) {
             // This is an edge case behavior observed in testing.
             return new PineArrayObject(
                 id.array.map(() => 1),
-                PineArrayType.int,
+                PineArrayType.float,
                 context
             );
         }
 
         return new PineArrayObject(
             id.array.map((x) => (x - mean) / stdev),
-            PineArrayType.int,
+            PineArrayType.float,
             context
         );
     };

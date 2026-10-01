@@ -33,7 +33,17 @@ import { TableHelper } from './namespaces/table/TableHelper';
 import { FootprintHelper } from './namespaces/footprint/FootprintHelper';
 import { VolumeRowHelper } from './namespaces/footprint/VolumeRowHelper';
 import { Ticker } from './namespaces/Ticker';
+import { isScalarHelper } from './namespaces/utils';
+import { receiverMatchesMethod } from './namespaces/methodDispatch';
 import type { IndicatorOptions } from './types/PineTypes';
+import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
+
+// Stand-in for an na drawing in getter / setter calls: getters return na (`get_text` and
+// `get_tooltip` the na string), setters and anything else do nothing.
+const NA_DRAWING: any = new Proxy(
+    {},
+    { get: (_target, prop) => (prop === 'get_text' || prop === 'get_tooltip' ? () => '' : () => NaN) },
+);
 
 export class Context {
     public data: any = {
@@ -130,6 +140,8 @@ export class Context {
     public source: IProvider | any[];
     public tickerId: string;
     public timeframe: string = '';
+    /** `//@version=` of the running Pine Script source; null for PineTS syntax. */
+    public pineVersion: number | null = null;
     public limit: number;
     public sDate: number;
     public eDate: number;
@@ -262,6 +274,13 @@ export class Context {
             get timenow() {
                 return new Date().getTime();
             },
+            // Best ask / bid are only defined on the 1T timeframe, which PineTS has no data for.
+            get ask() {
+                return NaN;
+            },
+            get bid() {
+                return NaN;
+            },
             get time_tradingday() {
                 // TradingView returns 00:00 UTC of the trading day the bar belongs to.
                 // For daily+ timeframes on 24/7 markets, this equals the bar's close date
@@ -324,11 +343,11 @@ export class Context {
         const chartHelper = new ChartHelper(this);
         this.pine['chart'] = {
             param: chartHelper.param.bind(chartHelper),
-            bg_color: chartHelper.bg_color.bind(chartHelper),
-            fg_color: chartHelper.fg_color.bind(chartHelper),
-            // Chart-type predicates are Pine VARIABLES (`chart.is_heikinashi`, no call) —
-            // exposed as getters so bare member access yields the boolean, like the
-            // visible-range built-ins below.
+            // Chart colors and chart-type predicates are Pine VARIABLES (`chart.fg_color`,
+            // `chart.is_heikinashi`, no call) — exposed as getters so bare member access
+            // yields the value, like the visible-range built-ins below.
+            get bg_color() { return chartHelper.bg_color(); },
+            get fg_color() { return chartHelper.fg_color(); },
             get is_standard() { return chartHelper.is_standard(); },
             get is_heikinashi() { return chartHelper.is_heikinashi(); },
             get is_kagi() { return chartHelper.is_kagi(); },
@@ -405,7 +424,7 @@ export class Context {
             'label',
         );
         Object.defineProperty(this.pine['label'], 'all', {
-            get: () => labelHelper.all,
+            get: () => new PineArrayObject(labelHelper.all, PineArrayType.label, this),
         });
 
         // line namespace
@@ -447,7 +466,7 @@ export class Context {
             'line',
         );
         Object.defineProperty(this.pine['line'], 'all', {
-            get: () => lineHelper.all,
+            get: () => new PineArrayObject(lineHelper.all, PineArrayType.line, this),
         });
 
         // box namespace
@@ -490,21 +509,23 @@ export class Context {
             'box',
         );
         Object.defineProperty(this.pine['box'], 'all', {
-            get: () => boxHelper.all,
+            get: () => new PineArrayObject(boxHelper.all, PineArrayType.box, this),
         });
 
         // linefill namespace
         const linefillHelper = new LinefillHelper(this);
+        // line.delete also deletes the linefills of that line
+        lineHelper.linefills = linefillHelper;
         this.bindContextObject(linefillHelper, ['any', 'new', 'param', 'set_color', 'get_line1', 'get_line2', 'delete'], 'linefill');
         Object.defineProperty(this.pine['linefill'], 'all', {
-            get: () => linefillHelper.all,
+            get: () => new PineArrayObject(linefillHelper.all, PineArrayType.linefill, this),
         });
 
         // polyline namespace
         const polylineHelper = new PolylineHelper(this);
         this.bindContextObject(polylineHelper, ['any', 'new', 'param', 'delete'], 'polyline');
         Object.defineProperty(this.pine['polyline'], 'all', {
-            get: () => polylineHelper.all,
+            get: () => new PineArrayObject(polylineHelper.all, PineArrayType.any, this),
         });
 
         // table namespace
@@ -540,7 +561,7 @@ export class Context {
             'table',
         );
         Object.defineProperty(this.pine['table'], 'all', {
-            get: () => tableHelper.all,
+            get: () => new PineArrayObject(tableHelper.all, PineArrayType.table, this),
         });
 
         // Register all drawing helpers for streaming rollback and plot sync
@@ -669,23 +690,31 @@ export class Context {
 
         // If target doesn't exist, create new Series
         if (!trg) {
-            return new Series([value]);
+            return this.typedSeries([value], value);
         }
 
         // If target is already a Series, update it
         if (trg instanceof Series) {
             trg.data[trg.data.length - 1] = value;
+            if (typeof value === 'boolean' && this.pineVersion >= 6) trg.beforeStart = false;
             return trg;
         }
 
         // Legacy: if trg is an array, convert to Series
         if (Array.isArray(trg)) {
             trg[trg.length - 1] = value;
-            return new Series(trg);
+            return this.typedSeries(trg, value);
         }
 
         // Default: create new Series
-        return new Series([value]);
+        return this.typedSeries([value], value);
+    }
+
+    /** A Series over `data`; a Pine v6 bool series reads `false` before its first bar. */
+    private typedSeries(data: any[], value: any, offset: number = 0): Series {
+        const series = new Series(data, offset);
+        if (typeof value === 'boolean' && this.pineVersion >= 6) series.beforeStart = false;
+        return series;
     }
 
     /**
@@ -737,7 +766,7 @@ export class Context {
             value = this.precision(src);
         }
 
-        return new Series([value]);
+        return this.typedSeries([value], value);
     }
 
     /**
@@ -750,8 +779,12 @@ export class Context {
     private static readonly PRECISION_EPSILON = 10 ** 10; // Cache default epsilon
 
     precision(value: number, decimals: number = 10) {
+        if (typeof value !== 'number') return value;
         const epsilon = decimals === 10 ? Context.PRECISION_EPSILON : 10 ** decimals;
-        return typeof value === 'number' ? Math.round(value * epsilon) / epsilon : value;
+        // From 2^53 / epsilon on, `value * epsilon` is inexact and the round trip moves the value
+        // (2136215970 -> 2136215969.9999998); such a double has no 10th decimal left to round.
+        if (!(Math.abs(value) * epsilon < 2 ** 53)) return value;
+        return Math.round(value * epsilon) / epsilon;
         //if (typeof n !== 'number' || isNaN(n)) return n;
         //return Number(n.toFixed(decimals));
     }
@@ -767,11 +800,15 @@ export class Context {
         if (typeof source === 'string') return source;
         if (source instanceof Series) {
             if (index) {
-                return new Series(source.data, source.offset + index);
+                const view = new Series(source.data, source.offset + index);
+                view.beforeStart = source.beforeStart;
+                return view;
             }
             return source;
         }
 
+        // Record the scalar a dual-use helper stands for, so `strategy.closedtrades[1]` has a history.
+        if (isScalarHelper(source)) source = source.__value;
         if (!Array.isArray(source) && typeof source === 'object') return source;
 
         if (!this.params[name]) this.params[name] = [];
@@ -783,7 +820,7 @@ export class Context {
             } else {
                 this.params[name][this.params[name].length - 1] = source;
             }
-            return new Series(this.params[name], index || 0);
+            return this.typedSeries(this.params[name], source, index || 0);
         }
     }
 
@@ -797,6 +834,7 @@ export class Context {
         // net — Pine offsets are integers; a fractional value indicates
         // int-division divergence). The Series path re-guards offset+index inside
         // Series.get; this covers the array/scalar paths below.
+        if (index == null || Number.isNaN(index)) index = 0;
         if (typeof index === 'number' && !Number.isInteger(index)) index = Math.trunc(index);
 
         if (source instanceof Series) {
@@ -940,6 +978,16 @@ export class Context {
     }
 
     /**
+     * Receiver of a drawing getter / setter call (`b.get_left()`, `t.box.set_right(x)`): the
+     * drawing itself, or for an na drawing a stand-in whose getters return na (`get_text` the
+     * na string) and whose setters do nothing, as on TradingView.
+     */
+    public drawingOrNa(receiver: any) {
+        const isNa = receiver === null || receiver === undefined || (typeof receiver === 'number' && isNaN(receiver));
+        return isNa ? NA_DRAWING : receiver;
+    }
+
+    /**
      * Calls a function with a specific call ID context
      * @param fn - The function to call
      * @param id - The call ID to use
@@ -955,6 +1003,28 @@ export class Context {
         } finally {
             this.popId();
         }
+    }
+
+    /**
+     * `receiver.name(args)` where a user `method` of that name may or may not apply, decided from
+     * the receiver's runtime type (see `receiverMatchesMethod`). No match runs the built-in member
+     * instead; calling any method on `na` is a no-op, like everywhere else in Pine.
+     * @param name - the Pine method name
+     * @param id - the call ID for the user method's local context
+     * @param candidates - `[userFunction, udtName | null]` per overload, in declaration order
+     * @param receiver - the receiver, wrapped like any user-function argument
+     */
+    public callMethod(name: string, id: string, candidates: any[][], receiver: any, ...args: any[]) {
+        const unwrap = (v: any) => (v instanceof Series ? v.get(0) : v);
+        const recv = unwrap(receiver);
+        if (recv === null || recv === undefined || (typeof recv === 'number' && Number.isNaN(recv))) return undefined;
+
+        for (const [fn, factory] of candidates) {
+            if (receiverMatchesMethod(fn, factory, recv)) return this.call(fn, id, receiver, ...args);
+        }
+
+        const member = recv[name];
+        return typeof member === 'function' ? member.apply(recv, args.map(unwrap)) : undefined;
     }
 
     //#endregion

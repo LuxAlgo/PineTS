@@ -5,11 +5,16 @@ import { Context } from '../../../Context.class';
 
 export function sum(context: Context) {
     return (id: PineArrayObject): number => {
-        return context.precision(
-            id.array.reduce((a: number, b: any) => {
-                const val = Number(b);
-                return isNaN(val) ? a : a + val;
-            }, 0)
-        );
+        // Sum of the non-na elements; na when there are none (empty array included).
+        let total = 0;
+        let count = 0;
+        for (const item of id.array) {
+            const val = Number(item);
+            if (!isNaN(val)) {
+                total += val;
+                count++;
+            }
+        }
+        return count === 0 ? NaN : context.precision(total);
     };
 }

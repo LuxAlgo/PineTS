@@ -1,8 +1,8 @@
 {
     "Builtin": {
-        "ask": false,
+        "ask": true,
         "bar_index": true,
-        "bid": false,
+        "bid": true,
         "close": true,
         "dayofmonth": true,
         "dayofweek": true,

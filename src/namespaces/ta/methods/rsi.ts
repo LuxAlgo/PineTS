@@ -44,8 +44,14 @@ export function rsi(context: any) {
 
         const currentValue = Series.from(source).get(0);
 
-        // Skip NaN/null/undefined values — don't advance RSI state
+        // An na bar does not advance the averages, and the change on the next bar is na too (it
+        // needs the value before it), so that bar returns na and only stores its value, as on TradingView.
         if (currentValue === null || currentValue === undefined || isNaN(currentValue)) {
+            state.currentPrevValue = NaN;
+            state.currentInitGains = [...state.prevInitGains];
+            state.currentInitLosses = [...state.prevInitLosses];
+            state.currentAvgGain = state.prevAvgGain;
+            state.currentAvgLoss = state.prevAvgLoss;
             return NaN;
         }
 

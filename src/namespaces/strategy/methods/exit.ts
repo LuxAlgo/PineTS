@@ -86,11 +86,14 @@ export function exit(context: any) {
         const fromEntry        = extractValue(parsed.from_entry);
         const qty              = extractValue(parsed.qty);
         const qtyPercent       = extractValue(parsed.qty_percent);
-        const profit           = extractValue(parsed.profit);
-        const limitRaw         = extractValue(parsed.limit);
-        const loss             = extractValue(parsed.loss);
-        const stopRaw          = extractValue(parsed.stop);
-        const trailPriceRaw    = extractValue(parsed.trail_price);
+        // An na leg is absent: `limit = na` with `profit = ...` uses the profit leg.
+        const isNaValue = (v: any) => (typeof v === 'number' && Number.isNaN(v)) || (typeof v === 'object' && v !== null && '__value' in v);
+        const leg = (v: any) => (isNaValue(v) ? undefined : v);
+        const profit           = leg(extractValue(parsed.profit));
+        const limitRaw         = leg(extractValue(parsed.limit));
+        const loss             = leg(extractValue(parsed.loss));
+        const stopRaw          = leg(extractValue(parsed.stop));
+        const trailPriceRaw    = leg(extractValue(parsed.trail_price));
         const trailPoints      = extractValue(parsed.trail_points);
         const trailOffset      = extractValue(parsed.trail_offset);
 
@@ -121,6 +124,9 @@ export function exit(context: any) {
                   (o: Order) => o.category === 'entry' && o.status === 'pending',
               );
         const attachedAtReversal = !!pendingEntry?._isReversalEntry;
+        // Whether a trade this exit covers is already open. Its levels are then taken as given
+        // even when already breached (a sell stop above the market fills at the next open).
+        const coversOpenTrade = context.strategy.opentrades.some((t: any) => !fromEntryId || t.entry_id === fromEntryId);
 
         // Cadence detection: persistent vs ephemeral capture.
         // If the user called strategy.exit at THIS exact call site on the
@@ -164,6 +170,7 @@ export function exit(context: any) {
             trail_armed: false,
             trail_peak: NaN,
             _attachedAtReversal: attachedAtReversal,
+            _coversOpenTrade: coversOpenTrade,
             _isPersistent: isPersistent,
             _callsiteId: callsiteId,
         };

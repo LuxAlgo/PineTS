@@ -4,7 +4,10 @@ import { PineMapObject } from '../PineMapObject';
 import { Context } from '../../../Context.class';
 
 export function new_fn(context: Context) {
-    return (): PineMapObject => {
-        return new PineMapObject(context);
+    // `valueType` is 'string' for map.new<K, string>() (passed by the transpiler).
+    return (valueType?: string): PineMapObject => {
+        const map = new PineMapObject(context);
+        if (valueType === 'string') map.valueType = valueType;
+        return map;
     };
 }

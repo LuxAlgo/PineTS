@@ -164,7 +164,7 @@ describe('Array Methods - Edge Cases', () => {
         expect(val === 1).toBe(true);
     });
 
-    it('array.slice should handle negative indices', async () => {
+    it('array.slice with a negative index is a runtime error', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
 
         const code = `
@@ -177,17 +177,12 @@ describe('Array Methods - Edge Cases', () => {
             array.set(arr, 3, 4);
             array.set(arr, 4, 5);
             
-            let sliced = array.slice(arr, -2);  // Last 2 elements
-            let size = array.size(sliced);
-            let last = array.last(sliced);
-            
-            plotchar(size, 'size');
-            plotchar(last, 'last');
+            let sliced = array.slice(arr, -2);
+            plotchar(array.size(sliced), 'size');
         `;
 
-        const { plots } = await pineTS.run(code);
-        expect(plots['size']).toBeDefined();
-        expect(plots['last']).toBeDefined();
+        // TradingView: "In 'array.slice()' function. Index -2 is out of bounds, array size is 5."
+        await expect(pineTS.run(code)).rejects.toThrow('Index -2 is out of bounds, array size is 5.');
     });
 
     it('array operations should handle boundary conditions', async () => {

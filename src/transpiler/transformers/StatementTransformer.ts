@@ -14,6 +14,9 @@ import {
     addArrayAccess,
     createScopedVariableReference,
     createScopedVariableAccess,
+    HISTORY_VALUE_OBJECT_TYPES,
+    isNamespaceVariable,
+    transformHistoryOffset,
 } from './ExpressionTransformer';
 
 /**
@@ -981,49 +984,10 @@ export function transformWhileStatement(node: any, scopeManager: ScopeManager, c
     // Suppress hoisting so namespace calls like array.size() stay inline.
     scopeManager.setSuppressHoisting(true);
 
-    // Transform the test condition
-    // Must wrap Series identifiers in $.get() so comparisons use concrete
-    // values, not raw Series objects (e.g. `while bar_index > cnt`).
+    // Transform the test condition like an `if` test (series identifiers read with $.get,
+    // `na(x)` / namespace calls lowered once), with the calls kept inline.
     if (node.test) {
-        walk.recursive(node.test, scopeManager, {
-            Identifier(node: any, state: ScopeManager) {
-                if (!node.computed) {
-                    transformIdentifier(node, state);
-                    if (node.type === 'Identifier') {
-                        const isNamespaceObject =
-                            scopeManager.isContextBound(node.name) &&
-                            node.parent &&
-                            node.parent.type === 'MemberExpression' &&
-                            node.parent.object === node;
-                        if (!isNamespaceObject) {
-                            node.computed = true;
-                            addArrayAccess(node, state);
-                        }
-                    }
-                }
-            },
-            MemberExpression(node: any, state: ScopeManager, c: any) {
-                transformMemberExpression(node, '', scopeManager);
-                // Recurse into non-namespace objects for user variable resolution
-                if (node.type === 'MemberExpression' && node.object) {
-                    if (node.object.type !== 'Identifier' || !scopeManager.isContextBound(node.object.name)) {
-                        c(node.object, state);
-                    }
-                }
-            },
-            CallExpression(node: any, state: ScopeManager, c: any) {
-                // Transform namespace method calls inline (no hoisting)
-                node.callee.parent = node;
-                c(node.callee, state);
-                transformCallExpression(node, state);
-                // Also traverse arguments
-                if (node.arguments) {
-                    for (const arg of node.arguments) {
-                        c(arg, state);
-                    }
-                }
-            },
-        });
+        transformExpression(node.test, scopeManager);
     }
 
     scopeManager.setSuppressHoisting(false);
@@ -1054,6 +1018,13 @@ export function transformExpression(node: any, scopeManager: ScopeManager): void
             if (node.object && node.object.type === 'Identifier'
                 && !scopeManager.isContextBound(node.object.name)
                 && !node.computed) {
+                node.object.parent = node;
+                c(node.object, state);
+            }
+            // Member chains (`pts.last().price`, `o.inner.body`): lower the object
+            // first so the chain's base is scoped.
+            else if (node.object && !node.computed
+                && (node.object.type === 'CallExpression' || node.object.type === 'MemberExpression')) {
                 node.object.parent = node;
                 c(node.object, state);
             }
@@ -1142,9 +1113,51 @@ export function transformIfStatement(node: any, scopeManager: ScopeManager, c: a
     // Transform the else branch (alternate) if it exists
     if (node.alternate) {
         scopeManager.pushScope('els');
-        c(node.alternate, scopeManager);
+        if (node.alternate.type === 'IfStatement') {
+            // An `else if` condition runs only when the earlier branches were not taken, so the
+            // calls hoisted out of it must land inside the else branch, not before the whole `if`.
+            const block = { type: 'BlockStatement', body: [node.alternate] };
+            c(block, scopeManager);
+            node.alternate = block.body.length === 1 && block.body[0].type === 'IfStatement' ? block.body[0] : block;
+        } else {
+            c(node.alternate, scopeManager);
+        }
         scopeManager.popScope();
     }
+}
+
+/**
+ * Lowers the object of a non-computed member access before the access itself, as the
+ * main walker does, so the base of a chain (`m0.body`, `pts.last().price`) is scoped.
+ * Computed accesses (`x[1]`) keep their raw object for `transformMemberExpression`.
+ */
+function lowerMemberObject(node: any, scopeManager: ScopeManager, c: any): void {
+    const obj = node.object;
+    if (!obj || node.computed) return;
+    if (obj.type === 'Identifier') {
+        if (scopeManager.isContextBound(obj.name)) return;
+        obj.parent = node;
+        transformIdentifier(obj, scopeManager);
+    } else if (obj.type === 'MemberExpression' || (obj.type === 'CallExpression' && !isContextCall(obj))) {
+        obj.parent = node;
+        c(obj, scopeManager);
+    }
+}
+
+/** `$.get(...)`, `$.param(...)`: already lowered, its arguments must not be walked again. */
+function isContextCall(node: any): boolean {
+    return node.callee?.type === 'MemberExpression' && node.callee.object?.type === 'Identifier' && node.callee.object.name === CONTEXT_NAME;
+}
+
+/** An already-scoped variable reference: `$.const.x`, `$.let.x`, `$.var.x`, `$.params.x`. */
+function isContextVariableRef(node: any): boolean {
+    const obj = node.object;
+    return (
+        obj?.type === 'MemberExpression' &&
+        obj.object?.type === 'Identifier' &&
+        obj.object.name === CONTEXT_NAME &&
+        ['const', 'let', 'var', 'params'].includes(obj.property?.name)
+    );
 }
 
 export function transformReturnStatement(node: any, scopeManager: ScopeManager): void {
@@ -1172,22 +1185,10 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
 
                     // Transform non-context-bound variables
                     return createScopedVariableAccess(element.name, scopeManager);
-                } else if (element.type === 'MemberExpression') {
-                    // Check if this is a context variable reference ($.const.xxx, $.let.xxx, etc.)
-                    const isContextVarRef =
-                        element.object &&
-                        element.object.type === 'MemberExpression' &&
-                        element.object.object &&
-                        element.object.object.type === 'Identifier' &&
-                        element.object.object.name === '$' &&
-                        element.object.property &&
-                        ['const', 'let', 'var', 'params'].includes(element.object.property.name);
-
-                    if (isContextVarRef) {
-                        // Use $.get($.const.xxx, 0) instead of $.const.xxx[0]
-                        return ASTFactory.createGetCall(element, 0);
-                    }
-
+                } else if (element.type === 'MemberExpression' && isContextVariableRef(element)) {
+                    // Use $.get($.const.xxx, 0) instead of $.const.xxx[0]
+                    return ASTFactory.createGetCall(element, 0);
+                } else if (element.type === 'MemberExpression' && element.computed) {
                     // Context-bound computed subscripts (`bar_index[len]`,
                     // `close[n]`, ...) in a return tuple must be lowered to
                     // `$.get(series, idx)` like everywhere else. This block used
@@ -1198,6 +1199,9 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                     transformMemberExpression(element, '', scopeManager);
                     return element;
                 } else if (
+                    // Field chains (`bar.buy`, `pts.last().price`) go through the walker so
+                    // their object is lowered first.
+                    element.type === 'MemberExpression' ||
                     element.type === 'BinaryExpression' ||
                     element.type === 'LogicalExpression' ||
                     element.type === 'ConditionalExpression' ||
@@ -1213,7 +1217,8 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                                 node._arrayAccessed = true;
                             }
                         },
-                        MemberExpression(node: any) {
+                        MemberExpression(node: any, state: ScopeManager, c: any) {
+                            lowerMemberObject(node, state, c);
                             transformMemberExpression(node, '', scopeManager);
                         },
                         CallExpression(node: any, state: ScopeManager, c: any) {
@@ -1335,12 +1340,18 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                 // For context-bound identifiers, add [0] array access if not already an array access
                 node.argument = ASTFactory.createArrayAccess(node.argument, 0);
             } else if (node.argument.type === 'MemberExpression') {
-                // `func(...)[N]` as a direct return value: route through
+                // `func(...)[N]` / `ta.nvi[N]` as a direct return value: route through
                 // transformMemberExpression so the call-result history ref is
                 // lowered to `$.get($.param(...), N)` (a scalar). Otherwise the
                 // return path leaves a raw subscript on a scalar (→ NaN).
-                if (node.argument.computed && node.argument.object.type === 'CallExpression') {
+                if (
+                    node.argument.computed &&
+                    (HISTORY_VALUE_OBJECT_TYPES.includes(node.argument.object.type) || isNamespaceVariable(node.argument.object, scopeManager))
+                ) {
                     transformMemberExpression(node.argument, '', scopeManager);
+                    if (node.argument._historyTransformed) {
+                        node.argument.arguments[1] = transformHistoryOffset(node.argument.arguments[1], scopeManager);
+                    }
                 }
                 // For member expressions, check if the object is context-bound
                 else if (
@@ -1393,7 +1404,8 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                             node._arrayAccessed = true;
                         }
                     },
-                    MemberExpression(node: any) {
+                    MemberExpression(node: any, state: ScopeManager, c: any) {
+                        lowerMemberObject(node, state, c);
                         transformMemberExpression(node, '', scopeManager);
                     },
                     // When an arrow function's last statement is an assignment

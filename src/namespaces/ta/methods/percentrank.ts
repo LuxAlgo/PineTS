@@ -17,24 +17,17 @@ export function percentrank(context: any) {
         }
 
         const currentValue = series.get(0);
-        if (isNaN(currentValue)) return NaN;
 
+        // As on TradingView, an na value (current or previous) compares false, so it is not counted,
+        // and the count is always divided by `length`: an na bar returns 0.
         let count = 0;
-        let validValues = 0;
-
-        for (let i = 1; i <= length; i++) {
-            const val = series.get(i);
-
-            if (isNaN(val)) continue;
-            validValues++;
-
-            if (val <= currentValue) {
-                count++;
+        if (currentValue !== null && currentValue !== undefined) {
+            for (let i = 1; i <= length; i++) {
+                const val = series.get(i);
+                if (val !== null && val !== undefined && val <= currentValue) count++;
             }
         }
 
-        if (validValues === 0) return NaN;
-
-        return context.precision((count / validValues) * 100);
+        return context.precision((count / length) * 100);
     };
 }

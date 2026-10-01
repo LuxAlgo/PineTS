@@ -43,10 +43,10 @@ export function cum(context: any) {
 
         const currentValue = Series.from(source).get(0);
 
-        // Handle NaN input - don't add to cumulative sum
+        // An na bar returns na and adds nothing (TradingView), so bars before the first value are na too.
         if (isNaN(currentValue)) {
             state.currentCumulativeSum = state.prevCumulativeSum;
-            return context.precision(state.prevCumulativeSum);
+            return NaN;
         }
 
         // Add current value to committed cumulative sum

@@ -24,8 +24,8 @@ parent: API Coverage
 | `open`            | ✅     | Open price                             |
 | `timenow`         | ✅     | Current time                           |
 | `volume`          | ✅     | Volume                                 |
-| `ask`             |        | Ask price                              |
-| `bid`             |        | Bid price                              |
+| `ask`             | ✅     | Ask price (na: only defined on the 1T timeframe) |
+| `bid`             | ✅     | Bid price (na: only defined on the 1T timeframe) |
 | `dayofmonth`      | ✅     | Day of month                           |
 | `dayofweek`       | ✅     | Day of week                            |
 | `hour`            | ✅     | Hour                                   |

@@ -34,11 +34,14 @@ export function wma(context: any) {
         }
 
         const currentValue = Series.from(source).get(0);
+        const currentIsNa = currentValue === null || currentValue === undefined || Number.isNaN(currentValue);
 
         // Use committed state
         const window = [...state.prevWindow];
 
-        window.unshift(currentValue);
+        // TradingView weighs an na bar with the last non-na value before it (and returns na on the
+        // na bar itself), so the window holds the source with na values filled forward.
+        window.unshift(currentIsNa ? (window.length ? window[0] : NaN) : currentValue);
 
         while (window.length > period) {
             window.pop();
@@ -51,13 +54,16 @@ export function wma(context: any) {
             while (window.length < period) {
                 window.push(series.get(window.length));
             }
+            for (let i = window.length - 2; i >= 0; i--) {
+                if (Number.isNaN(window[i])) window[i] = window[i + 1];
+            }
         }
 
         // Update tentative state
         state.currentWindow = window;
         state.currentCallCount = callCount;
 
-        if (window.length < period) {
+        if (window.length < period || currentIsNa || window.some((v) => Number.isNaN(v))) {
             return NaN;
         }
 

@@ -56,6 +56,8 @@ export interface StrategyConfig {
  */
 export interface Trade {
     id: string; // unique trade id (internal)
+    _exits_filled?: Set<string>; // ids of strategy.exit orders that already closed part of this trade
+    _entry_qty?: number; // size when the trade opened (base of strategy.exit qty_percent)
     entry_id: string; // id passed to strategy.entry()
     entry_price: number;
     entry_bar_index: number;
@@ -164,6 +166,11 @@ export interface Order {
     // persistent-pattern exits.
     _isPersistent?: boolean;
     _callsiteId?: string;
+    // Internal: strategy.exit queued while a trade it covers was already open (its limit / stop
+    // levels are then never dropped as wrong-sided).
+    _coversOpenTrade?: boolean;
+    // Internal: stop-limit entry whose stop has been reached; it now works as a limit order.
+    _stopTriggered?: boolean;
 
     // Internal: snapshot of open trade IDs at the moment strategy.close_all()
     // or strategy.close(id) was called. TV binds `close_all` / `close(id)` to

@@ -45,6 +45,7 @@ import { stdev as stdev_factory } from './methods/stdev';
 import { sum as sum_factory } from './methods/sum';
 import { unshift as unshift_factory } from './methods/unshift';
 import { variance as variance_factory } from './methods/variance';
+import { tostringElements } from './format';
 
 export enum PineArrayType {
     any = '',
@@ -151,8 +152,13 @@ export class PineArrayObject {
         this._variance = variance_factory(this.context);
     }
 
+    // Element count for JavaScript callers (PineTS syntax: `line.all.length`); Pine uses size().
+    get length(): number {
+        return this.array.length;
+    }
+
     toString(): string {
-        return '[' + this.array.toString().replace(/,/g, ', ') + ']';
+        return '[' + tostringElements(this).join(', ') + ']';
     }
 
     [Symbol.iterator]() {

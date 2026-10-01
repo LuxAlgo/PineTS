@@ -4,6 +4,7 @@ import { Series } from '../../Series';
 import { parseArgsForPineParams } from '../utils';
 import { LineObject } from './LineObject';
 import { ChartPointObject } from '../chart/ChartPointObject';
+import { resolvePoint } from '../chart/resolvePoint';
 import { NAHelper } from '../Core';
 import { silentInSecondary } from '../silentInSecondary';
 
@@ -23,6 +24,7 @@ const LINE_NEW_ARGS_TYPES = {
 
 export class LineHelper {
     private _lines: LineObject[] = [];
+    public linefills: { deleteForLine(line: LineObject): void } | null = null;
 
     constructor(private context: any) {}
 
@@ -73,19 +75,8 @@ export class LineHelper {
         }
     }
 
-    private _resolvePoint(point: ChartPointObject): { x: number; xloc: string } {
-        // Treat NaN as "not provided" so `chart.point.new(time, na, price)`
-        // (idiomatic in TV-published indicators — e.g. SMC's drawStructure)
-        // correctly resolves to a time-based point. Without the NaN check,
-        // `point.index !== undefined` is true for NaN and the helper
-        // returns x = NaN, leaving every line/box with x1=NaN/x2=NaN.
-        const hasIndex = point.index !== undefined &&
-            !(typeof point.index === 'number' && isNaN(point.index));
-        const hasTime = point.time !== undefined &&
-            !(typeof point.time === 'number' && isNaN(point.time));
-        if (hasIndex) return { x: point.index!, xloc: 'bi' };
-        if (hasTime) return { x: point.time!, xloc: 'bt' };
-        return { x: 0, xloc: 'bi' };
+    private _resolvePoint(point: ChartPointObject, xloc?: string): { x: number; xloc: string } {
+        return resolvePoint(point, xloc);
     }
 
     /**
@@ -185,13 +176,13 @@ export class LineHelper {
         if (parsed.first_point instanceof ChartPointObject) {
             const pt1 = parsed.first_point as ChartPointObject;
             const pt2 = parsed.second_point as ChartPointObject;
-            const r1 = this._resolvePoint(pt1);
+            const r1 = this._resolvePoint(pt1, xloc);
             x1 = r1.x;
             y1 = pt1.price;
             xloc = xloc || r1.xloc;
 
             if (pt2 instanceof ChartPointObject) {
-                const r2 = this._resolvePoint(pt2);
+                const r2 = this._resolvePoint(pt2, xloc);
                 x2 = r2.x;
                 y2 = pt2.price;
             } else {
@@ -301,42 +292,39 @@ export class LineHelper {
         }
     }
 
+    // A point sets the coordinate the line's xloc reads (its time for xloc.bar_time).
     @silentInSecondary
     set_first_point(id: LineObject, point: ChartPointObject): void {
         if (id && !id._deleted && point) {
-            const r = this._resolvePoint(point);
-            id.x1 = r.x;
+            id.x1 = this._resolvePoint(point, id.xloc).x;
             id.y1 = point.price;
-            id.xloc = r.xloc;
         }
     }
 
     @silentInSecondary
     set_second_point(id: LineObject, point: ChartPointObject): void {
         if (id && !id._deleted && point) {
-            const r = this._resolvePoint(point);
-            id.x2 = r.x;
+            id.x2 = this._resolvePoint(point, id.xloc).x;
             id.y2 = point.price;
-            id.xloc = r.xloc;
         }
     }
 
-    // --- Getter methods ---
+    // --- Getter methods (na for an na or deleted line) ---
 
     get_x1(id: LineObject): number {
-        return id ? id.x1 : NaN;
+        return id && !id._deleted ? id.x1 : NaN;
     }
 
     get_y1(id: LineObject): number {
-        return id ? id.y1 : NaN;
+        return id && !id._deleted ? id.y1 : NaN;
     }
 
     get_x2(id: LineObject): number {
-        return id ? id.x2 : NaN;
+        return id && !id._deleted ? id.x2 : NaN;
     }
 
     get_y2(id: LineObject): number {
-        return id ? id.y2 : NaN;
+        return id && !id._deleted ? id.y2 : NaN;
     }
 
     // line.get_price(id, x) — returns price at bar index x along the line
@@ -354,7 +342,7 @@ export class LineHelper {
     @silentInSecondary
     copy(id: LineObject): LineObject | undefined {
         if (!id) return undefined;
-        const ln = id.copy();
+        const ln = id._clone();
         ln._helper = this;
         ln._createdAtBar = this.context.idx;
         this._lines.push(ln);
@@ -362,9 +350,12 @@ export class LineHelper {
         return ln;
     }
 
+    // Deleting a line deletes its linefills (the max_lines_count cleanup does not).
     @silentInSecondary
     delete(id: LineObject): void {
-        if (id) id._deleted = true;
+        if (!id) return;
+        id._deleted = true;
+        if (id instanceof LineObject) this.linefills?.deleteForLine(id);
     }
 
     // --- Property: all active lines ---

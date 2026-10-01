@@ -23,14 +23,57 @@
 /** The modifier suffixes recognized as chart-type markers. */
 const KNOWN_MODIFIERS = new Set(['heikinashi', 'standard']);
 
-/** Split `"SYM;modifier"` into its parts. Plain symbols yield `modifier: null`. */
+/**
+ * Session / adjustment modifiers of a ticker id, keyed as in TradingView's encoded form
+ * `={"adjustment":"splits","session":"extended","symbol":"BINANCE:BTCUSDT"}`.
+ */
+export type TickerModifiers = Record<string, string | boolean>;
+
+/** Split TradingView's encoded ticker id into its symbol and modifiers. Plain ids have no modifiers. */
+export function decodeTickerId(tickerId: string): { symbol: string; modifiers: TickerModifiers } {
+    if (typeof tickerId === 'string' && tickerId.startsWith('={')) {
+        try {
+            const { symbol, ...modifiers } = JSON.parse(tickerId.slice(1));
+            if (typeof symbol === 'string') return { symbol, modifiers };
+        } catch {
+            // not an encoded id: fall through
+        }
+    }
+    return { symbol: tickerId, modifiers: {} };
+}
+
+/** TradingView's ticker id for `symbol` with `modifiers`: the plain symbol, or `={...}` with sorted keys. */
+export function encodeTickerId(symbol: string, modifiers: TickerModifiers): string {
+    const keys = Object.keys(modifiers).filter((k) => modifiers[k] !== undefined);
+    if (keys.length === 0) return symbol;
+    const entries: [string, string | boolean][] = keys.map((k) => [k, modifiers[k]]);
+    entries.push(['symbol', symbol]);
+    entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return '=' + JSON.stringify(Object.fromEntries(entries));
+}
+
+/**
+ * Split `"SYM;modifier"` into its parts. Plain symbols yield `modifier: null`. The symbol is always
+ * plain: session / adjustment modifiers of an encoded id (`={"session":…,"symbol":"SYM"}`) are dropped.
+ */
 export function splitTickerModifier(tickerId: string): { symbol: string; modifier: string | null } {
     if (typeof tickerId !== 'string') return { symbol: tickerId, modifier: null };
     const at = tickerId.lastIndexOf(';');
-    if (at <= 0 || at === tickerId.length - 1) return { symbol: tickerId, modifier: null };
+    if (at <= 0 || at === tickerId.length - 1) return { symbol: decodeTickerId(tickerId).symbol, modifier: null };
     const modifier = tickerId.slice(at + 1).toLowerCase();
-    if (!KNOWN_MODIFIERS.has(modifier)) return { symbol: tickerId, modifier: null };
-    return { symbol: tickerId.slice(0, at), modifier };
+    if (!KNOWN_MODIFIERS.has(modifier)) return { symbol: decodeTickerId(tickerId).symbol, modifier: null };
+    return { symbol: decodeTickerId(tickerId.slice(0, at)).symbol, modifier };
+}
+
+/**
+ * The ticker id a data source can serve: an encoded id's symbol, keeping a chart-type suffix
+ * (`={"session":"extended","symbol":"SYM"};heikinashi` → `SYM;heikinashi`). Session and
+ * adjustment modifiers are dropped: no bundled provider serves them.
+ */
+export function plainTickerId(tickerId: string): string {
+    if (typeof tickerId !== 'string') return tickerId;
+    const { symbol, modifier } = splitTickerModifier(tickerId);
+    return modifier ? `${symbol};${modifier}` : symbol;
 }
 
 /** The plain symbol with any chart-type modifier removed. */
@@ -38,7 +81,12 @@ export function stripTickerModifier(tickerId: string): string {
     return splitTickerModifier(tickerId).symbol;
 }
 
-/** Append a chart-type modifier (replacing any existing one; idempotent). */
+/**
+ * Append a chart-type modifier (replacing any existing one; idempotent). Session / adjustment
+ * modifiers of an encoded id are kept, so the order of `ticker.heikinashi` / `ticker.modify` does not matter.
+ */
 export function withTickerModifier(tickerId: string, modifier: string): string {
-    return `${stripTickerModifier(tickerId)};${modifier}`;
+    const { modifier: current } = splitTickerModifier(tickerId);
+    const base = current ? tickerId.slice(0, tickerId.lastIndexOf(';')) : tickerId;
+    return `${base};${modifier}`;
 }

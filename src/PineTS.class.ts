@@ -3,22 +3,16 @@
 import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { Context } from './Context.class';
 import { splitTickerModifier, withTickerModifier } from './tickerModifier';
+import { createSyminfo } from './namespaces/Syminfo';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
-import { processStrategyOrders, processExitOrders, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, isAdverseFirstBar, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState } from './namespaces/strategy/utils';
+import { processStrategyOrders, processOrdersOnClose, processExitOrders, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, isAdverseFirstBar, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState } from './namespaces/strategy/utils';
 
-// ── Timeframe duration utility ──────────────────────────────────────
-//prettier-ignore
-const TIMEFRAME_DURATION_MS: Record<string, number> = {
-    '1': 60_000, '3': 180_000, '5': 300_000, '15': 900_000, '30': 1_800_000,
-    '60': 3_600_000, '120': 7_200_000, '180': 10_800_000, '240': 14_400_000,
-    '4H': 14_400_000, '1D': 86_400_000, 'D': 86_400_000,
-    '1W': 604_800_000, 'W': 604_800_000,
-    '1M': 30 * 86_400_000, 'M': 30 * 86_400_000,
-};
+import { parseTimeframe, timeframeSeconds } from './timeframe';
+
 function getTimeframeDurationMs(timeframe: string | undefined): number {
-    if (!timeframe) return 86_400_000; // default to 1D when timeframe is unknown
-    return TIMEFRAME_DURATION_MS[timeframe] ?? TIMEFRAME_DURATION_MS[timeframe.toUpperCase()] ?? 86_400_000;
+    const tf = parseTimeframe(timeframe);
+    return tf ? timeframeSeconds(tf) * 1000 : 86_400_000; // default to 1D when timeframe is unknown
 }
 
 /**
@@ -456,6 +450,7 @@ export class PineTS {
         if (!periods) periods = this.data.length;
 
         const context = this._initializeContext(null as any, inputs, this._isSecondaryContext);
+        context.pineVersion = (transpiledFn as any)._pineVersion ?? null;
         this._transpiledCode = transpiledFn;
         // Preserve slice attribution on the context so any nested LTF
         // request inside the slice can keep using the same map.
@@ -485,6 +480,7 @@ export class PineTS {
         this._usesVisibleRange = prepared.usesVisibleRange;
 
         const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
+        context.pineVersion = (prepared.fn as any)._pineVersion ?? null;
         this._transpiledCode = prepared.fn;
         // Propagate transpile-time slices (one per request.security_lower_tf
         // call site) onto the Context so the slow path of the LTF runtime
@@ -530,6 +526,7 @@ export class PineTS {
         this._usesVisibleRange = prepared.usesVisibleRange;
 
         const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
+        context.pineVersion = (prepared.fn as any)._pineVersion ?? null;
         this._transpiledCode = prepared.fn;
         if (prepared.ltfSlices) (context as any)._ltfTruncatedBodies = prepared.ltfSlices;
 
@@ -1078,7 +1075,7 @@ export class PineTS {
             inputs,
         });
 
-        context.pine.syminfo = this._syminfo;
+        context.pine.syminfo = createSyminfo(this._syminfo);
         // THE CHART TYPE IS THE TICKER (single source of truth): a non-standard chart is
         // addressed by an extended ticker — `new PineTS(source, "SYM;heikinashi", …)` — so
         // the data source can distinguish the chart series from standard-data requests.
@@ -1090,10 +1087,10 @@ export class PineTS {
         const chartModifier = splitTickerModifier(String(this.tickerId ?? '')).modifier;
         context.chartStyle = chartModifier === 'heikinashi' ? 'heikinashi' : 'standard';
         if (this._syminfo && chartModifier === 'heikinashi') {
-            context.pine.syminfo = {
+            context.pine.syminfo = createSyminfo({
                 ...this._syminfo,
                 tickerid: withTickerModifier(String(this._syminfo.tickerid ?? this.tickerId), 'heikinashi'),
-            };
+            });
         }
         // Chart timezone only affects display formatting (log timestamps).
         // It does NOT override syminfo.timezone, which drives computation
@@ -1197,6 +1194,10 @@ export class PineTS {
             }
 
             const result = await transpiledFn(context);
+
+            // Market orders placed on this bar that fill at its close
+            // (process_orders_on_close, close(immediately = true)).
+            if (context.strategy) processOrdersOnClose(context);
 
             //collect results
             if (typeof result === 'object') {

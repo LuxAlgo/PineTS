@@ -7,6 +7,7 @@ export function copy(context: Context) {
     return (id: PineMapObject) => {
         const newMap = new PineMapObject(context);
         newMap.map = new Map(id.map);
+        newMap.valueType = id.valueType;
         return newMap;
     };
 }

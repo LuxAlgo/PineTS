@@ -340,6 +340,8 @@ export const CONTEXT_PINE_VARS = [
     'last_bar_index',
     'last_bar_time',
     'timenow',
+    'ask',
+    'bid',
     'inputs',
     'time',
     'time_close',

@@ -1,87 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { nonNaWindow } from '../utils/nonNaWindow';
 
 export function stdev(context: any) {
-    return (source: any, _length: any, _bias: any = true, _callId?: string) => {
+    return (source: any, _length: any, ...rest: any[]) => {
+        // The transpiler appends the call id after the optional `biased` argument.
+        const _callId: string | undefined = typeof rest[rest.length - 1] === 'string' ? rest.pop() : undefined;
         const length = Series.from(_length).get(0);
-        const bias = Series.from(_bias).get(0);
+        const bias = rest.length === 0 || !!Series.from(rest[0]).get(0);
+        const series = Series.from(source);
 
-        // Standard Deviation
-        if (!context.taState) context.taState = {};
-        const stateKey = _callId || `stdev_${length}_${bias}`;
+        // Over the last `length` non-na values (na values are skipped, as on TradingView).
+        const window = nonNaWindow(context, _callId || `stdev_${length}_${bias}`, (k) => series.get(k), length);
+        if (!window) return NaN;
 
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevSum: 0,
-                prevCallCount: 0,
-                // Tentative state
-                currentWindow: [],
-                currentSum: 0,
-                currentCallCount: 0,
-            };
-        }
-
-        const state = context.taState[stateKey];
-
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-                state.prevSum = state.currentSum;
-                state.prevCallCount = state.currentCallCount;
-            }
-            state.lastIdx = context.idx;
-        }
-
-        const currentValue = Series.from(source).get(0);
-
-        // Fix: Handle NaN/null values by skipping them
-        if (currentValue === null || currentValue === undefined || isNaN(currentValue)) {
-            return NaN;
-        }
-
-        // Use committed state
-        const window = [...state.prevWindow];
-        let sum = state.prevSum;
-
-        window.unshift(currentValue);
-        sum += currentValue;
-
-        while (window.length > length) {
-            const oldValue = window.pop();
-            sum -= oldValue;
-        }
-
-        // Track actual call count for callsite-correct backfill
-        const callCount = state.prevCallCount + 1;
-        if (window.length < length && (callCount >= length || context.idx >= length - 1)) {
-            const series = Series.from(source);
-            while (window.length < length) {
-                const val = series.get(window.length);
-                if (val === null || val === undefined || isNaN(val)) break;
-                window.push(val);
-                sum += val;
-            }
-        }
-
-        // Update tentative state
-        state.currentWindow = window;
-        state.currentSum = sum;
-        state.currentCallCount = callCount;
-
-        if (window.length < length) {
-            return NaN;
-        }
-
-        const mean = sum / length;
+        const mean = window.sum / length;
         let sumSquaredDiff = 0;
-        for (let i = 0; i < length; i++) {
-            sumSquaredDiff += Math.pow(window[i] - mean, 2);
-        }
+        for (const v of window.values) sumSquaredDiff += Math.pow(v - mean, 2);
 
         const divisor = bias ? length : length - 1;
         const stdev = Math.sqrt(sumSquaredDiff / divisor);

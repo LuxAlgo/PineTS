@@ -2,8 +2,8 @@
 
 import { PineTS } from '../../../PineTS.class';
 import { Series } from '../../../Series';
-import { splitTickerModifier, withTickerModifier } from '../../../tickerModifier';
-import { TIMEFRAMES, normalizeTimeframe } from '../utils/TIMEFRAMES';
+import { plainTickerId, splitTickerModifier, withTickerModifier } from '../../../tickerModifier';
+import { formatTimeframe, parseTimeframe, timeframeSeconds } from '../../../timeframe';
 import { findSecContextIdx } from '../utils/findSecContextIdx';
 import { findLTFContextIdx } from '../utils/findLTFContextIdx';
 import { parseArgsForPineParams } from '../../utils';
@@ -139,7 +139,9 @@ export function security(context: any) {
         const chartModifier = ctxParts.modifier === 'standard' ? null : ctxParts.modifier;
         // Empty string "" means "use chart's symbol" (Pine Script spec) — i.e. the chart's own
         // ticker, modifier included.
-        const resolvedSymbol = rawSymbol === '' ? context.tickerId : rawSymbol;
+        // An encoded tickerid (ticker.new / ticker.modify with a session or adjustment) is requested
+        // as its symbol.
+        const resolvedSymbol = plainTickerId(rawSymbol === '' ? context.tickerId : rawSymbol);
         const _symbol = typeof resolvedSymbol === 'string' && resolvedSymbol.includes(':') ? resolvedSymbol.split(':')[1] : resolvedSymbol;
         const rawTimeframe = timeframeSlot instanceof Series ? timeframeSlot.get(0) : timeframeSlot;
         // Empty string "" means "use chart's timeframe" (Pine Script spec)
@@ -171,12 +173,14 @@ export function security(context: any) {
             return Array.isArray(resolved) ? [resolved] : resolved;
         }
 
-        const ctxTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(context.timeframe));
-        const reqTimeframeIdx = TIMEFRAMES.indexOf(normalizeTimeframe(_timeframe));
+        const ctxTimeframe = parseTimeframe(context.timeframe);
+        const reqTimeframe = parseTimeframe(_timeframe);
 
-        if (ctxTimeframeIdx == -1 || reqTimeframeIdx == -1) {
-            throw new Error('Invalid timeframe');
+        if (!ctxTimeframe || !reqTimeframe) {
+            throw new Error(`Invalid value of the 'timeframe' argument ('${reqTimeframe ? context.timeframe : _timeframe}') in the 'security' function.`);
         }
+        const ctxSeconds = timeframeSeconds(ctxTimeframe);
+        const reqSeconds = timeframeSeconds(reqTimeframe);
 
         // Same-timeframe shortcut is only valid when the requested symbol is the
         // chart's symbol — at that point the secondary would just re-evaluate the
@@ -192,14 +196,16 @@ export function security(context: any) {
         const reqModifier = reqParts.modifier === 'standard' ? null : reqParts.modifier; // ";standard" ≡ no modifier
         const isSameSymbol = !_symbol || _symbol === '' || (reqParts.symbol === ctxParts.symbol && reqModifier === chartModifier);
 
-        if (ctxTimeframeIdx === reqTimeframeIdx && isSameSymbol) {
+        // Same length is not enough: "7D" bars follow the yearly day grid, "W" bars start on Mondays.
+        const isSameTimeframe = formatTimeframe(ctxTimeframe) === formatTimeframe(reqTimeframe);
+        if (isSameTimeframe && isSameSymbol) {
             // Resolve any helper objects (TimeComponentHelper, NAHelper, Series, etc.)
             // in the expression that haven't been extracted to their primitive values yet.
             const resolved = resolveExprValue(_expression);
             return Array.isArray(resolved) ? [resolved] : resolved;
         }
 
-        const isLTF = ctxTimeframeIdx > reqTimeframeIdx;
+        const isLTF = ctxSeconds > reqSeconds;
 
         const myOpenTime = Series.from(context.data.openTime).get(0);
         const myCloseTime = Series.from(context.data.closeTime).get(0);
@@ -268,8 +274,9 @@ export function security(context: any) {
             return Array.isArray(value) ? [value] : value;
         }
 
-        // Buffer to extend date range and ensure bar boundaries are covered
-        const buffer = 1000 * 60 * 60 * 24 * 30; // 30 days buffer (generous)
+        // Buffer to extend date range and ensure bar boundaries are covered: 30 days, or two
+        // bars of the requested timeframe so lookahead_off has a completed bar at the start.
+        const buffer = Math.max(1000 * 60 * 60 * 24 * 30, 2 * reqSeconds * 1000);
 
         // Determine start date for secondary context.
         // Use context.sDate if available, otherwise derive from the earliest bar's

@@ -22,12 +22,12 @@ describe('MockProvider.getSymbolInfo', () => {
             expect(symbolInfo.ticker).toBe('BTCUSDT');
             expect(symbolInfo.tickerid).toBe('BINANCE:BTCUSDT');
             expect(symbolInfo.prefix).toBe('BINANCE');
-            expect(symbolInfo.root).toBe('BTC');
+            expect(symbolInfo.root).toBe('BTCUSDT');
             expect(symbolInfo.basecurrency).toBe('BTC');
             expect(symbolInfo.currency).toBe('USDT');
             expect(symbolInfo.type).toBe('crypto');
             expect(symbolInfo.current_contract).toBe('');
-            expect(symbolInfo.session).toBe('24x7');
+            expect(symbolInfo.session).toBe('regular');
             expect(symbolInfo.timezone).toBe('Etc/UTC');
         });
 
@@ -36,7 +36,7 @@ describe('MockProvider.getSymbolInfo', () => {
 
             expect(symbolInfo).not.toBeNull();
             expect(symbolInfo.ticker).toBe('ETHUSDT');
-            expect(symbolInfo.root).toBe('ETH');
+            expect(symbolInfo.root).toBe('ETHUSDT');
             expect(symbolInfo.basecurrency).toBe('ETH');
             expect(symbolInfo.currency).toBe('USDT');
             expect(symbolInfo.type).toBe('crypto');
@@ -62,13 +62,13 @@ describe('MockProvider.getSymbolInfo', () => {
             expect(symbolInfo.ticker).toBe('BTCUSDT.P'); // Should preserve .P suffix
             expect(symbolInfo.tickerid).toBe('BINANCE:BTCUSDT.P'); // Should include .P
             expect(symbolInfo.prefix).toBe('BINANCE');
-            expect(symbolInfo.root).toBe('BTC'); // Root is base asset only
+            expect(symbolInfo.root).toBe('BTCUSDT.P'); // TradingView: root is the ticker itself
             expect(symbolInfo.basecurrency).toBe('BTC');
             expect(symbolInfo.currency).toBe('USDT');
             expect(symbolInfo.type).toBe('futures'); // Should be futures, not crypto
             expect(symbolInfo.current_contract).toBe('Perpetual');
             expect(symbolInfo.description).toContain('Perpetual');
-            expect(symbolInfo.session).toBe('24x7');
+            expect(symbolInfo.session).toBe('regular');
         });
 
         it('should return correct symbol info for ETHUSDT.P', async () => {
@@ -76,7 +76,7 @@ describe('MockProvider.getSymbolInfo', () => {
 
             expect(symbolInfo).not.toBeNull();
             expect(symbolInfo.ticker).toBe('ETHUSDT.P');
-            expect(symbolInfo.root).toBe('ETH');
+            expect(symbolInfo.root).toBe('ETHUSDT.P');
             expect(symbolInfo.type).toBe('futures');
             expect(symbolInfo.current_contract).toBe('Perpetual');
         });

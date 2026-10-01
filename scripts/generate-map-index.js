@@ -60,6 +60,8 @@ ${objectImports}
 
 export class PineMapObject {
     public map: Map<any, any>;
+    // 'string' for map<K, string>, whose missing keys read as the na string ("")
+    public valueType?: string;
 ${objectPrivateProps}
 
     constructor(public context: any) {

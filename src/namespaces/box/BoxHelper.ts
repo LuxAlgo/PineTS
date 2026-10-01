@@ -4,6 +4,7 @@ import { Series } from '../../Series';
 import { parseArgsForPineParams } from '../utils';
 import { BoxObject } from './BoxObject';
 import { ChartPointObject } from '../chart/ChartPointObject';
+import { resolvePoint } from '../chart/resolvePoint';
 import { NAHelper } from '../Core';
 import { silentInSecondary } from '../silentInSecondary';
 
@@ -72,19 +73,8 @@ export class BoxHelper {
         }
     }
 
-    private _resolvePoint(point: ChartPointObject): { x: number; xloc: string } {
-        // Treat NaN as "not provided" so `chart.point.new(time, na, price)`
-        // (idiomatic in TV-published indicators — e.g. SMC's drawStructure)
-        // correctly resolves to a time-based point. Without the NaN check,
-        // `point.index !== undefined` is true for NaN and the helper
-        // returns x = NaN, leaving every line/box with x1=NaN/x2=NaN.
-        const hasIndex = point.index !== undefined &&
-            !(typeof point.index === 'number' && isNaN(point.index));
-        const hasTime = point.time !== undefined &&
-            !(typeof point.time === 'number' && isNaN(point.time));
-        if (hasIndex) return { x: point.index!, xloc: 'bi' };
-        if (hasTime) return { x: point.time!, xloc: 'bt' };
-        return { x: 0, xloc: 'bi' };
+    private _resolvePoint(point: ChartPointObject, xloc?: string): { x: number; xloc: string } {
+        return resolvePoint(point, xloc);
     }
 
     private _resolve(val: any): any {
@@ -183,13 +173,13 @@ export class BoxHelper {
         if (parsed.top_left instanceof ChartPointObject) {
             const pt1 = parsed.top_left as ChartPointObject;
             const pt2 = parsed.bottom_right as ChartPointObject;
-            const r1 = this._resolvePoint(pt1);
+            const r1 = this._resolvePoint(pt1, xloc);
             left = r1.x;
             top = pt1.price;
             xloc = xloc || r1.xloc;
 
             if (pt2 instanceof ChartPointObject) {
-                const r2 = this._resolvePoint(pt2);
+                const r2 = this._resolvePoint(pt2, xloc);
                 right = r2.x;
                 bottom = pt2.price;
             } else {
@@ -274,23 +264,20 @@ export class BoxHelper {
         }
     }
 
+    // A point sets the coordinate the box's xloc reads (its time for xloc.bar_time).
     @silentInSecondary
     set_top_left_point(id: BoxObject, point: ChartPointObject): void {
         if (id && !id._deleted && point) {
-            const r = this._resolvePoint(point);
-            id.left = r.x;
+            id.left = this._resolvePoint(point, id.xloc).x;
             id.top = point.price;
-            id.xloc = r.xloc;
         }
     }
 
     @silentInSecondary
     set_bottom_right_point(id: BoxObject, point: ChartPointObject): void {
         if (id && !id._deleted && point) {
-            const r = this._resolvePoint(point);
-            id.right = r.x;
+            id.right = this._resolvePoint(point, id.xloc).x;
             id.bottom = point.price;
-            id.xloc = r.xloc;
         }
     }
 
@@ -372,22 +359,22 @@ export class BoxHelper {
         if (id && !id._deleted) id.text_formatting = this._resolve(formatting);
     }
 
-    // --- Getters ---
+    // --- Getters (na for an na or deleted box) ---
 
     get_left(id: BoxObject): number {
-        return id ? id.left : NaN;
+        return id && !id._deleted ? id.left : NaN;
     }
 
     get_right(id: BoxObject): number {
-        return id ? id.right : NaN;
+        return id && !id._deleted ? id.right : NaN;
     }
 
     get_top(id: BoxObject): number {
-        return id ? id.top : NaN;
+        return id && !id._deleted ? id.top : NaN;
     }
 
     get_bottom(id: BoxObject): number {
-        return id ? id.bottom : NaN;
+        return id && !id._deleted ? id.bottom : NaN;
     }
 
     // --- Management ---
@@ -395,7 +382,7 @@ export class BoxHelper {
     @silentInSecondary
     copy(id: BoxObject): BoxObject | undefined {
         if (!id) return undefined;
-        const b = id.copy();
+        const b = id._clone();
         b._helper = this;
         b._createdAtBar = this.context.idx;
         this._boxes.push(b);

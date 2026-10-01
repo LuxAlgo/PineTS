@@ -5,8 +5,12 @@ import { ChartPointObject } from './chart/ChartPointObject';
 function isPlot(arg: any) {
     return typeof arg === 'object' && arg && (arg.title !== undefined || arg._plotKey !== undefined) && arg.data !== undefined && arg.options !== undefined;
 }
+// Dual-use helper standing for a scalar (`strategy.closedtrades`, `na`); Series.from resolves it.
+export function isScalarHelper(arg: any) {
+    return arg !== null && typeof arg === 'object' && '__value' in arg && (arg.__value === null || typeof arg.__value !== 'object');
+}
 const TYPE_CHECK = {
-    series: (arg) => arg instanceof Series || typeof arg === 'number' || typeof arg === 'string' || typeof arg === 'boolean',
+    series: (arg) => arg instanceof Series || typeof arg === 'number' || typeof arg === 'string' || typeof arg === 'boolean' || isScalarHelper(arg),
     string: (arg) => typeof arg === 'string',
     // Pine Script color params accept both color strings and `na` (NaN).
     // Using 'color' instead of 'string' prevents NaN from invalidating the signature.
@@ -30,7 +34,8 @@ const TYPE_CHECK = {
     // objects — never arrays. Excluding arrays here lets functions like
     // request.security accept tuple expressions (e.g. `[o, c]`) as a positional
     // arg without misinterpreting them as the options bag.
-    remaining_options: (arg) => arg !== null && typeof arg === 'object' && !Array.isArray(arg) && !(arg instanceof Series) && !(arg instanceof ChartPointObject) && !isPlot(arg),
+    remaining_options: (arg) =>
+        arg !== null && typeof arg === 'object' && !Array.isArray(arg) && !(arg instanceof Series) && !(arg instanceof ChartPointObject) && !isPlot(arg) && !isScalarHelper(arg),
 };
 
 export type PineTypeMap<T> = {
