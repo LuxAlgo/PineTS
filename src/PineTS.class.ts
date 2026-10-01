@@ -211,62 +211,59 @@ export class PineTS {
         private sDate?: number,
         private eDate?: number,
     ) {
-        this._readyPromise = new Promise((resolve) => {
-            this.loadMarketData(source, tickerId, timeframe, limit, sDate, eDate).then((data) => {
-                const marketData = data;
+        this._readyPromise = this._loadData(source, tickerId, timeframe, limit, sDate, eDate);
+        // A failed load rejects ready(), and through it run() / stream(). Until
+        // one of those awaits it nobody handles the rejection, so mark it
+        // handled here (a PineTS that is built and never run must not raise an
+        // unhandled rejection); awaiting _readyPromise still rejects.
+        this._readyPromise.catch(() => {});
+    }
 
-                //this._periods = marketData.length;
-                this.data = marketData;
+    private async _loadData(source: IProvider | any[], tickerId?: string, timeframe?: string, limit?: number, sDate?: number, eDate?: number) {
+        const marketData = await this.loadMarketData(source, tickerId, timeframe, limit, sDate, eDate);
 
-                const _open = marketData.map((d) => d.open);
-                const _close = marketData.map((d) => d.close);
-                const _high = marketData.map((d) => d.high);
-                const _low = marketData.map((d) => d.low);
-                const _volume = marketData.map((d) => d.volume);
-                const _hlc3 = marketData.map((d) => (d.high + d.low + d.close) / 3);
-                const _hl2 = marketData.map((d) => (d.high + d.low) / 2);
-                const _ohlc4 = marketData.map((d) => (d.high + d.low + d.open + d.close) / 4);
-                const _hlcc4 = marketData.map((d) => (d.high + d.low + d.close + d.close) / 4);
-                const _openTime = marketData.map((d) => d.openTime);
-                // Providers should supply closeTime as session close time (TV convention).
-                // Safety-net for array-based data or providers that omit closeTime:
-                // estimate as openTime + timeframe duration (accurate for 24/7 crypto).
-                const tfDurationMs = getTimeframeDurationMs(this.timeframe);
-                const _closeTime = marketData.map((d) =>
-                    d.closeTime != null ? d.closeTime : d.openTime + tfDurationMs
-                );
+        //this._periods = marketData.length;
+        this.data = marketData;
 
-                this.open = _open;
-                this.close = _close;
-                this.high = _high;
-                this.low = _low;
-                this.volume = _volume;
-                this.hl2 = _hl2;
-                this.hlc3 = _hlc3;
-                this.ohlc4 = _ohlc4;
-                this.hlcc4 = _hlcc4;
-                this.openTime = _openTime;
-                this.closeTime = _closeTime;
+        const _open = marketData.map((d) => d.open);
+        const _close = marketData.map((d) => d.close);
+        const _high = marketData.map((d) => d.high);
+        const _low = marketData.map((d) => d.low);
+        const _volume = marketData.map((d) => d.volume);
+        const _hlc3 = marketData.map((d) => (d.high + d.low + d.close) / 3);
+        const _hl2 = marketData.map((d) => (d.high + d.low) / 2);
+        const _ohlc4 = marketData.map((d) => (d.high + d.low + d.open + d.close) / 4);
+        const _hlcc4 = marketData.map((d) => (d.high + d.low + d.close + d.close) / 4);
+        const _openTime = marketData.map((d) => d.openTime);
+        // Providers should supply closeTime as session close time (TV convention).
+        // Safety-net for array-based data or providers that omit closeTime:
+        // estimate as openTime + timeframe duration (accurate for 24/7 crypto).
+        const tfDurationMs = getTimeframeDurationMs(this.timeframe);
+        const _closeTime = marketData.map((d) =>
+            d.closeTime != null ? d.closeTime : d.openTime + tfDurationMs
+        );
 
-                if (source && (source as IProvider).getSymbolInfo) {
-                    const symbolInfo = (source as IProvider)
-                        .getSymbolInfo(tickerId)
-                        .then((symbolInfo) => {
-                            this._syminfo = symbolInfo;
-                            this._ready = true;
-                            resolve(true);
-                        })
-                        .catch((error) => {
-                            console.warn('Failed to get symbol info, using default values:', error);
-                            this._ready = true;
-                            resolve(true);
-                        });
-                } else {
-                    this._ready = true;
-                    resolve(true);
-                }
-            });
-        });
+        this.open = _open;
+        this.close = _close;
+        this.high = _high;
+        this.low = _low;
+        this.volume = _volume;
+        this.hl2 = _hl2;
+        this.hlc3 = _hlc3;
+        this.ohlc4 = _ohlc4;
+        this.hlcc4 = _hlcc4;
+        this.openTime = _openTime;
+        this.closeTime = _closeTime;
+
+        if (source && (source as IProvider).getSymbolInfo) {
+            try {
+                this._syminfo = await (source as IProvider).getSymbolInfo(tickerId);
+            } catch (error) {
+                console.warn('Failed to get symbol info, using default values:', error);
+            }
+        }
+        this._ready = true;
+        return true;
     }
 
     public setDebugSettings({ ln, debug }: { ln: boolean; debug: boolean }) {
