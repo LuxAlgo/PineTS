@@ -741,6 +741,12 @@ export function runAnalysisPass(ast: any, scopeManager: ScopeManager): string | 
                                     },
                                     computed: true,
                                 },
+                                // Identity, not a name: the transformers must recognise THESE
+                                // declarators as split elements. Matching on the element's name
+                                // (a program-wide set) also caught a user's own local that happened
+                                // to share a name — `p = close[1]` in a switch arm was lowered as
+                                // `$.get($.let.close, 0)[1]`, a tuple read of the wrong store.
+                                _arrayPatternSplit: true,
                             },
                         ],
                     }));
