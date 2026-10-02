@@ -52,37 +52,22 @@ export function parseStrategyOptions(args: any[]): any {
 }
 
 /**
- * Round a stop/limit price to the symbol's mintick grid, AWAY from the
- * reference price (typically the current bar's close at order placement).
+ * Round a stop/limit price to the symbol's mintick grid — to the NEAREST tick.
  *
- * Pine's broker emulator places stop/limit orders on the mintick grid
- * conservatively — a buy stop at 4188.4541 above current 4184 becomes
- * 4188.46 (ceiling), not 4188.45. This makes the order trigger LATER
- * (requires more price movement), mirroring real-broker order placement.
+ * TradingView places strategy orders on the tick grid at the nearest tick, not
+ * away from the reference price. Evidence: ADA/USDT 8h (mintick 0.0001, so a
+ * tick is ~0.2% of price), 1,456 bar-level stop checks against the TradingView
+ * trade list — nearest-tick agrees on 1,455, rounding away misses two fills
+ * (e.g. a short stop at 0.057701 was placed at 0.0578 by the away rule while
+ * TradingView filled it at 0.0577 on a bar whose high was 0.05777).
  *
- * The rule:
- *   price > referencePrice → ceil to mintick (push price UP)
- *   price < referencePrice → floor to mintick (push price DOWN)
- *   price === referencePrice → return as-is
- *
- * Covers all four cases naturally:
- *   - Buy stop above current  → ceil
- *   - Sell stop below current → floor
- *   - Buy limit below current → floor
- *   - Sell limit above current → ceil
- *   - Long TP above entry / SL below entry → ceil / floor
- *   - Short TP below entry / SL above entry → floor / ceil
- *
+ * `referencePrice` is kept in the signature for call-site compatibility.
  * For mintick === 0 or undefined (defensive), returns the price unchanged.
  */
 export function roundToMintick(price: number, referencePrice: number, mintick: number): number {
     if (!mintick || mintick <= 0 || !Number.isFinite(price)) return price;
-    if (price === referencePrice) return price;
-    const ticks = price / mintick;
-    // Small epsilon guards against float-imprecision flipping an
-    // already-on-grid value to the next tick.
-    const EPS = 1e-9;
-    return price > referencePrice ? Math.ceil(ticks - EPS) * mintick : Math.floor(ticks + EPS) * mintick;
+    void referencePrice;
+    return Math.round(price / mintick) * mintick;
 }
 
 /**
