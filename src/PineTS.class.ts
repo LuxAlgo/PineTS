@@ -304,6 +304,18 @@ export class PineTS {
      */
     public run(pineTSCode: Indicator | Function | String, periods: number | undefined, pageSize: number): AsyncGenerator<Context>;
     /**
+     * Project the cumulative execution context at each page boundary without
+     * constructing a page Context. The context is shared across pages; copy
+     * values in the projection when a retained snapshot is needed. Idle live
+     * polls still yield null without invoking the projection.
+     */
+    public run<T>(
+        pineTSCode: Indicator | Function | String,
+        periods: number | undefined,
+        pageSize: number,
+        options: { pageProjection: (context: Context, previousResultLength: number) => T },
+    ): AsyncGenerator<Awaited<T> | null>;
+    /**
      * Run the Pine Script code and return the resulting context.
      * if pageSize is provided, the function will return an iterator that will yield the results page by page.
      * each page contains the results of "pageSize" periods.
@@ -312,7 +324,15 @@ export class PineTS {
      * @param pageSize
      * @returns Context if pageSize is 0 or undefined, or AsyncGenerator<Context> if pageSize > 0
      */
-    public run(pineTSCode: Indicator | Function | String, periods?: number, pageSize?: number): Promise<Context> | AsyncGenerator<Context> {
+    public run<T = Context>(
+        pineTSCode: Indicator | Function | String,
+        periods?: number,
+        pageSize?: number,
+        options?: { pageProjection: (context: Context, previousResultLength: number) => T },
+    ): Promise<Context> | AsyncGenerator<Context | Awaited<T> | null> {
+        if (options && (!Number.isSafeInteger(pageSize) || pageSize <= 0)) {
+            throw new RangeError('Page projection requires a positive integer pageSize');
+        }
         const ind = Indicator.from(pineTSCode as any);
         this._currentIndicator = ind;
         // NB: `ind.prepare()` may throw synchronously for malformed Pine /
@@ -322,7 +342,7 @@ export class PineTS {
 
         if (pageSize && pageSize > 0) {
             const enableLiveStream = typeof this.eDate === 'undefined' && !Array.isArray(this.source);
-            return this._runPaginated(ind, periods, pageSize, enableLiveStream);
+            return this._runPaginated(ind, periods, pageSize, enableLiveStream, options?.pageProjection);
         } else {
             return this._runComplete(ind, periods);
         }
@@ -513,12 +533,13 @@ export class PineTS {
      * Uses a unified loop that handles both historical and live streaming data
      * @private
      */
-    private async *_runPaginated(
+    private async *_runPaginated<T = Context>(
         ind: Indicator,
         periods: number | undefined,
         pageSize: number,
         enableLiveStream: boolean = false,
-    ): AsyncGenerator<Context> {
+        pageProjection?: (context: Context, previousResultLength: number) => T,
+    ): AsyncGenerator<Context | Awaited<T> | null> {
         await this.ready();
         if (!periods) periods = this.data.length;
 
@@ -565,7 +586,9 @@ export class PineTS {
                 processedUpToIdx += toProcess;
 
                 // Yield the page with new results
-                const pageContext = this._createPageContext(context, previousResultLength);
+                const pageContext = pageProjection
+                    ? pageProjection(context, previousResultLength)
+                    : this._createPageContext(context, previousResultLength);
                 yield pageContext;
                 continue;
             }
