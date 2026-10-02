@@ -200,6 +200,65 @@ export function transformArrayIndex(node: any, scopeManager: ScopeManager): void
     }
 }
 
+/**
+ * Transform a computed-access INDEX into the scalar the call site needs.
+ *
+ * A bare identifier here is what killed `money-flow-profile`: the UDT-field branches wrapped the
+ * index without transforming it, so `b.i[rpLN]` emitted `$.get(<base>, rpLN)` and the run died with
+ * `ReferenceError: rpLN is not defined`. The three shapes are the ones the ordinary array-access
+ * path already handles (see the index handling in `transformFunctionArgument`).
+ */
+export function transformIndexExpression(property: any, scopeManager: ScopeManager, namespace?: string): any {
+    if (property.type === 'Identifier' && !scopeManager.isContextBound(property.name) && !scopeManager.isLoopVariable(property.name)) {
+        return ASTFactory.createGetCall(transformIdentifierForParam(property, scopeManager), 0);
+    }
+    if (property.type === 'BinaryExpression' || property.type === 'UnaryExpression' ||
+        property.type === 'LogicalExpression' || property.type === 'ConditionalExpression') {
+        return transformOperand(property, scopeManager, namespace);
+    }
+    return property;
+}
+
+/** True when the UDT instance variable was declared `var` — created once, mutated in place. */
+function isVarUdtInstance(name: string, scopeManager: ScopeManager): boolean {
+    try {
+        return scopeManager.getVariable(name)[1] === 'var';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * A UDT-field history read (`b.c[N]`, `b.outer.inner[N]`) — the rewrite both call sites share.
+ *
+ * The base read differs by declaration, and the two are NOT interchangeable:
+ *
+ *  * per-bar instance (`bar b = bar.new(…)`, the default): the engine stores a NEW object every bar,
+ *    so `$.get(<base>, N).field` IS the field as of N bars ago — cheap and exact.
+ *  * `var` instance: the object is created ONCE and mutated, so `$.get(<base>, N)` returns the same
+ *    object every bar and `.field` reads TODAY's value — silently wrong numbers rather than a crash
+ *    (the 14-indicator class: money-flow-profile, fibonacci-trailing-stop, …). The history belongs
+ *    to the FIELD: accumulate `$.get(<base>, 0).field` per bar with `$.param` and read N back. The
+ *    engine's per-bar shift carries the last value forward on bars where the call site did not run,
+ *    which is Pine's own behaviour for a series that is not updated every bar — so this is not the
+ *    conditional-call-site trap the per-bar case (correctly) avoids.
+ */
+function udtFieldHistory(chain: any, baseRef: any, index: any, isVarInstance: boolean, scopeManager: ScopeManager): any {
+    let cursor: any = chain;
+    while (cursor.object && cursor.object.type === 'MemberExpression') cursor = cursor.object;
+    cursor.object = ASTFactory.createGetCall(baseRef, isVarInstance ? 0 : index);
+    if (!isVarInstance) return chain;
+    const paramId = scopeManager.generateParamId();
+    const paramCall = {
+        type: 'CallExpression',
+        callee: ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('param')),
+        arguments: [chain, UNDEFINED_ARG, makeParamNameArg(scopeManager, paramId)],
+        _transformed: true,
+        _isParamCall: true,
+    };
+    return ASTFactory.createGetCall(paramCall, index);
+}
+
 export function addArrayAccess(node: any, scopeManager: ScopeManager): void {
     const memberExpr = ASTFactory.createGetCall(ASTFactory.createIdentifier(node.name), 0);
     // Preserve location info if available
@@ -702,9 +761,11 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
     // Subscript on a UDT-field chain: `bar.low[N]` where `bar` is a user
     // variable known to hold a UDT instance.
     //
-    // Pine semantics: `bar.low[N]` reads bar's `.low` from N bars ago.
-    // Since `bar = BAR.new()` runs every bar, `$.let.glb1_bar` is a Series
-    // of PineTypeObject instances → `$.get(glb1_bar, N).low` is correct.
+    // Pine semantics: `bar.low[N]` reads bar's `.low` from N bars ago. HOW the
+    // runtime stores that history depends on the declaration: a per-bar instance
+    // (`bar = BAR.new()`) stores a NEW object every bar, so `$.get(glb1_bar, N).low`
+    // is correct; a `var` instance keeps ONE object, so the history belongs to the
+    // FIELD and must be accumulated per bar (see udtFieldHistory).
     //
     // The rewrite is gated by `scopeManager.isUdtInstance(leafBaseName)` so it
     // does NOT fire for JS-style array indexing (e.g. `pl.points[0]` where
@@ -732,13 +793,19 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
                       return id;
                   })()
                 : createScopedVariableReference(baseName, scopeManager);
-            // Replace leaf `bar` with `$.get(<base-ref>, lookback)` and drop
-            // the outer `[N]` — the chain (`.low`) now reads from the previous
-            // bar's UDT instance.
-            cursor.object = ASTFactory.createGetCall(baseRef, memberNode.property);
+            // The index is an expression in its own right. `transformArrayIndex` has already run
+            // for this node by the time the traversal reaches it, so only an untransformed index is
+            // handled here (an untransformed one is a bare identifier and throws at runtime).
+            const index = memberNode._indexTransformed
+                ? memberNode.property
+                : transformIndexExpression(memberNode.property, scopeManager);
+            // Replace leaf `bar` with `$.get(<base-ref>, lookback)` and drop the outer `[N]` — the
+            // chain (`.low`) now reads with the instance's own history (per-bar instance) or the
+            // field's accumulated history (`var` instance). See udtFieldHistory.
+            const rewritten = udtFieldHistory(memberNode.object, baseRef, index,
+                isVarUdtInstance(baseName, scopeManager), scopeManager);
             // Re-anchor memberNode to the (now-rewritten) inner MemberExpression.
-            const inner = memberNode.object;
-            Object.assign(memberNode, inner);
+            Object.assign(memberNode, rewritten);
             delete memberNode.computed;
             return;
         }
@@ -1302,13 +1369,16 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                           return id;
                       })()
                     : createScopedVariableReference(baseName, scopeManager);
-                cursor.object = ASTFactory.createGetCall(baseRef, arg.property);
-                // `arg.object` is now the rewritten `$.get(<base>, N).field…`
-                // chain; it replaces the whole `arg` expression. The outer
-                // `$.param(...)` wrapper that the rest of this branch would
-                // have applied is intentionally skipped — the lookback is
-                // already baked into `$.get(...)`.
-                return arg.object;
+                // The index is an expression too — left bare it is the `ReferenceError: rpLN is
+                // not defined` that killed money-flow-profile (`chart.point.from_index(b.i[rpLN])`).
+                if (!arg._udtIndexTransformed) {
+                    arg.property = transformIndexExpression(arg.property, scopeManager, namespace);
+                    arg._udtIndexTransformed = true;
+                }
+                // The rewrite replaces the whole `arg` expression (the lookback is baked into the
+                // emitted `$.get`), so this branch returns before the generic `$.param` wrapping.
+                return udtFieldHistory(arg.object, baseRef, arg.property,
+                    isVarUdtInstance(baseName, scopeManager), scopeManager);
             }
         }
 
