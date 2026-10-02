@@ -169,6 +169,7 @@ export interface Order {
     // Internal: strategy.exit queued while a trade it covers was already open (its limit / stop
     // levels are then never dropped as wrong-sided).
     _coversOpenTrade?: boolean;
+    _placedWithPosition?: boolean;   // placed while a position was open: cancelled when that position goes flat
     // Internal: stop-limit entry whose stop has been reached; it now works as a limit order.
     _stopTriggered?: boolean;
 

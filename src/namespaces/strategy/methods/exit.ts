@@ -173,6 +173,9 @@ export function exit(context: any) {
             _coversOpenTrade: coversOpenTrade,
             _isPersistent: isPersistent,
             _callsiteId: callsiteId,
+            // Was a position open when this exit was placed? Such an order belongs to THAT position and dies with it
+            // (see processExitOrders); an exit placed while flat waits for its entry, as on TradingView.
+            _placedWithPosition: context.strategy.opentrades.length > 0,
         };
 
         // Pine semantic: calling strategy.exit with the same `id` REPLACES the

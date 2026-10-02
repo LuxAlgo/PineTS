@@ -1366,6 +1366,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
     const closePrice = Series.from(context.data.close).get(0);
     const currentTime = Series.from(context.data.openTime).get(0);
     const mintick = context.pine?.syminfo?.mintick ?? 0.01;
+    let anyExitFilledThisBar = false;
     const limitSlack = limitFillSlack(context);
 
     // Two-phase evaluation (TV broker-emulator order precedence at the
@@ -1834,6 +1835,7 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             // its qty cap is exhausted; otherwise it stays pending so the
             // surviving trades' brackets remain active on later bars (TV
             // brackets persist until filled or replaced).
+            if (closedAny) anyExitFilledThisBar = true;
             if (closedAny && (remainingMatchingQty() <= 1e-9 || capRemaining <= 1e-9)) {
                 order.status = 'filled';
                 order.fill_price = lastFill;
@@ -1844,6 +1846,15 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             for (const [t, before] of sizesBefore) {
                 if (Math.abs(t.size) < before) (t._exits_filled ??= new Set()).add(order.id);
             }
+        }
+    }
+
+    // A position that is now flat takes its exit orders with it: every still-pending exit that was placed while that
+    // position was open is cancelled, so it cannot survive the flat period and attach to a LATER entry with stale
+    // levels (e.g. `loss` ticks computed from an earlier bar). Exits placed while flat (waiting for an entry) stay.
+    if (anyExitFilledThisBar && strategy.opentrades.length === 0) {
+        for (const o of strategy.pending_orders) {
+            if (o.status === 'pending' && (o.category ?? 'entry') === 'exit' && o._placedWithPosition) o.status = 'cancelled';
         }
     }
 
