@@ -175,6 +175,29 @@ export function exit(context: any) {
             _callsiteId: callsiteId,
         };
 
+        // TradingView semantic: when `trail_price` is already reached by the market
+        // at placement (the common "seed the trail at the arm-bar close" pattern), the trailing stop is
+        // live from the next bar with its initial level at trail_price - offset, i.e. peak = trail_price.
+        // Arming only when a LATER bar touches trail_price and seeding the peak at that bar's extreme fills
+        // one bar late and optimistically. Direction comes from the matching open trades; if none are open
+        // yet (exit placed ahead of its entry) the existing behaviour stands.
+        if (order.trail_price !== undefined && Number.isFinite(currentClose)) {
+            const matchingOpen = (context.strategy.opentrades as any[]).filter(
+                (t: any) => !order.from_entry || t.entry_id === order.from_entry,
+            );
+            if (matchingOpen.length > 0) {
+                const isLongPos = matchingOpen[0].size > 0;
+                const reached = isLongPos ? currentClose >= order.trail_price : currentClose <= order.trail_price;
+                if (reached) {
+                    // The trail rides behind the running favourable extreme. When the activation level is already
+                    // behind the market (scripts commonly pass a far-away sentinel such as 1 or 1e6 to mean "trail
+                    // from now"), the peak starts at the market price at activation, i.e. the placing bar's close.
+                    order.trail_armed = true;
+                    order.trail_peak = isLongPos ? Math.max(order.trail_price, currentClose) : Math.min(order.trail_price, currentClose);
+                }
+            }
+        }
+
         // Pine semantic: calling strategy.exit with the same `id` REPLACES the
         // prior pending exit order (allowing dynamic TP/SL adjustment each
         // bar). Without this, stale exits accumulate across the strategy's
