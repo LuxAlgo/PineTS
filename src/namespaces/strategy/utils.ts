@@ -760,6 +760,7 @@ export function openTrade(
     entryComment?: string,
     isReversalOpen?: boolean,
     fillPath = 0,
+    equityFillPath = fillPath,
 ): void {
     const replay = equityReplay(context);
     const before = equityBook(context.strategy);
@@ -815,6 +816,7 @@ export function openTrade(
         entry_price: price,
         entry_time: time,
         entry_bar_index: context.idx,
+        equity_fill_path: equityFillPath,
         entry_comment: trade.entry_comment,
         qty,
         commission: entryCommission,
@@ -862,7 +864,7 @@ export function openTrade(
     }
 
     updateMaxContractsHeld(strategy);
-    recordEquityFill(replay, fillPath, before, equityBook(strategy));
+    recordEquityFill(replay, equityFillPath, before, equityBook(strategy));
 }
 
 /**
@@ -902,6 +904,9 @@ function executeOrder(context: any, order: Order, fillPrice: number, fillTime: n
             fillPath: order._fill_path,
         });
 
+        const replay = equityReplay(context);
+        const equityFillPath = replay.fills[replay.fills.length - 1]?.path ?? order._fill_path;
+
         // If there is remaining quantity (reversal), open a new trade.
         // When the close leg consumed LESS than the order anticipated at
         // queue time (a deferred close-margin-call shrank the position
@@ -912,10 +917,10 @@ function executeOrder(context: any, order: Order, fillPrice: number, fillTime: n
         if (remainingQty > 0) {
             const baseQty = (order as any)._base_qty;
             if (baseQty !== undefined && remainingQty > baseQty + 1e-9) {
-                openTrade(context, order.id, direction, baseQty, fillPrice, fillTime, order.comment, /* isReversalOpen */ true, order._fill_path);
-                openTrade(context, order.id, direction, remainingQty - baseQty, fillPrice, fillTime, order.comment, /* isReversalOpen */ true, order._fill_path);
+                openTrade(context, order.id, direction, baseQty, fillPrice, fillTime, order.comment, /* isReversalOpen */ true, order._fill_path, equityFillPath);
+                openTrade(context, order.id, direction, remainingQty - baseQty, fillPrice, fillTime, order.comment, /* isReversalOpen */ true, order._fill_path, equityFillPath);
             } else {
-                openTrade(context, order.id, direction, remainingQty, fillPrice, fillTime, order.comment, /* isReversalOpen */ true, order._fill_path);
+                openTrade(context, order.id, direction, remainingQty, fillPrice, fillTime, order.comment, /* isReversalOpen */ true, order._fill_path, equityFillPath);
             }
         }
     } else {
@@ -961,8 +966,8 @@ function consumeLedger(
     strategy: StrategyState,
     physical: Trade,
     qty: number,
-): Array<{ qty: number; entry_price: number; entry_time: number; entry_bar_index: number; entry_comment?: string; commission: number }> {
-    const out: Array<{ qty: number; entry_price: number; entry_time: number; entry_bar_index: number; entry_comment?: string; commission: number }> =
+): Array<{ qty: number; entry_price: number; entry_time: number; entry_bar_index: number; equity_fill_path?: number; entry_comment?: string; commission: number }> {
+    const out: Array<{ qty: number; entry_price: number; entry_time: number; entry_bar_index: number; equity_fill_path?: number; entry_comment?: string; commission: number }> =
         [];
     let need = qty;
     const queue: any[] = (strategy as any)._ledger_entries ?? [];
@@ -976,6 +981,7 @@ function consumeLedger(
             entry_price: rec.entry_price,
             entry_time: rec.entry_time,
             entry_bar_index: rec.entry_bar_index,
+            equity_fill_path: rec.equity_fill_path,
             entry_comment: rec.entry_comment,
             commission: commShare,
         });
@@ -991,6 +997,7 @@ function consumeLedger(
             entry_price: physical.entry_price,
             entry_time: physical.entry_time,
             entry_bar_index: physical.entry_bar_index,
+            equity_fill_path: physical._entry_fill_path,
             entry_comment: physical.entry_comment,
             commission: physQty > 0 ? (physical.commission ?? 0) * (need / physQty) : 0,
         });
@@ -1009,6 +1016,7 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
         advanceExcursions(context, closeInfo?.fillPath ?? 0);
     }
     let remainingQty = qtyToClose;
+    let equityFillPath = deferred ? 3 : (closeInfo?.fillPath ?? 0);
 
     // Close trades from oldest to newest (FIFO)
     const tradesToClose = [...strategy.opentrades];
@@ -1053,6 +1061,12 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
 
             const slices = consumeLedger(strategy, trade, qtyClosed);
             for (const s of slices) {
+                // Queue-order execution can close an entry at an earlier quote
+                // position. Preserve fills, but never replay a consumed lot
+                // before it exists. Reversal openings inherit this boundary.
+                if (!deferred && s.entry_bar_index === context.idx) {
+                    equityFillPath = Math.max(equityFillPath, s.equity_fill_path ?? 0);
+                }
                 const exitCommShare = exitCommTotal * (s.qty / qtyClosed);
                 const priceChange = tradeDirection === 1 ? exitPrice - s.entry_price : s.entry_price - exitPrice;
                 const gross = priceChange * s.qty * pointValue;
@@ -1166,7 +1180,7 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
         // first still-open trade
         strategy.position_entry_name = strategy.opentrades[0].entry_id;
     }
-    recordEquityFill(replay, deferred ? 3 : (closeInfo?.fillPath ?? 0), before, equityBook(strategy));
+    recordEquityFill(replay, equityFillPath, before, equityBook(strategy));
     if (deferred) replayEquityExcursions(strategy, replay);
 }
 

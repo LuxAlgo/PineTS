@@ -52,6 +52,29 @@ describe('aggregate equity excursions replay actual fills chronologically', () =
         expect(c.strategy.max_drawdown).toBe(10);
         expect(c.strategy.max_runup).toBe(40);
     });
+    it('never replays a close before the same-bar entry it consumes', () => {
+        const c = context();
+        Object.assign(c.strategy.pending_orders[0], { type: 'stop', stop: 110 });
+        c.strategy.pending_orders.push({ id: 'close', direction: -1, qty: 1, type: 'market', category: 'exit', from_entry: 'entry', bar: -1, time: -1, status: 'pending' });
+        bar(c, 0, [100, 115, 95, 112]);
+        // Scheduler fills110 then100: loss20. No short existed at the earlier low95.
+        expect(c.strategy.closedtrades[0].entry_price).toBe(110);
+        expect(c.strategy.closedtrades[0].exit_price).toBe(100);
+        expect(c.strategy.max_runup).toBe(0);
+        expect(c.strategy.max_drawdown).toBe(20);
+    });
+    it('keeps a reversal opening after the consumed entry and closing leg', () => {
+        const c = context();
+        Object.assign(c.strategy.pending_orders[0], { type: 'stop', stop: 110 });
+        c.strategy.pending_orders.push({ id: 'reverse', direction: -1, qty: 2, type: 'market', category: 'entry', bar: -1, time: -1, status: 'pending' });
+        bar(c, 0, [100, 115, 95, 112]);
+        // Preserve scheduler fills; causally delay replay to110. AtH: realized-20 + short(100-115)*2=-50.
+        expect(c.strategy.closedtrades[0].exit_price).toBe(100);
+        expect(c.strategy.opentrades[0].entry_price).toBe(100);
+        expect(c.strategy.position_size).toBe(-1);
+        expect(c.strategy.max_runup).toBe(0);
+        expect(c.strategy.max_drawdown).toBe(50);
+    });
     it('replays an older target before a later limit entry without mutating fills', () => {
         const c = context();
         bar(c, 0, [100, 100, 100, 100]);
