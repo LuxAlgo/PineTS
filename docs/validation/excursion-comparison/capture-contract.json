@@ -1,0 +1,55 @@
+{
+  "status": "NATIVE_FIXTURE_CAPTURED_LOCALLY",
+  "sourceSha256": "37fb4e138073c3267c6a20859c921d0760fd6d48f9f5afe9eff1df3291bd6b4c",
+  "symbol": "CME_MINI:MNQ1!",
+  "timeframe": "D",
+  "chartType": "ordinary_candles",
+  "reportScope": "chart",
+  "settings": {
+    "initial_capital": 1000000,
+    "default_qty_type": "fixed",
+    "default_qty_value": 1,
+    "pyramiding": 1,
+    "commission_type": "cash_per_contract",
+    "commission_value": 0,
+    "slippage": 0,
+    "margin_long": 0,
+    "margin_short": 0,
+    "process_orders_on_close": false,
+    "calc_on_order_fills": false,
+    "calc_on_every_tick": false,
+    "use_bar_magnifier": false
+  },
+  "sourceWindowUTC": [
+    "2026-09-01T00:00:00Z",
+    "2026-10-01T00:00:00Z"
+  ],
+  "captureRequirement": "Capture the complete active strategy window with pre-start and terminal-close candles, exact source/settings/metadata, and chart-scope ledger. Store vendor candles locally only; do not commit them.",
+  "requiredMetadata": [
+    "tickerid",
+    "pointvalue",
+    "mincontract",
+    "mintick",
+    "timezone",
+    "session",
+    "currency",
+    "type"
+  ],
+  "expectedMetadata": {
+    "pointvalue": 2,
+    "mincontract": 1,
+    "mintick": 0.25
+  },
+  "captureShape": {
+    "sourceSha256": "hash above",
+    "chartType": "ordinary_candles",
+    "reportScope": "chart",
+    "settings": "exact settings above",
+    "metadata": "exact native symbol metadata",
+    "timeframe": "D",
+    "candles": "ascending bars with open/high/low/close/volume/openTime/closeTime",
+    "trades": "numeric entryTime/exitTime/entryPrice/exitPrice/size/commission/profit/maxDrawdown/maxRunup for every closed trade",
+    "aggregate": "numeric maxDrawdown/maxRunup from native report"
+  },
+  "dataRights": "Keep native candles and full report local; public contribution includes only original probe, arithmetic fixtures and sanitized comparison result. No private strategy, vendor archives or account info may be published."
+}

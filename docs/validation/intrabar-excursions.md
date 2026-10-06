@@ -10,11 +10,15 @@ For example, a three-contract long entered at 100 on a bar `[open=100, high=105,
 
 The fixtures cover long/short stops and targets, market exits at the open, entry and exit slippage, intrabar stop entries, partial exits, reversal entries, trailing retracement, margin checkpoints and immediate/on-close execution. Entry path positions use the unslipped quote; execution prices remain distinct. The existing equal-distance high-first precedence is preserved, since changing which orders fill requires separate native evidence.
 
-## Native comparison still required
+## Fresh native fixture comparison
 
-No fresh TradingView comparison is included. The supported `tab_new` operation could not verify a unique isolated chart. A subsequent typed UI operation could not address the desktop shell's New tab target (`outcome:not_started`), so no existing layout was changed. The historical 85-trade reference cited in #311 has not been rerun on this `dev` baseline and is not evidence for this draft.
+On October6,2026, the original [public Pine v6 probe](excursion-comparison/probe.pine) ran on a newly isolated ordinary daily `CME_MINI:MNQ1!` chart. Exact source readback SHA256 is `37fb4e138073c3267c6a20859c921d0760fd6d48f9f5afe9eff1df3291bd6b4c`. Attached properties matched the [frozen contract](excursion-comparison/capture-contract.json): fixed quantity1, initial capital1,000,000, zero fees/slippage/margins, all recalculation/close flags false, Bar Magnifier off. Native plots confirmed pointvalue2, mincontract1, mintick0.25. The chart-scope report completed with10closed trades.
 
-Before this becomes ready for review, capture an original minimal public Pine v6 probe on ordinary candles, Bar Magnifier off, with the exact source, date range, chart timeframe, symbol metadata and strategy settings. Replay matching candles locally, separately record order-sizing prices and execution prices, and compare the per-trade ledger, drawdown/run-up and summary metrics. No private strategy or downloaded vendor candle archive is part of this contribution.
+Local replay on300matching chart candles compared nine numeric fields per trade at tolerance1e-8: entry/exit timestamps and prices, quantity, commission, profit, drawdown and run-up. All90 comparisons matched. Aggregate drawdown1,809.5, run-up2,856 and net profit1,468.5 also matched. [Sanitized result](excursion-comparison/native-result.json) records exact tested commit, scope and limitations; raw candles and full native reports remain local. The historical85-trade reference in #311 is not used as evidence here.
+
+Reproduce with the locked dependencies from repository root using `node --import tsx docs/validation/excursion-comparison/replay.mts /absolute/native-capture.json`. Capture JSON must follow the contract and preserve exact native settings/source/metadata. Native bar open timestamps were captured exactly; closeTime was derived from the17:00–16:00 session, and this probe does not use on-close/immediate execution. The native equity accessor returned only a summary, so no equity-curve comparison is claimed.
+
+This is one long-only bracket fixture. Multi-position, reversal, partial-close, fee and slippage paths remain covered by independent synthetic arithmetic, and broader native evidence is still needed before claiming general broker parity. The existing16chart-state fingerprints remained identical and the shared operator lock was released after capture. No existing layout or private script was edited.
 
 ## Aggregate book replay and causal limits
 
