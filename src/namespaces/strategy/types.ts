@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 LuxAlgo
 
+import type { EquityReplay } from './equityExcursions';
+
 /**
  * Strategy configuration options.
  *
@@ -203,6 +205,7 @@ export interface Order {
  * also indexable for the per-trade getter equivalents.
  */
 export interface StrategyState {
+    _equity_replay?: EquityReplay;
     config: StrategyConfig;
 
     // Trade collections (arrays — `.length` is the Pine count)

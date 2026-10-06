@@ -3,6 +3,8 @@
 
 import { Order, StrategyState, Trade } from './types';
 import { Series } from '../../Series';
+import { createEquityReplay, recordEquityFill, replayEquityExcursions } from './equityExcursions';
+import type { EquityBook, EquityReplay } from './equityExcursions';
 
 /**
  * Parse strategy() function arguments
@@ -244,6 +246,28 @@ function barPath(context: any): number[] {
     const low = Series.from(context.data.low).get(0);
     const close = Series.from(context.data.close).get(0);
     return Math.abs(high - open) <= Math.abs(open - low) ? [open, high, low, close] : [open, low, high, close];
+}
+
+/** Snapshot ledger totals before a fill, independently of physical lot ordering. */
+function equityBook(strategy: StrategyState): EquityBook {
+    const book = { size: 0, cost: 0, commission: 0, netprofit: strategy.netprofit };
+    for (const lot of ledgerOpenLots(strategy)) {
+        book.size += lot.dir * lot.qty;
+        book.cost += lot.dir * lot.qty * lot.entry_price;
+        book.commission += lot.commission;
+    }
+    return book;
+}
+
+function equityReplay(context: any, deferred = false): EquityReplay {
+    const strategy: StrategyState = context.strategy;
+    // Deferred previous-close margin fills belong to the retained prior bar.
+    if (deferred && strategy._equity_replay) return strategy._equity_replay;
+    if (!strategy._equity_replay || strategy._equity_replay.bar !== context.idx) {
+        strategy._equity_replay = createEquityReplay(strategy, equityBook(strategy), context.idx,
+            Series.from(context.data.openTime).get(0), barPath(context), context.pine?.syminfo?.pointvalue ?? 1);
+    }
+    return strategy._equity_replay;
 }
 
 /** Locate a trigger on the path; trailing stops specify the retracement segment. */
@@ -563,6 +587,7 @@ export function processOrdersOnClose(context: any): void {
 
     strategy.pending_orders = strategy.pending_orders.filter((o) => o.status === 'pending');
     markToMarket(context, closePrice);
+    replayEquityExcursions(strategy, equityReplay(context));
     updateStrategyMetrics(context);
 }
 
@@ -736,6 +761,8 @@ export function openTrade(
     isReversalOpen?: boolean,
     fillPath = 0,
 ): void {
+    const replay = equityReplay(context);
+    const before = equityBook(context.strategy);
     advanceExcursions(context, fillPath);
     const strategy: StrategyState = context.strategy;
     const tradeNum = strategy.opentrades.length + strategy.closedtrades.length;
@@ -803,7 +830,7 @@ export function openTrade(
     // sum of open trades' entry commissions). The exit commission is
     // realized in closePartialPosition when the trade actually closes.
     //
-    // Drawdown compensation: `updateEquityPeaks` adds the open trades'
+    // Drawdown compensation: the equity replay adds the open trades'
     // entry commission BACK to the drawdown formula. This mirrors TV's
     // drawdown formula which has an explicit `+ openCommission` term —
     // the result is correct for any peak timing (before vs during open
@@ -835,6 +862,7 @@ export function openTrade(
     }
 
     updateMaxContractsHeld(strategy);
+    recordEquityFill(replay, fillPath, before, equityBook(strategy));
 }
 
 /**
@@ -973,6 +1001,9 @@ function consumeLedger(
 export function closePartialPosition(context: any, qtyToClose: number, exitPrice: number, exitTime: number, closeInfo?: CloseInfo): void {
     const strategy: StrategyState = context.strategy;
     const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
+    const deferred = exitTime < Series.from(context.data.openTime).get(0);
+    const replay = equityReplay(context, deferred);
+    const before = equityBook(strategy);
     // A deferred liquidation was already visited on its original bar.
     if (exitTime >= Series.from(context.data.openTime).get(0)) {
         advanceExcursions(context, closeInfo?.fillPath ?? 0);
@@ -1135,6 +1166,8 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
         // first still-open trade
         strategy.position_entry_name = strategy.opentrades[0].entry_id;
     }
+    recordEquityFill(replay, deferred ? 3 : (closeInfo?.fillPath ?? 0), before, equityBook(strategy));
+    if (deferred) replayEquityExcursions(strategy, replay);
 }
 
 /**
@@ -1164,7 +1197,7 @@ function ledgerOpenLots(strategy: StrategyState): Array<{ qty: number; entry_pri
 /**
  * Mark-to-market the open positions to `currentPrice`, updating
  * `strategy.openprofit` and `strategy.equity`. Does NOT touch the
- * aggregate max_drawdown / max_runup peaks, latched in finalizeStrategyBar.
+ * aggregate max_drawdown / max_runup peaks, replayed in finalizeStrategyBar.
  * Per-trade excursions are tracked separately over each executed interval.
  */
 function markToMarket(context: any, currentPrice: number): void {
@@ -1177,114 +1210,6 @@ function markToMarket(context: any, currentPrice: number): void {
     }
     strategy.openprofit = unrealizedPnL;
     strategy.equity = strategy.initial_capital + strategy.netprofit + unrealizedPnL;
-}
-
-/**
- * Latch `strategy.max_drawdown` and `strategy.max_runup` using INTRA-BAR
- * high/low excursions of the CURRENT open position (after all fills have
- * settled for the bar).
- *
- * Algorithm:
- *   1. `equity_peak` / `equity_trough` track the running high/low of
- *      REALIZED equity (initial_capital + netprofit). They step only on
- *      closed-trade P&L.
- *   2. For the still-open position (single weighted-avg via position_size /
- *      position_avg_price), compute worst- and best-case unrealized excursion
- *      against the bar's adverse / favorable extreme:
- *        long:  worstPrice = low,   bestPrice = high
- *        short: worstPrice = high,  bestPrice = low
- *   3. drawdown_this_bar = (equity_peak  − realized_equity) + worst_excursion
- *      runup_this_bar    = (realized_equity − equity_trough) + best_excursion
- *   4. Latch the running maxima.
- *
- * Why latch only after fills: a trade closed by TP / SL during the bar
- * realizes exactly its stop/target P&L. Computing drawdown against the bar's
- * raw low BEFORE the fill would overcount — the trade never actually marked
- * to that low because the stop fired first. Running this only after fills
- * means closed trades contribute via `realizedEquity` (their actual close
- * price), and only positions that survived the bar contribute via H/L.
- *
- * Per-trade excursions are tracked separately over each executed bar interval.
- */
-function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): void {
-    const strategy: StrategyState = context.strategy;
-    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
-
-    const realizedEquity = strategy.initial_capital + strategy.netprofit;
-
-    // Open-book entry commissions (already deducted from netprofit at
-    // fill) — LEDGER view, consistent with netprofit's slice increments.
-    let openCommission = 0;
-    for (const lot of ledgerOpenLots(strategy)) openCommission += lot.commission;
-
-    // PEAK basis excludes the open trades' entry commissions. TV latches the
-    // equity high-water on the intermediate funds state right after a close
-    // settles — BEFORE the entry commission of a trade opened on the same
-    // bar (reversal) is charged. PT processes the reversal close+open
-    // atomically, so the peak basis adds the open entry commissions back.
-    // Verified against QA margin_calls xlsx (1% percent commission): TV's
-    // peak was exactly closed-trades-cum (+148,279.33) while the reversal
-    // trade opened on the peak bar had already cost 2,483.81 in entry
-    // commission. The TROUGH basis keeps the commission deducted
-    // (pessimistic on both sides — matches TV's run-up line exactly).
-    const peakBasis = realizedEquity + openCommission;
-    if (peakBasis > strategy.equity_peak) strategy.equity_peak = peakBasis;
-    if (realizedEquity < strategy.equity_trough) strategy.equity_trough = realizedEquity;
-
-    const posSize = strategy.position_size;
-    const avgPrice = strategy.position_avg_price;
-
-    let worstExcursion = 0;
-    let bestExcursion = 0;
-    if (posSize !== 0 && Number.isFinite(avgPrice)) {
-        const worstPrice = posSize > 0 ? lowPrice : highPrice;
-        const bestPrice = posSize > 0 ? highPrice : lowPrice;
-        // posSize * (avg - worstPrice) is always >= 0 (a loss); same for gain.
-        // Multiplied by pointValue to convert price units → account currency.
-        worstExcursion = posSize * (avgPrice - worstPrice) * pointValue;
-        bestExcursion = posSize * (bestPrice - avgPrice) * pointValue;
-    }
-
-    // Drawdown = realized gap from the high-water + the open position's
-    // intra-bar adverse excursion. No commission correction here: the peak
-    // basis already excludes open entry commissions (see above) while
-    // realizedEquity includes them — the asymmetry IS TV's model.
-    const drawDown = strategy.equity_peak - realizedEquity + worstExcursion;
-    if (drawDown > strategy.max_drawdown) {
-        strategy.max_drawdown = drawDown;
-        // Snapshot Max_Equity (the realized high-water in force at this
-        // moment) — denominator for max_drawdown_percent. Per TV's docs:
-        //   ddpct = max_drawdown / Max_Equity-at-latch × 100
-        strategy.equity_at_drawdown_peak = strategy.equity_peak;
-
-        // TV's max_drawdown_percent is the RUNNING MAX of the per-latch
-        // ratio, not (current_max_drawdown / current_equity_at_peak).
-        // The two diverge when a later latch has a larger absolute
-        // drawdown but a smaller percentage (equity grew faster). Track
-        // the high-water ratio independently of the absolute peak.
-        if (strategy.equity_peak > 0) {
-            const ratio = (100 * drawDown) / strategy.equity_peak;
-            if (ratio > strategy.max_drawdown_percent_value) {
-                strategy.max_drawdown_percent_value = ratio;
-            }
-        }
-    }
-
-    const runUp = realizedEquity - strategy.equity_trough + bestExcursion;
-    if (runUp > strategy.max_runup) {
-        strategy.max_runup = runUp;
-        // Snapshot the total equity at this peak — denominator for max_runup_percent.
-        strategy.equity_at_runup_peak = realizedEquity + bestExcursion;
-
-        // Symmetric running-max-of-ratio for max_runup_percent. See the
-        // max_drawdown_percent comment above for the semantic reason.
-        if (strategy.equity_at_runup_peak > 0) {
-            const ratio = (100 * runUp) / strategy.equity_at_runup_peak;
-            if (ratio > strategy.max_runup_percent_value) {
-                strategy.max_runup_percent_value = ratio;
-            }
-        }
-    }
 }
 
 /**
@@ -2087,7 +2012,7 @@ export function processMarginCall(context: any, checkpoint: 'open' | 'extreme' |
 
 /**
  * End-of-bar finalize: finish per-trade intervals, refresh equity at CLOSE
- * and latch aggregate equity metrics using their existing H/L model. Runs
+ * and replay aggregate equity metrics over reached quotes and actual fills. Runs
  * UNCONDITIONALLY once per bar (after entry+exit fills are done), regardless
  * of whether the strategy uses exit orders.
  */
@@ -2097,8 +2022,7 @@ export function finalizeStrategyBar(context: any): void {
     const closePrice = Series.from(context.data.close).get(0);
     markToMarket(context, closePrice);
     advanceExcursions(context, 3);
-    // Aggregate equity accounting is unchanged; per-trade intervals are separate.
-    updateEquityPeaks(context, Series.from(context.data.high).get(0), Series.from(context.data.low).get(0));
+    replayEquityExcursions(strategy, equityReplay(context));
 
     // Record the MARK-TO-MARKET equity at each calendar month's last bar,
     // for the end-of-run Sharpe / Sortino ratios (see
