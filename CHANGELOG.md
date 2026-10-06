@@ -1,5 +1,16 @@
 # Change Log
 
+## [Unreleased]
+
+### Added
+
+- **`request.financial`, `request.economic`, `request.dividends`, `request.earnings`, `request.splits`, `request.quandl`, `request.currency_rate` and `request.seed`** (`request.financial is not a function`, #364): PineTS has no data source for them, so they return `na` and add one warning per function per run to `ctx.warnings` (`request.<name>() is not supported by PineTS: it returns na`), and the rest of the script runs. `request.currency_rate` of a currency to itself returns 1, as on TradingView. Test: `tests/namespaces/request-unsupported.test.ts`.
+
+### Fixed
+
+- **`strategy.cancel_all()` now cancels pending exit orders too** (#388): it cancelled entries only, so a strategy that cancels and re-places its exits on every bar kept the stale exit legs working next to the new ones, and the stale ones could fill first. An exit placed while a position was open is now also cancelled when an exit fill leaves that position flat, so it no longer attaches to a later entry with stale levels; an exit placed while flat still waits for its entry. Matches TradingView's List of Trades on BINANCE:BTCUSDT 1h.
+- **A market data error rejects `run()` instead of leaving it pending** (#359, #344): when a provider's `getMarketData()` threw or rejected, `ready()` / `run()` / `stream()` never settled and the error became an unhandled rejection. They now reject with the provider's error; a `PineTS` that is built and never run raises no unhandled rejection. A `request.security()` whose series fails to load stops the script with that error, as on TradingView, unless the call passes `ignore_invalid_symbol = true`: then the series is `na` on every bar, the load is not retried, and one warning names the request. `request.security_lower_tf()` secondaries reject the same way. Test: `tests/core/provider-errors.test.ts`.
+
 ## [0.11.0] - 2026-10-01 - TradingView Parity for Timeframes, Strings, Drawings, Arrays & Strategy Fills
 
 ### Added
