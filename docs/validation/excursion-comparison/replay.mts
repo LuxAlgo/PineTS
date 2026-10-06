@@ -30,10 +30,14 @@ actual.forEach((trade: any, i: number) => {
     for (const key of Object.keys(trade)) {
         const expected = capture.trades[i][key];
         assert(Number.isFinite(expected), `Native row ${i} lacks numeric ${key}`);
+        assert(Number.isFinite(trade[key]), `PineTS row ${i} lacks numeric ${key}`);
         if (Math.abs(trade[key] - expected) > 1e-8) mismatches.push({row:i,field:key,expected,actual:trade[key]});
     }
 });
 const aggregate = {maxDrawdown:result.strategy.max_drawdown,maxRunup:result.strategy.max_runup,netProfit:result.strategy.netprofit};
+if (capture.aggregate !== null && capture.aggregate !== undefined) {
+    assert.deepEqual(Object.keys(capture.aggregate).sort(), Object.keys(aggregate).sort(), 'Aggregate reference must contain exactly maxDrawdown, maxRunup and netProfit');
+}
 const aggregateMismatches = Object.entries(capture.aggregate ?? {}).filter(([key, expected]) => !Number.isFinite(expected) || !Number.isFinite(aggregate[key]) || Math.abs(aggregate[key] - Number(expected)) > 1e-8).map(([field,expected]) => ({field,expected,actual:aggregate[field]}));
 console.log(JSON.stringify({sourceSha256:hash,candles:capture.candles.length,trades:actual.length,perTradeMatch:mismatches.length===0,mismatches,aggregate,aggregateReference:capture.aggregate,aggregateMatch:capture.aggregate ? aggregateMismatches.length===0 : null,aggregateMismatches,aggregateScope:'Fixture comparison only; general native parity unverified'},null,2));
 if (mismatches.length || aggregateMismatches.length) process.exitCode=1;
