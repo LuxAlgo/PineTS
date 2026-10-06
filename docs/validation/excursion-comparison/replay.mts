@@ -34,6 +34,6 @@ actual.forEach((trade: any, i: number) => {
     }
 });
 const aggregate = {maxDrawdown:result.strategy.max_drawdown,maxRunup:result.strategy.max_runup,netProfit:result.strategy.netprofit};
-const aggregateMismatches = Object.entries(capture.aggregate ?? {}).filter(([key, expected]) => !Number.isFinite(expected) || Math.abs(aggregate[key] - Number(expected)) > 1e-8).map(([field,expected]) => ({field,expected,actual:aggregate[field]}));
+const aggregateMismatches = Object.entries(capture.aggregate ?? {}).filter(([key, expected]) => !Number.isFinite(expected) || !Number.isFinite(aggregate[key]) || Math.abs(aggregate[key] - Number(expected)) > 1e-8).map(([field,expected]) => ({field,expected,actual:aggregate[field]}));
 console.log(JSON.stringify({sourceSha256:hash,candles:capture.candles.length,trades:actual.length,perTradeMatch:mismatches.length===0,mismatches,aggregate,aggregateReference:capture.aggregate,aggregateMatch:capture.aggregate ? aggregateMismatches.length===0 : null,aggregateMismatches,aggregateScope:'Fixture comparison only; general native parity unverified'},null,2));
 if (mismatches.length || aggregateMismatches.length) process.exitCode=1;
