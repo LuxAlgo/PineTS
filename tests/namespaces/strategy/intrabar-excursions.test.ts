@@ -135,4 +135,11 @@ describe('excursions over the executed part of a bar', () => {
         bar(c, 1, [100, 105, 80, 100]);
         expect(c.strategy.closedtrades[0]).toMatchObject({ exit_price: 104, max_drawdown: 0, max_runup: 8 });
     });
+    it('preserves stop-limit execution without applying stop slippage', () => {
+        const c = context();
+        c.strategy.config.slippage = 4;
+        Object.assign(c.strategy.pending_orders[0], { type: 'stop-limit', stop: 110, limit: 111 });
+        bar(c, 0, [100, 115, 95, 112]);
+        expect(c.strategy.opentrades[0]).toMatchObject({ entry_price: 110, max_drawdown: 0, max_runup: 10 });
+    });
 });
