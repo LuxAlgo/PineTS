@@ -1164,8 +1164,8 @@ function ledgerOpenLots(strategy: StrategyState): Array<{ qty: number; entry_pri
 /**
  * Mark-to-market the open positions to `currentPrice`, updating
  * `strategy.openprofit` and `strategy.equity`. Does NOT touch the
- * max_drawdown / max_runup peaks: those advance along reached prices
- * before fills change the book and through the remaining bar path.
+ * aggregate max_drawdown / max_runup peaks, latched in finalizeStrategyBar.
+ * Per-trade excursions are tracked separately over each executed interval.
  */
 function markToMarket(context: any, currentPrice: number): void {
     const strategy: StrategyState = context.strategy;
