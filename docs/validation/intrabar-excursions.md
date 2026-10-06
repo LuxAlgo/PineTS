@@ -1,6 +1,6 @@
-# Intrabar excursion accounting — draft validation
+# Per-trade intrabar excursions — draft validation
 
-This is the excursion-only split requested in [the review of #311](https://github.com/LuxAlgo/PineTS/pull/311#issuecomment-6020275599), rebased onto `dev` at `90209d4`. Cash sizing, quantity flooring, limit slippage, exit lifecycle and order-price rounding remain separate.
+This is the per-trade excursion split requested in [the review of #311](https://github.com/LuxAlgo/PineTS/pull/311#issuecomment-6020275599), rebased onto `dev` at `90209d4`. Cash sizing, quantity flooring, limit slippage, exit lifecycle and order-price rounding remain separate.
 
 ## Reproducible arithmetic regressions
 
@@ -16,4 +16,6 @@ No fresh TradingView comparison is included. The supported TradingView `tab_new`
 
 Before this becomes ready for review, capture an original minimal public Pine v6 probe on ordinary candles, Bar Magnifier off, with the exact source, date range, chart timeframe, symbol metadata and strategy settings. Replay matching candles locally, separately record order-sizing prices and execution prices, and compare the per-trade ledger, drawdown/run-up and summary metrics. No private strategy or downloaded vendor candle archive is part of this contribution.
 
-This patch follows the existing order-processing phases. It does not implement a globally chronological entry/exit scheduler, Bar Magnifier, or repair the outstanding trailing-fill changes in #367. Native verification must include multi-order and mixed entry/exit bars; synthetic tests alone do not establish general broker parity.
+This draft corrects per-trade drawdown/run-up only. Aggregate `strategy.max_drawdown` / `strategy.max_runup` retain the existing equity accounting. A shared forward cursor was rejected during independent review because current entry/exit phases can process a later price before an earlier fill. Per-trade intervals are recomputed from prior-bar peaks, so queue order cannot make an older lot retain prices after its exit or make a market entry lose its earlier low. Both review reproductions are permanent regressions. Aggregate equity excursions require a chronological book replay and a fresh native comparison before a follow-up can claim parity.
+
+This patch does not implement a globally chronological entry/exit scheduler, Bar Magnifier, or repair the outstanding trailing-fill changes in #367. Native verification must include multi-order and mixed entry/exit bars; synthetic tests alone do not establish general broker parity.

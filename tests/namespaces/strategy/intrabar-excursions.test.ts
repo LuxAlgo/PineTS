@@ -32,7 +32,6 @@ describe('excursions over the executed part of a bar', () => {
         bar(c, 0, [100, 105, 80, 100]); // O-H-L-C; stop after the high
         expect(c.strategy.closedtrades[0]).toMatchObject({ exit_price: 90, max_drawdown: 60, max_runup: 30 });
         expect(c.strategy.max_drawdown).toBe(60);
-        expect(c.strategy.max_runup).toBe(30);
     });
     it('retains short run-up before a stop and excludes the later high', () => {
         const c = context(-1, 2, 110);
@@ -120,5 +119,20 @@ describe('excursions over the executed part of a bar', () => {
         finalizeStrategyBar(c);
         expect(c.strategy.closedtrades[0]).toMatchObject({ exit_id: 'Margin call', exit_price: 80, size: 5, max_drawdown: 200, max_runup: 50 });
         expect(c.strategy.opentrades[0]).toMatchObject({ size: 5, max_drawdown: 200, max_runup: 50 });
+    });
+    it('keeps an earlier market entry interval when a later stop is queued first', () => {
+        const c = context();
+        Object.assign(c.strategy.pending_orders[0], { type: 'stop', stop: 110 });
+        c.strategy.pending_orders.push({ id: 'market', direction: 1, qty: 1, type: 'market', category: 'entry', bar: -1, time: -1, status: 'pending' });
+        bar(c, 0, [100, 115, 95, 112]);
+        expect(c.strategy.opentrades.find((t: any) => t.entry_id === 'market')).toMatchObject({ entry_price: 100, max_drawdown: 10, max_runup: 30 });
+    });
+    it('excludes a later entry quote from an older lot that exits earlier on the path', () => {
+        const c = context();
+        bar(c, 0, [100, 100, 100, 100]);
+        c.strategy.pending_orders.push({ id: 'later', direction: 1, qty: 1, type: 'limit', limit: 85, category: 'entry', bar: 0, time: 0, status: 'pending' });
+        c.strategy.pending_orders.push({ id: 'target', direction: -1, qty: 1, type: 'limit', limit: 104, category: 'exit', from_entry: 'entry', bar: 0, time: 0, status: 'pending' });
+        bar(c, 1, [100, 105, 80, 100]);
+        expect(c.strategy.closedtrades[0]).toMatchObject({ exit_price: 104, max_drawdown: 0, max_runup: 8 });
     });
 });

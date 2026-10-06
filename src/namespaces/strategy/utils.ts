@@ -260,39 +260,46 @@ function pathPosition(context: any, price: number, firstSegment = 0): number {
 }
 
 /**
- * Record only prices reached while the current position exists. Called before
- * each fill changes the book and once at the close for surviving positions.
- * The cursor also prevents multiple partial exits from replaying old extremes.
+ * Recompute each lot's current-bar interval from its entry to the requested
+ * fill. Entries and exits are processed in separate phases, so a shared
+ * forward cursor would lose earlier fills or retain prices after an exit.
+ * Prior-bar peaks remain the baseline; current-bar extrema can be revised
+ * when an earlier exit is processed after a later entry.
  */
 function advanceExcursions(context: any, end: number): void {
-    const s: StrategyState = context.strategy;
     const path = barPath(context);
     if (!path.every(Number.isFinite)) return;
-    if (s._excursion_bar !== context.idx) {
-        s._excursion_bar = context.idx;
-        s._excursion_path = 0;
-    }
-    const start = s._excursion_path ?? 0;
-    end = Math.max(start, Math.min(3, end));
-    const at = (t: number) => t === 3 ? path[3] : path[Math.floor(t)] + (path[Math.floor(t) + 1] - path[Math.floor(t)]) * (t % 1);
-    const positions = [start];
-    for (let i = Math.floor(start) + 1; i < end; i++) positions.push(i);
-    positions.push(end);
     const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
-    for (const position of positions) {
-        const price = at(position);
-        for (const t of s.opentrades) {
-            // The trigger precedes the slippage-adjusted fill. A new trade
-            // starts at its fill price, not at that earlier quote.
-            if (t.entry_bar_index === context.idx && t._entry_fill_path !== undefined && position <= t._entry_fill_path) continue;
-            const pnl = (price - t.entry_price) * t.size * pointValue;
-            const commission = t.commission ?? 0;
-            t.max_drawdown = Math.max(t.max_drawdown ?? 0, pnl < 0 ? -pnl + commission : 0);
-            t.max_runup = Math.max(t.max_runup ?? 0, pnl - commission);
+    const at = (position: number): number => {
+        if (position === 3) return path[3];
+        const segment = Math.floor(position);
+        return path[segment] + (path[segment + 1] - path[segment]) * (position - segment);
+    };
+    for (const trade of context.strategy.opentrades as Trade[]) {
+        if (trade._excursion_bar !== context.idx) {
+            trade._excursion_bar = context.idx;
+            trade._excursion_base_drawdown = trade.max_drawdown ?? 0;
+            trade._excursion_base_runup = trade.max_runup ?? 0;
         }
-        updateEquityPeaks(context, price, price);
+        const enteredThisBar = trade.entry_bar_index === context.idx;
+        const start = enteredThisBar ? (trade._entry_fill_path ?? 0) : 0;
+        const finish = Math.max(start, Math.min(3, end));
+        const positions: number[] = [];
+        // An entry's unslipped trigger was quoted before the execution.
+        if (!enteredThisBar) positions.push(start);
+        for (let vertex = Math.floor(start) + 1; vertex < finish; vertex++) positions.push(vertex);
+        if (finish > start) positions.push(finish);
+        const commission = trade.commission ?? 0;
+        let drawdown = trade._excursion_base_drawdown ?? 0;
+        let runup = trade._excursion_base_runup ?? 0;
+        for (const position of positions) {
+            const pnl = (at(position) - trade.entry_price) * trade.size * pointValue;
+            drawdown = Math.max(drawdown, -pnl + commission);
+            runup = Math.max(runup, pnl - commission);
+        }
+        trade.max_drawdown = drawdown;
+        trade.max_runup = runup;
     }
-    s._excursion_path = end;
 }
 
 /**
@@ -312,7 +319,7 @@ export function processStrategyOrders(context: any): void {
     const currentTime = Series.from(context.data.openTime).get(0);
 
     // Mark-to-market at OPEN price so fill logic / risk checks see accurate equity.
-    // Excursions advance separately before fills and through the remaining path.
+    // Per-trade excursions advance separately before fills and through the remaining path.
     markToMarket(context, openPrice);
 
     const limitSlack = limitFillSlack(context);
@@ -1082,6 +1089,8 @@ export function closePartialPosition(context: any, qtyToClose: number, exitPrice
             trade.commission = (trade.commission ?? 0) - entryCommissionShare;
             trade.max_drawdown = (trade.max_drawdown ?? 0) * ((tradeQty - qtyClosing) / tradeQty);
             trade.max_runup = (trade.max_runup ?? 0) * ((tradeQty - qtyClosing) / tradeQty);
+            trade._excursion_base_drawdown = (trade._excursion_base_drawdown ?? 0) * ((tradeQty - qtyClosing) / tradeQty);
+            trade._excursion_base_runup = (trade._excursion_base_runup ?? 0) * ((tradeQty - qtyClosing) / tradeQty);
             strategy.opentrades.push(trade);
             remainingQty = 0;
         }
@@ -1170,7 +1179,33 @@ function markToMarket(context: any, currentPrice: number): void {
     strategy.equity = strategy.initial_capital + strategy.netprofit + unrealizedPnL;
 }
 
-/** Compare reached prices with the realized-equity high/low water marks. */
+/**
+ * Latch `strategy.max_drawdown` and `strategy.max_runup` using INTRA-BAR
+ * high/low excursions of the CURRENT open position (after all fills have
+ * settled for the bar).
+ *
+ * Algorithm:
+ *   1. `equity_peak` / `equity_trough` track the running high/low of
+ *      REALIZED equity (initial_capital + netprofit). They step only on
+ *      closed-trade P&L.
+ *   2. For the still-open position (single weighted-avg via position_size /
+ *      position_avg_price), compute worst- and best-case unrealized excursion
+ *      against the bar's adverse / favorable extreme:
+ *        long:  worstPrice = low,   bestPrice = high
+ *        short: worstPrice = high,  bestPrice = low
+ *   3. drawdown_this_bar = (equity_peak  − realized_equity) + worst_excursion
+ *      runup_this_bar    = (realized_equity − equity_trough) + best_excursion
+ *   4. Latch the running maxima.
+ *
+ * Why latch only after fills: a trade closed by TP / SL during the bar
+ * realizes exactly its stop/target P&L. Computing drawdown against the bar's
+ * raw low BEFORE the fill would overcount — the trade never actually marked
+ * to that low because the stop fired first. Running this only after fills
+ * means closed trades contribute via `realizedEquity` (their actual close
+ * price), and only positions that survived the bar contribute via H/L.
+ *
+ * Per-trade excursions are tracked separately over each executed bar interval.
+ */
 function updateEquityPeaks(context: any, highPrice: number, lowPrice: number): void {
     const strategy: StrategyState = context.strategy;
     const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
@@ -2051,8 +2086,8 @@ export function processMarginCall(context: any, checkpoint: 'open' | 'extreme' |
 }
 
 /**
- * End-of-bar finalize: refresh equity at CLOSE and latch
- * `strategy.max_drawdown` / `strategy.max_runup` over the remaining path. Runs
+ * End-of-bar finalize: finish per-trade intervals, refresh equity at CLOSE
+ * and latch aggregate equity metrics using their existing H/L model. Runs
  * UNCONDITIONALLY once per bar (after entry+exit fills are done), regardless
  * of whether the strategy uses exit orders.
  */
@@ -2062,6 +2097,8 @@ export function finalizeStrategyBar(context: any): void {
     const closePrice = Series.from(context.data.close).get(0);
     markToMarket(context, closePrice);
     advanceExcursions(context, 3);
+    // Aggregate equity accounting is unchanged; per-trade intervals are separate.
+    updateEquityPeaks(context, Series.from(context.data.high).get(0), Series.from(context.data.low).get(0));
 
     // Record the MARK-TO-MARKET equity at each calendar month's last bar,
     // for the end-of-run Sharpe / Sortino ratios (see

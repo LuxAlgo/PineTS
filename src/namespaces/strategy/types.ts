@@ -83,6 +83,9 @@ export interface Trade {
      */
     _bracket_entry?: number;
     _entry_fill_path?: number; // Entry location on its historical bar path.
+    _excursion_bar?: number;
+    _excursion_base_drawdown?: number; // Peak carried into the current bar.
+    _excursion_base_runup?: number;
 }
 
 /**
@@ -200,8 +203,6 @@ export interface Order {
  * also indexable for the per-trade getter equivalents.
  */
 export interface StrategyState {
-    _excursion_bar?: number;
-    _excursion_path?: number;
     config: StrategyConfig;
 
     // Trade collections (arrays — `.length` is the Pine count)
