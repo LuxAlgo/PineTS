@@ -536,21 +536,30 @@ export function runTransformationPass(
         },
         AssignmentExpression(node: any, state: ScopeManager, c: any) {
             transformAssignmentExpression(node, state);
-            // After compound assignment transformation, the node becomes $.set(target, rhs).
-            // Traverse any IIFEs in the RHS to transform identifiers inside them
-            // (e.g., switch-expression IIFEs in compound assignments like disp /= switch i {...}).
-            if (node.type === 'CallExpression' && node.arguments) {
-                const traverseForIIFEs = (n: any): void => {
-                    if (!n) return;
-                    if (n.type === 'CallExpression' && n.callee &&
-                        (n.callee.type === 'ArrowFunctionExpression' || n.callee.type === 'FunctionExpression')) {
-                        c(n.callee, state);
-                    }
-                    if (n.type === 'BinaryExpression') {
-                        traverseForIIFEs(n.left);
-                        traverseForIIFEs(n.right);
-                    }
-                };
+            // Traverse any IIFEs in the RHS to transform identifiers inside them.
+            // Compound assignments (x /= ...) were rewritten to a `$.set(...)`
+            // CallExpression — walk its arguments. A plain `=` assignment keeps
+            // its AssignmentExpression type — walk node.right. Without the
+            // second shape, a UDT variable referenced inside a switch-expression
+            // IIFE assigned with `:=` (`t.label := switch ... => t.x ...`) keeps
+            // its bare Pine name in the branch bodies and throws
+            // `ReferenceError: <name> is not defined` at runtime.
+            const traverseForIIFEs = (n: any): void => {
+                if (!n) return;
+                if (n.type === 'CallExpression' && n.callee &&
+                    (n.callee.type === 'ArrowFunctionExpression' || n.callee.type === 'FunctionExpression')) {
+                    c(n.callee, state);
+                }
+                if (n.type === 'BinaryExpression' || n.type === 'LogicalExpression' || n.type === 'ConditionalExpression') {
+                    traverseForIIFEs(n.left);
+                    traverseForIIFEs(n.right);
+                    traverseForIIFEs(n.consequent);
+                    traverseForIIFEs(n.alternate);
+                }
+            };
+            if (node.type === 'AssignmentExpression') {
+                traverseForIIFEs(node.right);
+            } else if (node.type === 'CallExpression' && node.arguments) {
                 node.arguments.forEach((arg: any) => traverseForIIFEs(arg));
             }
         },
