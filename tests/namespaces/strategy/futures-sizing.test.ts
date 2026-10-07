@@ -19,7 +19,6 @@ function contextFor(config: any = {}, symbol: any = {}) {
 
 describe('contract-aware strategy sizing', () => {
     // Independent notional arithmetic: floor($1m / (30573.25 * $2/point)) = 16.
-    // Alex confirmed the 32-versus-16 MNQ defect in #311; these bars are synthetic.
     it.each(['cash', 'percent_of_equity'])('uses pointvalue and minimum contracts for %s', (type) => {
         const c = contextFor({ default_qty_type: type, default_qty_value: type === 'cash' ? 1000000 : 100 });
         expect(calculateOrderQty(c, undefined, 1, 30573.25)).toBe(16);
