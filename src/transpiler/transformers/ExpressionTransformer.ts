@@ -193,9 +193,17 @@ export function transformArrayIndex(node: any, scopeManager: ScopeManager): void
     // when neither block above matched — e.g. func()[expr * 2], close[a + b] with non-Identifier object.
     if (node.computed && node.property.type !== 'Identifier' && node.property.type !== 'MemberExpression'
         && !node._indexTransformed) {
-        if (node.property.type === 'BinaryExpression' || node.property.type === 'UnaryExpression' ||
+        if (node.property.type === 'CallExpression') {
+            // `close[array.get(idxArr, y)]`: each identifier inside the index
+            // call (the array name, its args) still lives in this scope.
+            // Without this the array name leaked bare and threw
+            // "ReferenceError: <name> is not defined" at runtime.
+            if (!node.property._transformed) transformCallExpression(node.property, scopeManager);
+            node._indexTransformed = true;
+        } else if (node.property.type === 'BinaryExpression' || node.property.type === 'UnaryExpression' ||
             node.property.type === 'LogicalExpression' || node.property.type === 'ConditionalExpression') {
             node.property = transformOperand(node.property, scopeManager);
+            node._indexTransformed = true;
         }
     }
 }
