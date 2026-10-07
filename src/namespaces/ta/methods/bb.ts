@@ -1,6 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { CallWindow, PushOptions } from '../utils/windows';
+
+const OPTIONS: PushOptions = {
+    dropped: (v, win) => {
+        win.tAgg -= v;
+    },
+    // Backfill from source if window is undersized (dynamic length recovery)
+    // Break on NaN since this function intentionally excludes NaN from the window
+    backfill: (window, win, source, length) => {
+        const series = Series.from(source);
+        while (window.length < length) {
+            const val = series.get(window.length);
+            if (isNaN(val)) break;
+            window.push(val);
+            win.tAgg += val;
+        }
+    },
+};
 
 /**
  * Bollinger Bands (BB)
@@ -23,84 +41,38 @@ export function bb(context: any) {
         const length = Series.from(_length).get(0);
         const mult = Series.from(_mult).get(0);
 
-        // Use incremental calculation with rolling window
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `bb_${length}_${mult}`;
-
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevSum: 0,
-                // Tentative state
-                currentWindow: [],
-                currentSum: 0,
-            };
-        }
-
-        const state = context.taState[stateKey];
-
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-                state.prevSum = state.currentSum;
-            }
-            state.lastIdx = context.idx;
-        }
+        if (!context.taState[stateKey]) context.taState[stateKey] = new CallWindow();
+        const win: CallWindow = context.taState[stateKey];
+        win.begin(context.idx);
 
         const currentValue = Series.from(source).get(0);
 
-        // Handle NaN input
+        // An na value leaves the window as it was
         if (isNaN(currentValue)) {
-            state.currentWindow = [...state.prevWindow];
-            state.currentSum = state.prevSum;
+            win.t = null;
             return [[NaN, NaN, NaN]];
         }
 
-        // Use committed state to calculate current state
-        const window = [...state.prevWindow];
-        let sum = state.prevSum;
-
-        // Add current value to window
-        window.unshift(currentValue);
-        sum += currentValue;
-
-        // Remove oldest value if window exceeds length
-        while (window.length > length) {
-            const oldValue = window.pop();
-            sum -= oldValue;
-        }
-
-        // Backfill from source if window is undersized (dynamic length recovery)
-        // Break on NaN since this function intentionally excludes NaN from the window
-        if (window.length < length && context.idx >= length - 1) {
-            const series = Series.from(source);
-            while (window.length < length) {
-                const val = series.get(window.length);
-                if (isNaN(val)) break;
-                window.push(val);
-                sum += val;
-            }
-        }
-
-        // Update tentative state
-        state.currentWindow = window;
-        state.currentSum = sum;
+        // Running sum of the window: committed in win.agg, this call's in win.tAgg
+        win.tAgg = (win.agg ?? 0) + currentValue;
+        win.push(context.idx, currentValue, length, OPTIONS, source);
+        const sum = win.tAgg;
 
         // Not enough data yet
-        if (window.length < length) {
+        if (win.size < length) {
             return [[NaN, NaN, NaN]];
         }
 
         // Calculate middle band (SMA)
         const middle = sum / length;
 
-        // Calculate standard deviation
+        // Standard deviation summed over the window (a running sum of squares would cancel)
+        const values = win.values(length);
         let sumSquaredDiff = 0;
         for (let i = 0; i < length; i++) {
-            sumSquaredDiff += Math.pow(window[i] - middle, 2);
+            sumSquaredDiff += Math.pow(values[i] - middle, 2);
         }
         const stdev = Math.sqrt(sumSquaredDiff / length);
 

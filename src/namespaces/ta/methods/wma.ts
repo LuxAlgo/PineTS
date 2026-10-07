@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { PushOptions, WeightedWindow } from '../utils/windows';
+
+// Backfill with the source history, na values filled with the value before them
+const BACKFILL_FILLED: PushOptions = {
+    backfill: (window, _win, source, period) => {
+        const series = Series.from(source);
+        while (window.length < period) window.push(series.get(window.length));
+        for (let i = window.length - 2; i >= 0; i--) {
+            if (Number.isNaN(window[i])) window[i] = window[i + 1];
+        }
+    },
+};
 
 export function wma(context: any) {
     return (source: any, _period: any, _callId?: string) => {
@@ -9,73 +21,21 @@ export function wma(context: any) {
         // Weighted Moving Average
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `wma_${period}`;
-
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevCallCount: 0,
-                // Tentative state
-                currentWindow: [],
-                currentCallCount: 0,
-            };
-        }
-
-        const state = context.taState[stateKey];
-
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-                state.prevCallCount = state.currentCallCount;
-            }
-            state.lastIdx = context.idx;
-        }
+        if (!context.taState[stateKey]) context.taState[stateKey] = new WeightedWindow(true);
+        const win: WeightedWindow = context.taState[stateKey];
+        win.begin(context.idx);
 
         const currentValue = Series.from(source).get(0);
         const currentIsNa = currentValue === null || currentValue === undefined || Number.isNaN(currentValue);
 
-        // Use committed state
-        const window = [...state.prevWindow];
-
         // TradingView weighs an na bar with the last non-na value before it (and returns na on the
         // na bar itself), so the window holds the source with na values filled forward.
-        window.unshift(currentIsNa ? (window.length ? window[0] : NaN) : currentValue);
+        const value = currentIsNa ? (win.ring.size ? win.ring.at(0) : NaN) : currentValue;
+        win.push(context.idx, value, period, BACKFILL_FILLED, source);
 
-        while (window.length > period) {
-            window.pop();
-        }
-
-        // Track actual call count for callsite-correct backfill
-        const callCount = state.prevCallCount + 1;
-        if (window.length < period && (callCount >= period || context.idx >= period - 1)) {
-            const series = Series.from(source);
-            while (window.length < period) {
-                window.push(series.get(window.length));
-            }
-            for (let i = window.length - 2; i >= 0; i--) {
-                if (Number.isNaN(window[i])) window[i] = window[i + 1];
-            }
-        }
-
-        // Update tentative state
-        state.currentWindow = window;
-        state.currentCallCount = callCount;
-
-        if (window.length < period || currentIsNa || window.some((v) => Number.isNaN(v))) {
-            return NaN;
-        }
-
-        let numerator = 0;
-        let denominator = 0;
-        for (let i = 0; i < period; i++) {
-            const weight = period - i;
-            numerator += window[i] * weight;
-            denominator += weight;
-        }
-
-        const wma = numerator / denominator;
-        return context.precision(wma);
+        if (currentIsNa) return NaN;
+        const sums = win.sums();
+        if (!sums) return NaN;
+        return context.precision(sums[1] / ((period * (period + 1)) / 2));
     };
 }

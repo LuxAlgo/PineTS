@@ -12,13 +12,15 @@ export function variance(context: any) {
         const series = Series.from(source);
 
         // Over the last `length` non-na values (na values are skipped, as on TradingView).
-        const window = nonNaWindow(context, _callId || `variance_${length}_${biased}`, (k) => series.get(k), length);
+        const window = nonNaWindow(context, _callId || `variance_${length}_${biased}`, series, length);
         if (!window) return NaN;
 
         // Summed here rather than with the running sum: `sumSquares / length - mean^2` magnifies drift.
         let sum = 0;
         let sumSquares = 0;
-        for (const v of window.values) {
+        const values = window.values();
+        for (let i = 0; i < length; i++) {
+            const v = values[i];
             sum += v;
             sumSquares += v * v;
         }

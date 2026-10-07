@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { extremeBarsOffset } from '../utils/extremeBars';
 
 /**
  * Lowest Bars
@@ -19,31 +20,15 @@ export function lowestbars(context: any) {
         const length = Series.from(_length).get(0);
         const series = Series.from(source);
 
-        // Stateless calculation (accesses past data via Series)
-        
+        // Result depends on historical data availability.
         if (context.idx < length - 1) {
             return NaN;
         }
 
-        let minVal = Infinity;
-        let minOffset = NaN;
-
-        for (let i = 0; i < length; i++) {
-            const val = series.get(i);
-
-            // TradingView resets the window at na: only the bars since the most recent
-            // na take part, and an na on the current bar yields offset 0
-            // (tests/namespaces/ta/na-window-semantics.test.ts).
-            if (val === undefined || isNaN(val)) break;
-
-            // `<=` so that, scanning newest → oldest, an older bar with the same value
-            // overwrites: TradingView returns the offset of the OLDEST bar among ties.
-            if (isNaN(minOffset) || val <= minVal) {
-                minVal = val;
-                minOffset = -i;
-            }
-        }
-
-        return isNaN(minOffset) ? 0 : minOffset;
+        // TradingView resets the window at na: only the bars since the most recent
+        // na take part, and an na on the current bar yields offset 0
+        // (tests/namespaces/ta/na-window-semantics.test.ts). Among equal values the
+        // OLDEST bar wins; in a local block the window is the calls of the last `length` bars.
+        return extremeBarsOffset(context, _callId, series, length, false);
     };
 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { nonNaWindow } from '../utils/nonNaWindow';
+import { BACKFILL_FROM_SOURCE, WeightedWindow } from '../utils/windows';
 
 /**
  * Center of Gravity (COG)
@@ -15,6 +17,9 @@ import { Series } from '../../../Series';
  *     num = num + price * (i + 1)
  * cog = -num / sum
  *
+ * As in that formula on TradingView, in a local block `sum` is over the last `length` calls (math.sum)
+ * and `num` over the last `length` bars, a skipped bar repeating the last call's value (`source[i]`).
+ *
  * @param source - Source series (typically close)
  * @param length - Number of bars (lookback period)
  * @returns Center of Gravity value
@@ -24,30 +29,29 @@ export function cog(context: any) {
         const length = Series.from(_length).get(0);
         const sourceSeries = Series.from(source);
 
-        // Calculate sum of source over length period
         let sum = 0;
-        let hasNaN = false;
-
-        for (let i = 0; i < length; i++) {
-            const value = sourceSeries.get(i);
-            if (isNaN(value)) {
-                hasNaN = true;
-                break;
-            }
-            sum += value;
-        }
-
-        // Return NaN if we don't have enough data
-        if (hasNaN) {
-            return NaN;
-        }
-
-        // Calculate weighted sum
-        // num = sum of (price[i] * (i + 1))
         let num = 0;
-        for (let i = 0; i < length; i++) {
-            const price = sourceSeries.get(i);
-            num += price * (i + 1);
+        if (_callId && length >= 1) {
+            if (!context.taState) context.taState = {};
+            const win: WeightedWindow = (context.taState[_callId] ??= new WeightedWindow(true));
+            win.begin(context.idx);
+            win.push(context.idx, sourceSeries.get(0), length, BACKFILL_FROM_SOURCE, source);
+            const calls = nonNaWindow(context, `${_callId}_sum`, sourceSeries, length);
+            // [S, N] with N weighing the newest value `length`: Σ x_i * (i + 1) = (length + 1) * S - N
+            const sums = win.sums();
+            if (!sums || !calls) return NaN;
+            sum = calls.sum;
+            num = (length + 1) * sums[0] - sums[1];
+        } else {
+            for (let i = 0; i < length; i++) {
+                const value = sourceSeries.get(i);
+                if (isNaN(value)) {
+                    // Return NaN if we don't have enough data
+                    return NaN;
+                }
+                sum += value;
+                num += value * (i + 1);
+            }
         }
 
         // Avoid division by zero
@@ -61,4 +65,3 @@ export function cog(context: any) {
         return context.precision(cog);
     };
 }
-

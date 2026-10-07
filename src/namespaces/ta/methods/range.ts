@@ -1,6 +1,54 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { CallWindow, MonoDeque } from '../utils/windows';
+
+/** The non-na values of the last calls with their running maximum and minimum. */
+class RangeWindow extends CallWindow {
+    private seq = 0;
+    private hi = new MonoDeque(true);
+    private lo = new MonoDeque(false);
+
+    protected pushed(x: number): void {
+        this.seq++;
+        this.hi.push(this.seq, x);
+        this.lo.push(this.seq, x);
+        const from = this.seq - this.ring.size + 1;
+        this.hi.expire(from);
+        this.lo.expire(from);
+    }
+
+    protected rebuilt(): void {
+        this.hi.clear();
+        this.lo.clear();
+        for (let i = this.ring.size - 1; i >= 0; i--) {
+            this.seq++;
+            this.hi.push(this.seq, this.ring.at(i));
+            this.lo.push(this.seq, this.ring.at(i));
+        }
+    }
+
+    /** [max, min] of the current call's window. */
+    extremes(): [number, number] {
+        const t = this.t;
+        if (!t || t.rebuilt) {
+            let max = -Infinity;
+            let min = Infinity;
+            for (let i = 0; i < this.size; i++) {
+                const v = this.at(i);
+                if (v > max) max = v;
+                if (v < min) min = v;
+            }
+            return [max, min];
+        }
+        const pi = this.hi.first(this.seq - this.size + 2);
+        const pl = this.lo.first(this.seq - this.size + 2);
+        // the newest value wins only when strictly better: among equal values the oldest comes first
+        const max = pi < 0 || t.x > this.hi.valAt(pi) ? t.x : this.hi.valAt(pi);
+        const min = pl < 0 || t.x < this.lo.valAt(pl) ? t.x : this.lo.valAt(pl);
+        return [max, min];
+    }
+}
 
 /**
  * Range
@@ -19,63 +67,38 @@ export function range(context: any) {
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `range_${length}`;
-
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevCallCount: 0,
-                // Tentative state
-                currentWindow: [],
-                currentCallCount: 0,
-            };
-        }
-
-        const state = context.taState[stateKey];
-
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = state.currentWindow;
-                state.prevCallCount = state.currentCallCount;
-            }
-            state.lastIdx = context.idx;
-        }
+        if (!context.taState[stateKey]) context.taState[stateKey] = new RangeWindow();
+        const win: RangeWindow = context.taState[stateKey];
+        win.begin(context.idx);
 
         const isNa = (v: any) => v === undefined || v === null || isNaN(v);
         const series = Series.from(source);
+        const currentValue = series.get(0);
 
-        // Non-na values, oldest → newest
-        const window = [...state.prevWindow];
-
-        // First call on a later bar (conditional block, barstate.islast): seed the window
-        // from the source history, like the other window functions' backfill.
-        if (state.prevCallCount === 0) {
-            for (let i = 1; i <= context.idx && window.length < length; i++) {
+        if (win.calls === 0) {
+            // First call (conditional block, barstate.islast): seed the window from the source
+            // history, like the other window functions' backfill.
+            const values: number[] = [];
+            for (let i = 1; i <= context.idx && values.length < length; i++) {
                 const v = series.get(i);
-                if (!isNa(v)) window.unshift(v);
+                if (!isNa(v)) values.push(v);
             }
+            if (!isNa(currentValue)) values.unshift(currentValue);
+            while (values.length > length) values.pop();
+            win.set(values, length);
+        } else if (!isNa(currentValue)) {
+            win.push(context.idx, currentValue, length);
+        } else if (win.ring.size > length) {
+            win.set(win.ring.toArray().slice(0, length), length);
+        } else {
+            win.t = null;
         }
 
-        const currentValue = series.get(0);
-        if (!isNa(currentValue)) window.push(currentValue);
-        while (window.length > length) window.shift();
-
-        // Update tentative state
-        state.currentWindow = window;
-        state.currentCallCount = state.prevCallCount + 1;
-
-        if (window.length < length) {
+        if (win.size < length) {
             return NaN;
         }
 
-        let max = Number.MIN_VALUE;
-        let min = Infinity;
-        for (const v of window) {
-            if (v > max) max = v;
-            if (v < min) min = v;
-        }
-        return context.precision(max - min);
+        const [max, min] = win.extremes();
+        return context.precision((max > Number.MIN_VALUE ? max : Number.MIN_VALUE) - min);
     };
 }

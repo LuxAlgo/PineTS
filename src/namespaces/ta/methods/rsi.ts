@@ -17,14 +17,15 @@ export function rsi(context: any) {
                 prevPrevValue: null,
                 prevAvgGain: 0,
                 prevAvgLoss: 0,
-                prevInitGains: [],
-                prevInitLosses: [],
+                // First `period` gains / losses (the seed of the averages), committed
+                initGains: [],
+                initLosses: [],
                 // Tentative state
                 currentPrevValue: null,
                 currentAvgGain: 0,
                 currentAvgLoss: 0,
-                currentInitGains: [],
-                currentInitLosses: [],
+                // Gain / loss the current bar adds to the seed, if any
+                currentInit: null,
             };
         }
 
@@ -36,9 +37,12 @@ export function rsi(context: any) {
                 state.prevPrevValue = state.currentPrevValue;
                 state.prevAvgGain = state.currentAvgGain;
                 state.prevAvgLoss = state.currentAvgLoss;
-                state.prevInitGains = [...state.currentInitGains]; // Deep copy array
-                state.prevInitLosses = [...state.currentInitLosses]; // Deep copy array
+                if (state.currentInit) {
+                    state.initGains.push(state.currentInit[0]);
+                    state.initLosses.push(state.currentInit[1]);
+                }
             }
+            state.currentInit = null;
             state.lastIdx = context.idx;
         }
 
@@ -48,8 +52,7 @@ export function rsi(context: any) {
         // needs the value before it), so that bar returns na and only stores its value, as on TradingView.
         if (currentValue === null || currentValue === undefined || isNaN(currentValue)) {
             state.currentPrevValue = NaN;
-            state.currentInitGains = [...state.prevInitGains];
-            state.currentInitLosses = [...state.prevInitLosses];
+            state.currentInit = null;
             state.currentAvgGain = state.prevAvgGain;
             state.currentAvgLoss = state.prevAvgLoss;
             return NaN;
@@ -61,8 +64,7 @@ export function rsi(context: any) {
         // First valid bar or previous was NaN/null — store value, don't compute diff
         if (prevValue === null || isNaN(prevValue)) {
             state.currentPrevValue = currentValue;
-            state.currentInitGains = [...state.prevInitGains];
-            state.currentInitLosses = [...state.prevInitLosses];
+            state.currentInit = null;
             state.currentAvgGain = state.prevAvgGain;
             state.currentAvgLoss = state.prevAvgLoss;
             return NaN;
@@ -70,8 +72,6 @@ export function rsi(context: any) {
 
         let avgGain = state.prevAvgGain;
         let avgLoss = state.prevAvgLoss;
-        const initGains = [...state.prevInitGains]; // Copy for tentative usage
-        const initLosses = [...state.prevInitLosses]; // Copy for tentative usage
 
         // Calculate gain/loss from previous value
         const diff = currentValue - prevValue;
@@ -79,20 +79,14 @@ export function rsi(context: any) {
         const loss = diff < 0 ? -diff : 0;
 
         // Accumulate gains/losses until we have 'period' values
-        if (initGains.length < period) {
-            initGains.push(gain);
-            initLosses.push(loss);
-
-            // Update tentative state arrays
-            state.currentInitGains = initGains;
-            state.currentInitLosses = initLosses;
+        if (state.initGains.length < period) {
+            state.currentInit = [gain, loss];
             state.currentPrevValue = currentValue;
 
-            // Once we have 'period' gain/loss pairs, calculate first RSI
-            if (initGains.length === period) {
-                // Calculate first RSI using simple averages
-                avgGain = initGains.reduce((a, b) => a + b, 0) / period;
-                avgLoss = initLosses.reduce((a, b) => a + b, 0) / period;
+            // Once we have 'period' gain/loss pairs, calculate first RSI using simple averages
+            if (state.initGains.length + 1 === period) {
+                avgGain = (state.initGains.reduce((a: number, b: number) => a + b, 0) + gain) / period;
+                avgLoss = (state.initLosses.reduce((a: number, b: number) => a + b, 0) + loss) / period;
 
                 state.currentAvgGain = avgGain;
                 state.currentAvgLoss = avgLoss;
@@ -102,6 +96,7 @@ export function rsi(context: any) {
             }
             return NaN;
         }
+        state.currentInit = null;
 
         // Calculate RSI using smoothed averages (Wilder's smoothing)
         avgGain = (avgGain * (period - 1) + gain) / period;

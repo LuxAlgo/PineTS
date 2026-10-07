@@ -9,7 +9,7 @@ export function sma(context: any) {
         const series = Series.from(source);
 
         // Mean of the last `period` non-na values (na values are skipped, as on TradingView).
-        const window = nonNaWindow(context, _callId || `sma_${period}`, (k) => series.get(k), period);
+        const window = nonNaWindow(context, _callId || `sma_${period}`, series, period);
         if (!window) return NaN;
 
         return context.precision(window.sum / period);

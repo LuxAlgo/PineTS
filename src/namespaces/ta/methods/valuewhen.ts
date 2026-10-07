@@ -15,19 +15,19 @@ export function valuewhen(context: any) {
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
                 lastIdx: -1,
-                // Committed state
-                prevValues: [],
-                // Tentative state
-                currentValues: [],
+                // Committed values of the occurrences, oldest first (only ever appended to)
+                values: [],
+                // Tentative: whether the current bar is an occurrence, and its value
+                pending: false,
+                pendingValue: undefined,
             };
         }
         const state = context.taState[stateKey];
 
         // Commit logic
         if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevValues = [...state.currentValues];
-            }
+            if (state.pending) state.values.push(state.pendingValue);
+            state.pending = false;
             state.lastIdx = context.idx;
         }
 
@@ -35,27 +35,28 @@ export function valuewhen(context: any) {
         const val = Series.from(source).get(0);
         const occurrence = Series.from(_occurrence).get(0);
 
-        // Use committed values as base
-        const values = [...state.prevValues];
-
-        if (cond) {
-            values.push(val);
-        }
-
-        // Update tentative state
-        state.currentValues = values;
+        state.pending = !!cond;
+        state.pendingValue = val;
 
         if (isNaN(occurrence) || occurrence < 0) {
             return NaN;
         }
 
-        const index = values.length - 1 - occurrence;
-
-        if (index < 0) {
-            return NaN;
+        // Occurrences newest first: the current bar's (when it is one), then the committed ones
+        const values = state.values;
+        let result;
+        if (state.pending) {
+            if (occurrence === 0) result = val;
+            else {
+                const index = values.length - occurrence;
+                if (index < 0) return NaN;
+                result = values[index];
+            }
+        } else {
+            const index = values.length - 1 - occurrence;
+            if (index < 0) return NaN;
+            result = values[index];
         }
-
-        const result = values[index];
 
         // Check if result is a number to apply precision, else return as is (e.g. boolean/color)
         if (typeof result === 'number') {

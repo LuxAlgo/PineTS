@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { ExtremeWindow } from '../utils/windows';
 
 /**
  * Williams %R (WPR)
@@ -24,75 +25,35 @@ export function wpr(context: any) {
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `wpr_${length}`;
-
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevHighWindow: [],
-                prevLowWindow: [],
-                // Tentative state
-                currentHighWindow: [],
-                currentLowWindow: [],
-            };
-        }
-
-        const state = context.taState[stateKey];
-
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevHighWindow = [...state.currentHighWindow];
-                state.prevLowWindow = [...state.currentLowWindow];
-            }
-            state.lastIdx = context.idx;
-        }
+        if (!context.taState[stateKey]) context.taState[stateKey] = { highs: new ExtremeWindow(true, true), lows: new ExtremeWindow(false, true) };
+        const hw: ExtremeWindow = context.taState[stateKey].highs;
+        const lw: ExtremeWindow = context.taState[stateKey].lows;
+        hw.begin(context.idx);
+        lw.begin(context.idx);
 
         // Get current values from context.data
         const high = context.get(context.data.high, 0);
         const low = context.get(context.data.low, 0);
         const close = context.get(context.data.close, 0);
 
-        // Handle NaN inputs
+        // An na bar leaves the windows as they were
         if (isNaN(high) || isNaN(low) || isNaN(close)) {
-            // Propagate state
-            state.currentHighWindow = [...state.prevHighWindow];
-            state.currentLowWindow = [...state.prevLowWindow];
+            hw.t = null;
+            lw.t = null;
             return NaN;
         }
 
-        const highWindow = [...state.prevHighWindow];
-        const lowWindow = [...state.prevLowWindow];
-
-        // Add to windows
-        highWindow.unshift(high);
-        lowWindow.unshift(low);
-
-        if (highWindow.length > length) {
-            highWindow.pop();
-            lowWindow.pop();
-        }
-
-        state.currentHighWindow = highWindow;
-        state.currentLowWindow = lowWindow;
+        hw.push(context.idx, high, length, { trimOnce: true });
+        lw.push(context.idx, low, length, { trimOnce: true });
 
         // Not enough data yet
-        if (highWindow.length < length) {
+        if (hw.size < length) {
             return NaN;
         }
 
-        // Find highest high and lowest low in the window
-        let highestHigh = highWindow[0];
-        let lowestLow = lowWindow[0];
-
-        for (let i = 1; i < length; i++) {
-            if (highWindow[i] > highestHigh) {
-                highestHigh = highWindow[i];
-            }
-            if (lowWindow[i] < lowestLow) {
-                lowestLow = lowWindow[i];
-            }
-        }
+        // Highest high and lowest low of the last `length` values (the windows hold no na)
+        const highestHigh = hw.extreme(length);
+        const lowestLow = lw.extreme(length);
 
         // Calculate Williams %R
         const range = highestHigh - lowestLow;

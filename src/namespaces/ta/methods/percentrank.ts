@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { BACKFILL_FROM_SOURCE, SortedWindow } from '../utils/windows';
+
+const isNa = (v: any) => v === null || v === undefined || Number.isNaN(v);
 
 /**
  * Percent Rank
  *
  * Returns the percentage of values in the last length previous bars that are less than or equal to the current value.
+ *
+ * The previous values are kept sorted, so a bar costs a binary search. In a local block, as on
+ * TradingView, they are the last `length` bars, a skipped bar repeating the last call's value.
  */
 export function percentrank(context: any) {
     return (source: any, _length: any, _callId?: string) => {
@@ -21,7 +27,13 @@ export function percentrank(context: any) {
         // As on TradingView, an na value (current or previous) compares false, so it is not counted,
         // and the count is always divided by `length`: an na bar returns 0.
         let count = 0;
-        if (currentValue !== null && currentValue !== undefined) {
+        if (_callId) {
+            if (!context.taState) context.taState = {};
+            const win: SortedWindow = (context.taState[_callId] ??= new SortedWindow(isNa, true));
+            win.begin(context.idx);
+            win.push(context.idx, currentValue, length + 1, BACKFILL_FROM_SOURCE, source);
+            if (!isNa(currentValue)) count = win.countPrevLE(currentValue);
+        } else if (currentValue !== null && currentValue !== undefined) {
             for (let i = 1; i <= length; i++) {
                 const val = series.get(i);
                 if (val !== null && val !== undefined && val <= currentValue) count++;

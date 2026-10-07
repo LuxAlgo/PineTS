@@ -13,16 +13,9 @@ export function vwma(context: any) {
         // sma(source * volume) / sma(volume), each over its own last `period` non-na values: a bar
         // where the source is na drops out of the numerator only, as on TradingView.
         const weighted = nonNaWindow(context, `${stateKey}_sv`, (k) => series.get(k) * volume.get(k), period);
-        const volumes = nonNaWindow(context, `${stateKey}_v`, (k) => volume.get(k), period);
+        const volumes = nonNaWindow(context, `${stateKey}_v`, volume, period);
         if (!weighted || !volumes) return NaN;
 
-        let sumVolPrice = 0;
-        let sumVol = 0;
-        for (let i = 0; i < period; i++) {
-            sumVolPrice += weighted.values[i];
-            sumVol += volumes.values[i];
-        }
-
-        return context.precision(sumVolPrice / sumVol);
+        return context.precision(weighted.sum / volumes.sum);
     };
 }

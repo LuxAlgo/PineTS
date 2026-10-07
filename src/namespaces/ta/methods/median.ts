@@ -9,12 +9,11 @@ export function median(context: any) {
         const series = Series.from(source);
 
         // Median of the last `length` non-na values (na values are skipped, as on TradingView).
-        const window = nonNaWindow(context, _callId || `median_${length}`, (k) => series.get(k), length);
+        const window = nonNaWindow(context, _callId || `median_${length}`, series, length, 'sorted');
         if (!window) return NaN;
 
-        const sorted = window.values.slice().sort((a, b) => a - b);
         const mid = Math.floor(length / 2);
-        const median = length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+        const median = length % 2 === 0 ? (window.kth(mid - 1) + window.kth(mid)) / 2 : window.kth(mid);
 
         return context.precision(median);
     };

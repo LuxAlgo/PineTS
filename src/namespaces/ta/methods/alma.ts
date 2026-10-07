@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { BACKFILL_FROM_SOURCE, CallWindow } from '../utils/windows';
 
 /**
  * ALMA - Arnaud Legoux Moving Average
@@ -19,6 +20,9 @@ import { Series } from '../../../Series';
  * - s = period / sigma
  * - weight[i] = exp(-((i - m)^2) / (2 * s^2))
  * - ALMA = sum(weight[i] * price[i]) / sum(weight[i])
+ *
+ * The Gaussian weights have no running form, so each bar sums its `period` values (no copy of the
+ * window).
  */
 export function alma(context: any) {
     return (source: any, _period: any, _offset: any, _sigma: any, ...rest: any[]) => {
@@ -29,19 +33,12 @@ export function alma(context: any) {
         const sigma = Series.from(_sigma).get(0);
         const floor = rest.length > 0 && !!Series.from(rest[0]).get(0);
 
-        // Incremental ALMA calculation using rolling window
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `alma_${period}_${offset}_${sigma}_${floor}`;
 
         if (!context.taState[stateKey]) {
-            context.taState[stateKey] = { 
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevCallCount: 0,
-                // Tentative state (working window)
-                currentWindow: [],
-                currentCallCount: 0,
+            context.taState[stateKey] = {
+                win: new CallWindow(true),
                 // Weights for `weightsKey`; a series length recomputes them
                 weightsKey: '',
                 weights: [],
@@ -49,6 +46,7 @@ export function alma(context: any) {
         }
 
         const state = context.taState[stateKey];
+        const win: CallWindow = state.win;
 
         const weightsKey = `${period}_${offset}_${sigma}_${floor}`;
         if (state.weightsKey !== weightsKey) {
@@ -71,55 +69,25 @@ export function alma(context: any) {
             state.weightsKey = weightsKey;
         }
 
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                // Commit the tentative window to prevWindow
-                state.prevWindow = [...state.currentWindow];
-                state.prevCallCount = state.currentCallCount;
-            }
-            state.lastIdx = context.idx;
-        }
+        win.begin(context.idx);
+        win.push(context.idx, Series.from(source).get(0), period, BACKFILL_FROM_SOURCE, source);
 
-        const currentValue = Series.from(source).get(0);
-
-        // Start with the committed window
-        const window = [...state.prevWindow];
-
-        // Add current value to window (most recent at front)
-        window.unshift(currentValue);
-
-        while (window.length > period) {
-            window.pop();
-        }
-
-        // Track actual call count for callsite-correct backfill
-        const callCount = state.prevCallCount + 1;
-        if (window.length < period && (callCount >= period || context.idx >= period - 1)) {
-            const series = Series.from(source);
-            while (window.length < period) {
-                window.push(series.get(window.length));
-            }
-        }
-
-        // Update tentative state
-        state.currentWindow = window;
-        state.currentCallCount = callCount;
-
-        if (window.length < period) {
+        if (win.size < period) {
             // Not enough data yet
             return NaN;
         }
 
-        // Calculate weighted average
-        // Window is [newest, ..., oldest], but weights are indexed [oldest, ..., newest]
-        // So we need to apply weights in reverse order
+        // weights[0] applies to the oldest value of the window, weights[period - 1] to the newest
+        const weights: number[] = state.weights;
+        const t = win.t!;
         let alma = 0;
-        for (let i = 0; i < period; i++) {
-            // weights[0] = oldest, weights[period-1] = newest
-            // window[0] = newest, window[period-1] = oldest
-            // So weights[i] should multiply window[period-1-i]
-            alma += state.weights[i] * window[period - 1 - i];
+        if (t.rebuilt) {
+            for (let i = 0; i < period; i++) alma += weights[i] * t.values![period - 1 - i];
+        } else {
+            // the current value is not in the committed ring yet
+            const ring = win.ring;
+            for (let i = 0; i < period - 1; i++) alma += weights[i] * ring.at(period - 2 - i);
+            alma += weights[period - 1] * t.x;
         }
 
         return context.precision(alma);

@@ -20,11 +20,14 @@ export function correlation(context: any) {
         const s2 = Series.from(source2);
         const key = _callId || `correlation_${length}`;
 
+        // Summed afresh rather than with the running sum: `mxx - mx * mx` cancels, so the drift of a
+        // running sum can turn a zero variance negative (or the other way round).
         const mean = (suffix: string, valueAt: (k: number) => number) => {
             const w = nonNaWindow(context, `${key}_${suffix}`, valueAt, length);
             if (!w) return NaN;
+            const values = w.values();
             let sum = 0;
-            for (const v of w.values) sum += v;
+            for (let i = 0; i < length; i++) sum += values[i];
             return sum / length;
         };
         const mx = mean('x', (k) => s1.get(k));

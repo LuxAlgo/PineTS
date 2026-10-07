@@ -1834,8 +1834,8 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
         }
 
         // Inject unique call ID for TA functions to enable proper state management
-        // (`math.random` keeps a seeded generator per call site the same way)
-        if (namespace === 'ta' || fullPath === 'math.random') {
+        // (`math.random` keeps a seeded generator per call site the same way, `math.sum` its window)
+        if (namespace === 'ta' || fullPath === 'math.random' || fullPath === 'math.sum') {
             // Any function scope on the stack, not just the immediate one: a call in an
             // `if` / `for` / `else if` inside a function body must still be keyed by the call path.
             if (scopeManager.isInsideFunctionScope()) {

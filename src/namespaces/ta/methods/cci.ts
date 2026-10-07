@@ -1,6 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { nonNaWindow } from '../utils/nonNaWindow';
+import { CallWindow, PushOptions } from '../utils/windows';
+
+// Backfill stopping at the first na of the source history
+const BACKFILL_UNTIL_NA: PushOptions = {
+    backfill: (window, _win, source, length) => {
+        const series = Series.from(source);
+        while (window.length < length) {
+            const val = series.get(window.length);
+            if (isNaN(val)) break;
+            window.push(val);
+        }
+    },
+};
 
 /**
  * Commodity Channel Index (CCI)
@@ -20,88 +34,39 @@ import { Series } from '../../../Series';
  * @remarks
  * - Returns NaN during initialization period (when not enough data)
  * - The constant 0.015 ensures approximately 70-80% of values fall between -100 and +100
+ * - As TradingView computes it: the SMA skips na values (in a local block it is over the calls) and
+ *   the mean deviation is over the last `length` bars, a bar skipped by a local block repeating the
+ *   last call's value; an na among those bars gives na (as ta.dev)
+ * - The mean deviation moves with the mean, so it is summed over the window on every bar
  */
 export function cci(context: any) {
     return (source: any, _length: any, _callId?: string) => {
         const length = Series.from(_length).get(0);
+        const series = Series.from(source);
 
-        // Use incremental calculation with rolling window
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `cci_${length}`;
+        if (!context.taState[stateKey]) context.taState[stateKey] = new CallWindow(true);
+        const bars: CallWindow = context.taState[stateKey];
+        bars.begin(context.idx);
 
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevSum: 0,
-                prevCallCount: 0,
-                // Tentative state
-                currentWindow: [],
-                currentSum: 0,
-                currentCallCount: 0,
-            };
-        }
-
-        const state = context.taState[stateKey];
-
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-                state.prevSum = state.currentSum;
-                state.prevCallCount = state.currentCallCount;
-            }
-            state.lastIdx = context.idx;
-        }
-
-        const currentValue = Series.from(source).get(0);
-
-        // Use committed state
-        const window = [...state.prevWindow];
-        let sum = state.prevSum;
-
-        // The window keeps na values (TradingView's cci, through ta.dev, is na while one is inside
-        // it); they add 0 to the running sum.
-        const num = (v: any) => (v === null || v === undefined || Number.isNaN(v) ? 0 : v);
-        window.unshift(currentValue);
-        sum += num(currentValue);
-
-        // Remove oldest value if window exceeds length
-        while (window.length > length) {
-            const oldValue = window.pop();
-            sum -= num(oldValue);
-        }
-
-        // Track actual call count for callsite-correct backfill
-        const callCount = state.prevCallCount + 1;
-        if (window.length < length && (callCount >= length || context.idx >= length - 1)) {
-            const series = Series.from(source);
-            while (window.length < length) {
-                const val = series.get(window.length);
-                if (isNaN(val)) break;
-                window.push(val);
-                sum += val;
-            }
-        }
-
-        // Update tentative state
-        state.currentWindow = window;
-        state.currentSum = sum;
-        state.currentCallCount = callCount;
+        const currentValue = series.get(0);
+        bars.push(context.idx, currentValue, length, BACKFILL_UNTIL_NA, source);
+        const mean = nonNaWindow(context, `${stateKey}_mean`, series, length);
 
         // Not enough data yet
-        if (window.length < length || window.some((v) => v === null || v === undefined || Number.isNaN(v))) {
+        if (!mean || bars.size < length) {
             return NaN;
         }
 
         // Calculate SMA (mean)
-        const sma = sum / length;
+        const sma = mean.sum / length;
 
         // Calculate Mean Deviation
+        const values = bars.values(length);
         let sumAbsoluteDeviations = 0;
         for (let i = 0; i < length; i++) {
-            sumAbsoluteDeviations += Math.abs(window[i] - sma);
+            sumAbsoluteDeviations += Math.abs(values[i] - sma);
         }
         const meanDeviation = sumAbsoluteDeviations / length;
 
