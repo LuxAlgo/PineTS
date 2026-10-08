@@ -2,7 +2,7 @@
 
 import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
-import { BACKFILL_FROM_SOURCE, CallWindow } from '../utils/windows';
+import { CarryHistory } from '../utils/history';
 
 export function dev(context: any) {
     return (source: any, _length: any, _callId?: string) => {
@@ -15,22 +15,20 @@ export function dev(context: any) {
         // gives na.
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `dev_${length}`;
-        if (!context.taState[stateKey]) context.taState[stateKey] = new CallWindow(true);
-        const bars: CallWindow = context.taState[stateKey];
-        bars.begin(context.idx);
-        bars.push(context.idx, series.get(0), length, BACKFILL_FROM_SOURCE, source);
+        const bars: CarryHistory = (context.taState[stateKey] ??= new CarryHistory());
+        bars.push(context.idx, series.get(0), length, series);
         const sma = nonNaWindow(context, `${stateKey}_mean`, series, length);
 
-        if (!sma || bars.size < length) {
+        if (!sma || bars.h.size < length) {
             return NaN;
         }
 
         // The mean moves every bar, so every |x - mean| changes: no running form
         const mean = sma.sum / length;
-        const values = bars.values(length);
+        const values = bars.h.view(length);
         let sumDeviation = 0;
         for (let i = 0; i < length; i++) {
-            sumDeviation += Math.abs(values[i] - mean);
+            sumDeviation += Math.abs(values[length - 1 - i] - mean);
         }
 
         const dev = sumDeviation / length;

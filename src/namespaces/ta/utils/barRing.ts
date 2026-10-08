@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { CarryHistory, ExtremeTail } from './history';
 import { MonoDeque } from './windows';
 
 /**
@@ -249,5 +250,78 @@ export class TvWeightedRing {
         this.steps = 0;
         this.ok = !Number.isNaN(S + N);
         return this.ok ? [S, N] : undefined;
+    }
+}
+
+/*
+ * TradingView compiles these functions two ways. With a const / simple length (a literal, an input) they
+ * read the BarRing slots above. With a series length they read `source[i]`, the history inside the
+ * function, where a bar a local block skipped repeats the last call's value (CarryHistory), whatever
+ * `length` is on each call. PineTS cannot see the qualifier at run time: a call site takes the series
+ * form from the first call whose length differs from the first one (a length that varies), and keeps
+ * the CarryHistory up to date until then so that it can switch. Both forms agree on calls made every bar.
+ */
+
+/** ta.highest / ta.lowest / ta.highestbars / ta.lowestbars: the slot form, or the series form. */
+export class ExtremeCall {
+    private slots: TvExtreme;
+    private carry = new CarryHistory();
+    private tail: ExtremeTail;
+    private firstLength = NaN;
+    private seriesForm = false;
+    /** The extreme found by the last `step`. */
+    value = NaN;
+
+    constructor(max: boolean) {
+        this.slots = new TvExtreme(max);
+        this.tail = new ExtremeTail(max);
+    }
+
+    /** Bar of the extreme for the call on bar `idx` with value `x` (in `value`), -1 if none (na). */
+    step(idx: number, x: any, length: number, series: Series): number {
+        const h = this.carry.h;
+        this.carry.push(idx, x, validLength(length) ? length : 1, series);
+        if (this.carry.newBar) this.tail.commit(h);
+        else this.tail.rollback();
+        this.tail.sync(h);
+        if (Number.isNaN(this.firstLength)) this.firstLength = length;
+        else if (length !== this.firstLength) this.seriesForm = true;
+
+        if (!this.seriesForm) {
+            const bar = this.slots.step(idx, x, length, series);
+            this.value = this.slots.value;
+            return bar;
+        }
+        const j = validLength(length) && h.size >= length ? this.tail.find(h, length) : -1;
+        if (j < 0) {
+            this.value = NaN;
+            return -1;
+        }
+        this.value = h.get(j);
+        return idx - (h.end - 1 - j);
+    }
+}
+
+/** ta.linreg: [S, N] (N weighing the newest value `length`) in the slot form, or the series form. */
+export class LinregCall {
+    private slots = new TvWeightedRing();
+    private carry = new CarryHistory(2);
+    private firstLength = NaN;
+    private seriesForm = false;
+    // [slope, intercept] of the last call that had a regression line (committed), and after this call
+    private committedLine: [number, number] | null = null;
+    line: [number, number] | null = null;
+
+    step(idx: number, x: number, length: number, series: Series): [number, number] | undefined {
+        this.carry.push(idx, x, validLength(length) ? length : 1, series);
+        if (this.carry.newBar) this.committedLine = this.line;
+        this.line = this.committedLine;
+        if (Number.isNaN(this.firstLength)) this.firstLength = length;
+        else if (length !== this.firstLength) this.seriesForm = true;
+        if (!this.seriesForm) return this.slots.step(idx, x, length, series);
+
+        const h = this.carry.h;
+        if (!validLength(length) || h.size < length || h.nas(length) > 0) return undefined;
+        return [h.sum(length), h.wsum(length)];
     }
 }

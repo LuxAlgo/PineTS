@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
-import { TvExtreme } from '../utils/barRing';
+import { ExtremeCall } from '../utils/barRing';
 
 export function lowest(context: any) {
     return (source: any, _length: any, _callId?: string) => {
@@ -19,11 +19,12 @@ export function lowest(context: any) {
         // TradingView resets the window at na: only the bars since the most recent na
         // take part, and an na on the current bar yields na
         // (tests/namespaces/ta/na-window-semantics.test.ts). In a local block, TradingView's own
-        // algorithm (TvExtreme): bars the block skipped are read from slots written earlier.
+        // algorithm (ExtremeCall): with a constant length, bars the block skipped are read from slots
+        // written earlier; with a varying length, they repeat the last call's value.
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `lowest_${length}`;
-        if (!context.taState[stateKey]) context.taState[stateKey] = new TvExtreme(false);
-        const win: TvExtreme = context.taState[stateKey];
+        if (!context.taState[stateKey]) context.taState[stateKey] = new ExtremeCall(false);
+        const win: ExtremeCall = context.taState[stateKey];
         const bar = win.step(context.idx, series.get(0), length, series);
 
         if (context.idx < length - 1 || bar < 0) {

@@ -16,11 +16,7 @@ export function mode(context: any) {
         const length = Series.from(_length).get(0);
         const series = Series.from(source);
 
-        if (context.idx < length - 1) {
-            return NaN;
-        }
-
         const window = nonNaWindow(context, _callId || `mode_${length}`, series, length, 'counts');
-        return window ? window.mode() : NaN;
+        return window && context.idx >= length - 1 ? window.mode() : NaN;
     };
 }

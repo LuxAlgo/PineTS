@@ -1,35 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
-import { ExtremeWindow } from '../utils/windows';
+import { CarryHistory, ExtremeTail } from '../utils/history';
 
-/**
- * Williams %R (WPR)
- *
- * The oscillator shows the current closing price in relation to the high and low
- * of the past 'length' bars.
- *
- * Formula:
- * %R = (Highest High - Close) / (Highest High - Lowest Low) * -100
- *
- * Note: Williams %R produces values between -100 and 0
- * - Values near -100 indicate oversold conditions
- * - Values near 0 indicate overbought conditions
- *
- * @param length - Number of bars (lookback period)
- * @returns Williams %R value (-100 to 0)
- */
+class WprState {
+    highs = new CarryHistory(0, undefined, false);
+    lows = new CarryHistory(0, undefined, false);
+    hi = new ExtremeTail(true);
+    lo = new ExtremeTail(false);
+}
+
 export function wpr(context: any) {
     return (_length: any, _callId?: string) => {
         const length = Series.from(_length).get(0);
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `wpr_${length}`;
-        if (!context.taState[stateKey]) context.taState[stateKey] = { highs: new ExtremeWindow(true, true), lows: new ExtremeWindow(false, true) };
-        const hw: ExtremeWindow = context.taState[stateKey].highs;
-        const lw: ExtremeWindow = context.taState[stateKey].lows;
-        hw.begin(context.idx);
-        lw.begin(context.idx);
+        const state: WprState = (context.taState[stateKey] ??= new WprState());
 
         // Get current values from context.data
         const high = context.get(context.data.high, 0);
@@ -37,23 +24,34 @@ export function wpr(context: any) {
         const close = context.get(context.data.close, 0);
 
         // An na bar leaves the windows as they were
-        if (isNaN(high) || isNaN(low) || isNaN(close)) {
-            hw.t = null;
-            lw.t = null;
-            return NaN;
+        const na = isNaN(high) || isNaN(low) || isNaN(close);
+        if (na) {
+            state.highs.visit(context.idx, length);
+            state.lows.visit(context.idx, length);
+        } else {
+            state.highs.push(context.idx, high, length);
+            state.lows.push(context.idx, low, length);
         }
-
-        hw.push(context.idx, high, length, { trimOnce: true });
-        lw.push(context.idx, low, length, { trimOnce: true });
+        const hh = state.highs.h;
+        const lh = state.lows.h;
+        if (state.highs.newBar) {
+            state.hi.commit(hh);
+            state.lo.commit(lh);
+        } else {
+            state.hi.rollback();
+            state.lo.rollback();
+        }
+        state.hi.sync(hh);
+        state.lo.sync(lh);
 
         // Not enough data yet
-        if (hw.size < length) {
+        if (na || !(length >= 1) || hh.size < length) {
             return NaN;
         }
 
         // Highest high and lowest low of the last `length` values (the windows hold no na)
-        const highestHigh = hw.extreme(length);
-        const lowestLow = lw.extreme(length);
+        const highestHigh = hh.get(state.hi.find(hh, length));
+        const lowestLow = lh.get(state.lo.find(lh, length));
 
         // Calculate Williams %R
         const range = highestHigh - lowestLow;

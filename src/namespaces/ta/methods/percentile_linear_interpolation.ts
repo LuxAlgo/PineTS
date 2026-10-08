@@ -19,7 +19,7 @@ export function percentile_linear_interpolation(context: any) {
         const percentage = Series.from(_percentage).get(0);
         const series = Series.from(source);
 
-        if (context.idx < length - 1 || !validLength(length)) {
+        if (!validLength(length)) {
             return NaN;
         }
 
@@ -27,7 +27,7 @@ export function percentile_linear_interpolation(context: any) {
         const key = _callId || `pli_${length}_${percentage}`;
         const win: PercentileArray = (context.taState[key] ??= new PercentileArray());
         const values = win.step(context.idx, series.get(0), length, series);
-        if (!values) return NaN;
+        if (!values || context.idx < length - 1) return NaN;
 
         // index = (percentage / 100) * length - 0.5, interpolated with the next value
         return context.precision(linearInterpolation(values, percentage));

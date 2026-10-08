@@ -2,7 +2,7 @@
 
 import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
-import { BACKFILL_FROM_SOURCE, WeightedWindow } from '../utils/windows';
+import { CarryHistory } from '../utils/history';
 
 /**
  * Center of Gravity (COG)
@@ -33,15 +33,14 @@ export function cog(context: any) {
         let num = 0;
         if (_callId && length >= 1) {
             if (!context.taState) context.taState = {};
-            const win: WeightedWindow = (context.taState[_callId] ??= new WeightedWindow(true));
-            win.begin(context.idx);
-            win.push(context.idx, sourceSeries.get(0), length, BACKFILL_FROM_SOURCE, source);
+            const bars: CarryHistory = (context.taState[_callId] ??= new CarryHistory(2));
+            bars.push(context.idx, sourceSeries.get(0), length, sourceSeries);
             const calls = nonNaWindow(context, `${_callId}_sum`, sourceSeries, length);
-            // [S, N] with N weighing the newest value `length`: Σ x_i * (i + 1) = (length + 1) * S - N
-            const sums = win.sums();
-            if (!sums || !calls) return NaN;
+            // S and N weighing the newest value `length`: Σ x_i * (i + 1) = (length + 1) * S - N
+            const h = bars.h;
+            if (!calls || h.size < length || h.nas(length) > 0) return NaN;
             sum = calls.sum;
-            num = (length + 1) * sums[0] - sums[1];
+            num = (length + 1) * h.sum(length) - h.wsum(length);
         } else {
             for (let i = 0; i < length; i++) {
                 const value = sourceSeries.get(i);

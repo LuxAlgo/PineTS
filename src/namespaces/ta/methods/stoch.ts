@@ -1,19 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
-import { ExtremeWindow } from '../utils/windows';
+import { CarryHistory, ExtremeTail } from '../utils/history';
+
+class StochState {
+    highs = new CarryHistory(0, undefined, false);
+    lows = new CarryHistory(0, undefined, false);
+    hi = new ExtremeTail(true);
+    lo = new ExtremeTail(false);
+    // the value of the previous call (committed) and of this one
+    prev = NaN;
+    cur = NaN;
+}
 
 /**
  * As on TradingView, a bar whose stochastic is na (na source, na high / low, not enough bars) repeats
- * the previous value. The value is committed with the windows (`agg` / `tAgg` of the highs).
+ * the previous value.
  */
-function result(context: any, hw: ExtremeWindow, value: number): number {
+function result(context: any, state: StochState, value: number): number {
     if (Number.isNaN(value)) {
-        const prevStoch = hw.agg === undefined ? NaN : hw.agg;
-        hw.tAgg = prevStoch;
-        return prevStoch;
+        state.cur = state.prev;
+        return state.prev;
     }
-    hw.tAgg = value;
+    state.cur = value;
     return context.precision(value);
 }
 
@@ -37,37 +46,48 @@ function result(context: any, hw: ExtremeWindow, value: number): number {
  * - A bar whose value would be NaN because of an na input (source, high, low) repeats the previous value
  * - A flat range (highest equal to lowest) repeats the previous value when the source equals it and
  *   is NaN otherwise
+ * - In a local block the highs and lows are those of the last `length` bars, a skipped bar repeating
+ *   the last call's; `length` may change from call to call
  */
 export function stoch(context: any) {
     return (source: any, high: any, low: any, _length: any, _callId?: string) => {
         const length = Series.from(_length).get(0);
 
-        // Rolling highest / lowest over the values of the last `length` calls
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `stoch_${length}`;
-        if (!context.taState[stateKey]) context.taState[stateKey] = { highs: new ExtremeWindow(true, true), lows: new ExtremeWindow(false, true) };
-        const hw: ExtremeWindow = context.taState[stateKey].highs;
-        const lw: ExtremeWindow = context.taState[stateKey].lows;
-        hw.begin(context.idx);
-        lw.begin(context.idx);
+        const state: StochState = (context.taState[stateKey] ??= new StochState());
 
         // Get current values
         const currentSource = Series.from(source).get(0);
         const currentHigh = Series.from(high).get(0);
         const currentLow = Series.from(low).get(0);
 
-        hw.push(context.idx, currentHigh, length, { trimOnce: true });
-        lw.push(context.idx, currentLow, length, { trimOnce: true });
+        state.highs.push(context.idx, currentHigh, length);
+        state.lows.push(context.idx, currentLow, length);
+        const hh = state.highs.h;
+        const lh = state.lows.h;
+        if (state.highs.newBar) {
+            state.prev = state.cur;
+            state.hi.commit(hh);
+            state.lo.commit(lh);
+        } else {
+            state.hi.rollback();
+            state.lo.rollback();
+        }
+        state.hi.sync(hh);
+        state.lo.sync(lh);
 
         // Not enough data yet
-        if (hw.size < length) {
-            return result(context, hw, NaN);
+        if (!(length >= 1) || hh.size < length) {
+            return result(context, state, NaN);
         }
 
         // Highest high and lowest low like ta.highest / ta.lowest: only the bars since the most
         // recent na in the window take part, and an na on the current bar makes them na.
-        const highest = hw.extreme(length);
-        const lowest = lw.extreme(length);
+        const jh = state.hi.find(hh, length);
+        const jl = state.lo.find(lh, length);
+        const highest = jh < 0 ? NaN : hh.get(jh);
+        const lowest = jl < 0 ? NaN : lh.get(jl);
 
         // Calculate stochastic
         const range = highest - lowest;
@@ -75,11 +95,11 @@ export function stoch(context: any) {
         // A flat range repeats the previous value when the source sits on it; otherwise it is na and
         // that na is not replaced by the previous value (TradingView).
         if (range === 0) {
-            if (currentSource === lowest) return result(context, hw, NaN);
-            hw.tAgg = NaN;
+            if (currentSource === lowest) return result(context, state, NaN);
+            state.cur = NaN;
             return NaN;
         }
 
-        return result(context, hw, (100 * (currentSource - lowest)) / range);
+        return result(context, state, (100 * (currentSource - lowest)) / range);
     };
 }

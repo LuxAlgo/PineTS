@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
-import { BACKFILL_FROM_SOURCE, CallWindow } from '../utils/windows';
+import { CarryHistory } from '../utils/history';
 
 /**
  * ALMA - Arnaud Legoux Moving Average
- * 
+ *
  * ALMA uses a Gaussian distribution to weight the moving average,
  * reducing lag while maintaining smoothness.
- * 
+ *
  * @param source - The data source (typically close price)
  * @param period - The number of periods (window size)
  * @param offset - Position of Gaussian peak (0-1, default 0.85). Higher = more responsive
  * @param sigma - Width of Gaussian curve (default 6). Higher = smoother
  * @param floor - Floor the peak position `offset * (period - 1)` (default false)
- * 
+ *
  * Formula:
  * - m = offset * (period - 1)   (floored when `floor` is true)
  * - s = period / sigma
@@ -38,7 +38,7 @@ export function alma(context: any) {
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
-                win: new CallWindow(true),
+                carry: new CarryHistory(),
                 // Weights for `weightsKey`; a series length recomputes them
                 weightsKey: '',
                 weights: [],
@@ -46,7 +46,7 @@ export function alma(context: any) {
         }
 
         const state = context.taState[stateKey];
-        const win: CallWindow = state.win;
+        const carry: CarryHistory = state.carry;
 
         const weightsKey = `${period}_${offset}_${sigma}_${floor}`;
         if (state.weightsKey !== weightsKey) {
@@ -69,27 +69,20 @@ export function alma(context: any) {
             state.weightsKey = weightsKey;
         }
 
-        win.begin(context.idx);
-        win.push(context.idx, Series.from(source).get(0), period, BACKFILL_FROM_SOURCE, source);
+        const series = Series.from(source);
+        carry.push(context.idx, series.get(0), period, series);
+        const h = carry.h;
 
-        if (win.size < period) {
+        if (!(period >= 1) || h.size < period) {
             // Not enough data yet
             return NaN;
         }
 
         // weights[0] applies to the oldest value of the window, weights[period - 1] to the newest
         const weights: number[] = state.weights;
-        const t = win.t!;
         let alma = 0;
-        if (t.rebuilt) {
-            for (let i = 0; i < period; i++) alma += weights[i] * t.values![period - 1 - i];
-        } else {
-            // the current value is not in the committed ring yet
-            const ring = win.ring;
-            for (let i = 0; i < period - 1; i++) alma += weights[i] * ring.at(period - 2 - i);
-            alma += weights[period - 1] * t.x;
-        }
-
+        const values = h.view(period);
+        for (let i = 0; i < period; i++) alma += weights[i] * values[i];
         return context.precision(alma);
     };
 }

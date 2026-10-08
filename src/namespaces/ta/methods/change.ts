@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
-import { BACKFILL_FROM_SOURCE, CallWindow } from '../utils/windows';
+import { CarryHistory } from '../utils/history';
 
 export function change(context: any) {
     return (source: any, _length: any = 1, _callId?: string) => {
@@ -14,21 +14,19 @@ export function change(context: any) {
         }
         const length = Series.from(_length).get(0);
 
-        // The values of the last `length + 1` calls
+        // The value `length` bars back (in a local block, a skipped bar repeating the last call's value)
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `change_${length}`;
-        if (!context.taState[stateKey]) context.taState[stateKey] = new CallWindow(true);
-        const win: CallWindow = context.taState[stateKey];
-        win.begin(context.idx);
+        const carry: CarryHistory = (context.taState[stateKey] ??= new CarryHistory());
+        const series = Series.from(source);
+        const currentValue = series.get(0);
+        carry.push(context.idx, currentValue, length, series);
 
-        const currentValue = Series.from(source).get(0);
-        win.push(context.idx, currentValue, length + 1, BACKFILL_FROM_SOURCE, source);
-
-        if (win.size <= length) {
+        if (!(length >= 0) || carry.h.size <= length) {
             return NaN;
         }
 
-        const change = currentValue - win.at(length);
+        const change = currentValue - carry.h.at(length);
         return context.precision(change);
     };
 }

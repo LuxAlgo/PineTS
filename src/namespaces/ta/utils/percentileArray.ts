@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { CarryHistory } from './history';
 import { lowerBound, upperBound } from './windows';
 
 const isNa = (v: number) => Number.isNaN(v);
@@ -8,78 +9,93 @@ const isNa = (v: number) => Number.isNaN(v);
 /**
  * The values of the last `length` calls of ta.percentile_linear_interpolation /
  * ta.percentile_nearest_rank, in the order TradingView keeps them: a call inserts its value before the
- * first one it is smaller than, scanning from the start, then the value of `length` calls back is
- * removed (its first occurrence). An na is smaller than nothing, so it goes to the end, but a value
- * inserted later goes after it as well: the array is sorted only while it holds no na, and the result
- * read from it can then be na. Verified against TradingView with synthetic na patterns.
+ * first one it is smaller than, scanning from the start, then the oldest values are removed (their
+ * first occurrence) while more than `length` are held. An na is smaller than nothing, so it goes to
+ * the end, but a value inserted later goes after it as well: the array is sorted only while it holds
+ * no na, and the result read from it can then be na. With fewer than `length` values (a series length
+ * that grew), the array is completed from `source[count]`, the history inside the function (in a local
+ * block, a skipped bar repeating the last call's value). Verified against TradingView with synthetic
+ * na patterns and lengths.
  *
- * Without na, the insert and the removal are binary searches. A first call on a later bar is backfilled
- * from the source history, like the other window functions.
+ * Without na, the insert and the removal are binary searches. A first call on a later bar is completed
+ * from the source history, like the other window functions' backfill.
  */
 export class PercentileArray {
     readonly arr: number[] = [];
     private nan = 0;
-    // values of the calls in the window, oldest at `head`
-    private hist: number[] = [];
+    // values held, oldest at `head`
+    private held: number[] = [];
     private head = 0;
-    private length = NaN;
-    private lastIdx = -1;
-    // the last call's insert / removal, undone when the same bar is computed again (live bar)
-    private ins = -1;
-    private rem = -1;
-    private remVal = NaN;
+    private carry = new CarryHistory();
+    // undo of the current bar's changes, for a bar computed again (live bar)
+    private undoLog: (() => void)[] = [];
 
-    /** The array after the call on bar `idx`; undefined while fewer than `length` calls are held. */
+    /** The array after the call on bar `idx`; undefined while fewer than `length` values are held. */
     step(idx: number, x: any, length: number, series: Series): number[] | undefined {
         const v = x == null ? NaN : Number(x);
-        if (length !== this.length) {
-            this.reset(length);
-            if (idx >= length - 1) for (let k = length - 1; k >= 1; k--) this.add(series.get(k), length);
-        } else if (idx === this.lastIdx) this.undo();
-        this.lastIdx = idx;
-        this.add(v, length);
-        return this.hist.length - this.head < length ? undefined : this.arr;
-    }
+        this.carry.push(idx, v, length, series);
+        if (this.carry.newBar) this.commit();
+        else this.rollback();
 
-    private reset(length: number): void {
-        this.arr.length = 0;
-        this.nan = 0;
-        this.hist = [];
-        this.head = 0;
-        this.length = length;
-        this.lastIdx = -1;
-    }
-
-    private add(v: any, length: number): void {
-        const x = v == null ? NaN : Number(v);
-        this.ins = this.insertAt(x);
-        this.arr.splice(this.ins, 0, x);
-        if (isNa(x)) this.nan++;
-        this.hist.push(x);
-        this.rem = -1;
-        if (this.hist.length - this.head > length) {
-            const y = this.hist[this.head++];
-            this.rem = this.indexOf(y);
-            this.remVal = y;
-            this.arr.splice(this.rem, 1);
-            if (isNa(y)) this.nan--;
-            if (this.head > 1024 && this.head * 2 > this.hist.length) {
-                this.hist = this.hist.slice(this.head);
-                this.head = 0;
+        this.insert(v);
+        this.held.push(v);
+        this.undoLog.push(() => this.held.pop());
+        while (this.held.length - this.head > length) {
+            const y = this.held[this.head++];
+            this.undoLog.push(() => this.head--);
+            this.removeValue(y);
+        }
+        const h = this.carry.h;
+        while (this.held.length - this.head < length && h.size > this.held.length - this.head) {
+            const y = h.at(this.held.length - this.head);
+            if (this.head > 0) {
+                const old = this.held[--this.head];
+                this.held[this.head] = y;
+                this.undoLog.push(() => {
+                    this.held[this.head] = old;
+                    this.head++;
+                });
+            } else {
+                this.held.unshift(y);
+                this.undoLog.push(() => this.held.shift());
             }
+            this.insert(y);
+        }
+        return this.held.length - this.head < length ? undefined : this.arr;
+    }
+
+    private commit(): void {
+        this.undoLog.length = 0;
+        if (this.head > 1024 && this.head * 2 > this.held.length) {
+            this.held = this.held.slice(this.head);
+            this.head = 0;
         }
     }
 
-    private undo(): void {
-        if (this.rem >= 0) {
-            this.arr.splice(this.rem, 0, this.remVal);
-            if (isNa(this.remVal)) this.nan++;
-            if (this.head > 0) this.hist[--this.head] = this.remVal;
-            else this.hist.unshift(this.remVal);
-        }
-        const x = this.hist.pop()!;
-        this.arr.splice(this.ins, 1);
-        if (isNa(x)) this.nan--;
+    private rollback(): void {
+        for (let i = this.undoLog.length - 1; i >= 0; i--) this.undoLog[i]();
+        this.undoLog.length = 0;
+    }
+
+    private insert(x: number): void {
+        const p = this.insertAt(x);
+        this.arr.splice(p, 0, x);
+        if (isNa(x)) this.nan++;
+        this.undoLog.push(() => {
+            this.arr.splice(p, 1);
+            if (isNa(x)) this.nan--;
+        });
+    }
+
+    private removeValue(y: number): void {
+        const p = this.indexOf(y);
+        if (p < 0) return;
+        this.arr.splice(p, 1);
+        if (isNa(y)) this.nan--;
+        this.undoLog.push(() => {
+            this.arr.splice(p, 0, y);
+            if (isNa(y)) this.nan++;
+        });
     }
 
     private insertAt(x: number): number {
@@ -92,14 +108,17 @@ export class PercentileArray {
 
     private indexOf(y: number): number {
         const a = this.arr;
-        if (this.nan === 0 && !isNa(y)) return lowerBound(a, y);
+        if (this.nan === 0 && !isNa(y)) {
+            const p = lowerBound(a, y);
+            return a[p] === y ? p : -1;
+        }
         if (isNa(y)) {
             for (let i = 0; i < a.length; i++) if (isNa(a[i])) return i;
+            return -1;
         }
         return a.indexOf(y);
     }
 }
-
 /** ta.percentile_nearest_rank of the array (index from its length, na if it points at an na). */
 export function nearestRank(a: number[], percentage: number): number {
     const n = a.length;
