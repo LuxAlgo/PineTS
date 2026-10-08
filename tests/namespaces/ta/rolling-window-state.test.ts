@@ -43,7 +43,10 @@ const ref = {
     wma: (w: number[]) => w.reduce((a, v, i) => a + v * (w.length - i), 0) / ((w.length * (w.length + 1)) / 2),
     linreg: (w: number[], offset: number) => {
         const n = w.length;
-        let sx = 0, sy = 0, sxy = 0, sxx = 0;
+        let sx = 0,
+            sy = 0,
+            sxy = 0,
+            sxx = 0;
         w.forEach((y, j) => {
             const x = n - 1 - j;
             sx += x;
@@ -84,14 +87,16 @@ const ref = {
         const x = [...w].reverse();
         const order = x.map((_, i) => i).sort((a, b) => x[a] - x[b]);
         const ranks: number[] = [];
-        for (let i = 0; i < x.length; ) {
+        for (let i = 0; i < x.length;) {
             let j = i;
             while (j + 1 < x.length && x[order[j + 1]] === x[order[i]]) j++;
             for (let k = i; k <= j; k++) ranks[order[k]] = (i + j) / 2 + 1;
             i = j + 1;
         }
         const m = (x.length + 1) / 2;
-        let cov = 0, vx = 0, vy = 0;
+        let cov = 0,
+            vx = 0,
+            vy = 0;
         x.forEach((_, i) => {
             cov += (i + 1 - m) * (ranks[i] - m);
             vx += (i + 1 - m) ** 2;
@@ -251,7 +256,7 @@ describe('rolling window state', () => {
         });
     }
 
-    it('a call inside a condition sees its calls, or the bars with the skipped ones repeating the last call', () => {
+    it('a call inside a condition sees its calls, the bars with the skipped ones repeating the last call, or TradingView slots', () => {
         // irregular gaps: a call on about 3 bars in 5
         const vals = close(randomWalk(400, 5)).map((v) => Math.round(v / 20));
         const on = vals.map((v, i) => (v * 7 + i) % 5 < 3);
@@ -279,18 +284,44 @@ describe('rolling window state', () => {
                 while (!on[j]) j--;
                 return vals[j];
             });
+        // TradingView's rci / highest read bar b from slot b % (n + 1), last written by the call on a bar
+        // b - m(n + 1) (0 if none; the bars before the first call hold their own value: backfill)
+        const firstCall = on.indexOf(true);
+        const slot = (b: number, n: number) => {
+            for (let j = b; j >= 0; j -= n + 1) if (on[j]) return vals[j];
+            return b < firstCall ? vals[b] : 0;
+        };
+        const slots = (i: number, n: number) => Array.from({ length: n }, (_, k) => slot(i - k, n));
+        // highest as TradingView keeps it: the extreme and its bar, replaced by a greater value, else
+        // rescanned (slots) when n bars old
+        const highestRef: number[] = [];
+        let best = NaN;
+        let bestBar = -1;
+        for (let i = 0; i < vals.length; i++) {
+            if (!on[i]) continue;
+            if (bestBar >= 0 && vals[i] > best) {
+                best = vals[i];
+                bestBar = i;
+            } else if (bestBar < 0 || i - bestBar >= 10) {
+                best = -Infinity;
+                for (let k = 0; k < 10 && i - k >= 0; k++)
+                    if (slot(i - k, 10) >= best) {
+                        best = slot(i - k, 10);
+                        bestBar = i - k;
+                    }
+            }
+            highestRef[i] = best;
+        }
         for (let i = 100; i < vals.length; i++) {
             if (!on[i]) continue;
             expect(got.sma[i], `sma ${i}`).toBeCloseTo(ref.sma(calls(i, 10)), 8);
             expect(got.median[i], `median ${i}`).toBe(ref.median(calls(i, 10)));
             expect(got.sum[i], `sum ${i}`).toBeCloseTo(ref.sma(calls(i, 10)) * 10, 8);
-            expect(got.rci[i], `rci ${i}`).toBeCloseTo(ref.rci(calls(i, 10)), 8);
+            expect(got.rci[i], `rci ${i}`).toBeCloseTo(ref.rci(slots(i, 10)), 8);
             expect(got.wma[i], `wma ${i}`).toBeCloseTo(ref.wma(carry(i, 10)), 8);
             expect(got.change[i], `change ${i}`).toBe(vals[i] - carry(i, 11)[10]);
             expect(got.percentrank[i], `percentrank ${i}`).toBeCloseTo(ref.percentrank(carry(i, 11)), 8);
-            const inBars: number[] = [];
-            for (let d = 0; d < 10; d++) if (on[i - d]) inBars.push(vals[i - d]);
-            expect(got.highest[i], `highest ${i}`).toBe(Math.max(...inBars));
+            expect(got.highest[i], `highest ${i}`).toBe(highestRef[i]);
         }
     });
 });

@@ -18,10 +18,18 @@
  *    ta.mom, ta.roc, ta.percentrank, ta.stoch, ta.wpr, ta.pivothigh, ta.pivotlow;
  *  - both: ta.dev / ta.cci (mean over the calls, deviations over the bars), ta.cog (sum over the
  *    calls, weighted sum over the bars);
- *  - ta.cmo / ta.mfi: the change from the previous call, summed over the calls.
- * Not covered (TradingView's values follow none of these rules): ta.linreg and ta.rci in a local block,
- * and ta.highest / ta.lowest / ta.highestbars / ta.lowestbars under irregular gaps (PineTS uses the
- * calls of the last `length` bars, which TradingView matches when a bar in three is skipped).
+ *  - ta.cmo / ta.mfi: the change from the previous call, summed over the calls;
+ *  - `length + 1` slots indexed by bar index, written by the calls, a skipped bar reading what its slot
+ *    last held: ta.linreg, ta.rci, and ta.highest / ta.lowest / ta.highestbars / ta.lowestbars (which
+ *    keep their extreme from call to call and rescan the slots when it is `length` bars old).
+ * The ta.linreg under `hour % 3 != 0` is left out: its skipped slots hold values written long before
+ * these candles (it matches when TradingView's history is replayed from its first bar).
+ *
+ * `data/tv-synthetic-sources.json` pins those rules down with sources that are functions of a bar count
+ * k (distinct values, na patterns, strictly increasing), so each returned value names the bar it came
+ * from: ta.highest / ta.lowest / *bars under several gap patterns and with na, the slots of ta.lowest,
+ * ta.linreg / ta.rci in local blocks, and ta.percentile_* with na (PercentileArray). Checked from k = 20,
+ * after the bars where PineTS backfills a first call from the source history.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -41,6 +49,35 @@ describe('ta functions in a local block (TradingView parity)', () => {
                     const g = got[i];
                     const ok = isNa(w) ? isNa(g) : !isNa(g) && Math.abs(g - w) <= 1e-6 * Math.max(1, Math.abs(w));
                     if (!ok && mismatches.length < 20) mismatches.push(`${plot} bar ${fixture.checkFrom + i}: TradingView ${w}, PineTS ${g}`);
+                });
+            }
+            expect(mismatches).toEqual([]);
+        });
+    }
+});
+
+const synthetic = JSON.parse(readFileSync(new URL('./data/tv-synthetic-sources.json', import.meta.url), 'utf8'));
+
+describe('ta functions on synthetic sources (TradingView parity)', () => {
+    for (const [name, probe] of Object.entries<any>(synthetic.probes)) {
+        it(`matches TradingView: ${name}`, async () => {
+            const candles = probe.times.map((t: number) => ({
+                openTime: t * 1000,
+                open: 1,
+                high: 1,
+                low: 1,
+                close: 1,
+                volume: 1,
+                closeTime: t * 1000 + 3599_999,
+            }));
+            const { plots } = await new PineTS(candles).run(probe.script);
+            const mismatches: string[] = [];
+            for (const [plot, want] of Object.entries<(number | null)[]>(probe.tv)) {
+                const got = plots[plot].data.slice(probe.checkFrom).map((d: any) => d.value);
+                want.forEach((w, i) => {
+                    const g = got[i];
+                    const ok = isNa(w) ? isNa(g) : !isNa(g) && Math.abs(g - w) <= 1e-9 * Math.max(1, Math.abs(w));
+                    if (!ok && mismatches.length < 20) mismatches.push(`${plot} k=${synthetic.from + i}: TradingView ${w}, PineTS ${g}`);
                 });
             }
             expect(mismatches).toEqual([]);

@@ -395,7 +395,10 @@ export class ExtremeWindow extends CallWindow {
     private seq = 0;
     private dq: MonoDeque;
 
-    constructor(private readonly max: boolean, carry = false) {
+    constructor(
+        private readonly max: boolean,
+        carry = false,
+    ) {
         super(carry);
         this.dq = new MonoDeque(max);
     }
@@ -510,7 +513,10 @@ export class SortedWindow extends CallWindow {
     sorted: number[] = [];
     nan = 0;
 
-    constructor(private readonly isNa: (v: any) => boolean, carry = false) {
+    constructor(
+        private readonly isNa: (v: any) => boolean,
+        carry = false,
+    ) {
         super(carry);
     }
 
@@ -574,60 +580,5 @@ export class SortedWindow extends CallWindow {
         }
         const y = t.evict ? this.evicted() : undefined;
         return upperBound(this.sorted, v) - (y !== undefined && !this.isNa(y) && y <= v ? 1 : 0);
-    }
-}
-
-/**
- * Highest / lowest value among the calls made within the last `length` bars, only those since the most
- * recent na (an na current value gives na): TradingView's `ta.highest` / `ta.lowest` /
- * `ta.highestbars` / `ta.lowestbars`, which in a local block see the calls of the last `length` bars
- * (not the last `length` calls). The bars before the first call (or a change of `length`) are read
- * from the source series, like the other windows' backfill. O(1) amortized per call.
- */
-export class RecentExtreme {
-    private lastIdx = -1;
-    private length = NaN;
-    private dq: MonoDeque;
-    private pending = false;
-    private tx: any;
-    /** The extreme value found by the last step. */
-    value: any;
-
-    constructor(private readonly max: boolean) {
-        this.dq = new MonoDeque(max);
-    }
-
-    private add(bar: number, v: any): void {
-        if (nanLike(v)) this.dq.clear();
-        else this.dq.push(bar, v);
-    }
-
-    /**
-     * Adds the current call's value `x` (tentatively) and returns the bar index of the extreme among the
-     * calls of the last `length` bars, `idx` for the current one, or -1 at an na current value.
-     */
-    step(idx: number, x: any, length: number, series: { get(k: number): any }): number {
-        if (idx > this.lastIdx) {
-            if (this.pending) this.add(this.lastIdx, this.tx);
-            this.pending = false;
-            if (this.lastIdx < 0 || length !== this.length) {
-                this.dq.clear();
-                for (let bar = Math.max(0, idx - length + 1); bar < idx; bar++) this.add(bar, series.get(idx - bar));
-                this.length = length;
-            }
-            this.lastIdx = idx;
-        }
-        this.pending = true;
-        this.tx = x;
-        this.value = x;
-        if (nanLike(x)) return -1;
-        this.dq.expire(idx - length + 1);
-        const p = this.dq.first(idx - length + 1);
-        if (p < 0) return idx;
-        // an older bar with the same value wins
-        const v = this.dq.valAt(p);
-        if (this.max ? v < x : v > x) return idx;
-        this.value = v;
-        return this.dq.seqAt(p);
     }
 }

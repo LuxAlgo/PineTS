@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { RecentExtreme } from './windows';
+import { TvExtreme } from './barRing';
 
 const nanLike = (v: any) => v === undefined || isNaN(v);
 
 /**
  * Offset (<= 0) of the highest (lowest) value of the last `length` bars, the oldest bar among equal
  * values; only the bars since the most recent na take part and an na current value gives 0. In a local
- * block, the calls of the last `length` bars.
+ * block, TradingView's own algorithm (TvExtreme).
  */
 export function extremeBarsOffset(context: any, key: string | undefined, series: any, length: number, max: boolean): number {
     if (!key) return extremeBarsScan(series, length, max);
     if (!context.taState) context.taState = {};
-    const w: RecentExtreme = (context.taState[key] ??= new RecentExtreme(max));
+    const w: TvExtreme = (context.taState[key] ??= new TvExtreme(max));
     const bar = w.step(context.idx, series.get(0), length, series);
     if (bar < 0) return 0;
     // -0 when the current bar wins: the offset is -i for i = 0
