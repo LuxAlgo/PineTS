@@ -581,7 +581,7 @@ export class Core {
             },
 
             copy: function (object: PineTypeObject) {
-                return new PineTypeObject(object.__def__, this.context, UDT);
+                return new PineTypeObject(object._fieldValues(), this.context, UDT);
             },
 
             // Factory metadata exposed for the request.security_lower_tf
