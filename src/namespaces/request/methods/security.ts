@@ -252,7 +252,15 @@ export function security(context: any) {
                 return NaN;
             }
 
-            const value = secContext.params[_expression_name][secContextIdx];
+            // The expression's param may be ABSENT when the request never
+            // executed in the secondary context. Pine v6 dynamic requests run
+            // only when the calling condition is true, and a secondary context
+            // runs the script AS the requested symbol — its own conditions
+            // (its inputs, syminfo-derived config, ignore_invalid_symbol
+            // guards) can gate the same call off, so nothing registers
+            // params[exprName] there. TradingView reads that as na (the plot
+            // shows na for those bars), not an error.
+            const value = secContext.params[_expression_name]?.[secContextIdx] ?? NaN;
 
             // Handle gaps for HTF (Higher Timeframe)
             if (!isLTF && _gaps) {
@@ -366,7 +374,11 @@ export function security(context: any) {
             return NaN;
         }
 
-        const value = secContext.params[_expression_name][secContextIdx];
+        // Same never-executed-in-secondary case as above: Pine v6 dynamic
+        // requests only register their expression's param when the calling
+        // condition is true, and the secondary runs as the requested symbol
+        // where that condition can be false. TradingView reads this as na.
+        const value = secContext.params[_expression_name]?.[secContextIdx] ?? NaN;
 
         // Handle gaps for HTF (Higher Timeframe) - First call
         if (!isLTF && _gaps) {
