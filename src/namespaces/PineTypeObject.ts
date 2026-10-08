@@ -24,7 +24,18 @@ export class PineTypeObject {
     }
 
     copy() {
-        return new PineTypeObject(this.__def__, this.context, this._udt);
+        return new PineTypeObject(this._fieldValues(), this.context, this._udt);
+    }
+
+    // Current field values (shallow). Fields left na by `new()` are absent from
+    // `_definition`, so the type's field list is needed to catch later assignments.
+    _fieldValues(): Record<string, any> {
+        const keys = new Set<string>([...(this._udt?._definitionKeys ?? []), ...Object.keys(this._definition)]);
+        const values: Record<string, any> = {};
+        for (const key of keys) {
+            if (Object.prototype.hasOwnProperty.call(this, key)) values[key] = this[key];
+        }
+        return values;
     }
 
     toString() {
