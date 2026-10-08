@@ -144,7 +144,7 @@ export function calculateOrderQty(context: any, specifiedQty: number | undefined
 
     // Get qty type and value, calling functions if needed
     let qtyType = strategy.config.default_qty_type || 'fixed';
-    let qtyValue = strategy.config.default_qty_value || 1;
+    let qtyValue = strategy.config.default_qty_value ?? 1;
 
     // If qtyType is a function, call it to get the actual string value
     if (typeof qtyType === 'function') {
@@ -162,6 +162,7 @@ export function calculateOrderQty(context: any, specifiedQty: number | undefined
         return floorQty(context, Math.abs(specifiedQty));
     }
 
+    const pointValue = context.pine?.syminfo?.pointvalue ?? 1;
     let rawQty: number;
     switch (qtyType) {
         case 'fixed':
@@ -169,15 +170,15 @@ export function calculateOrderQty(context: any, specifiedQty: number | undefined
             break;
 
         case 'cash':
-            // Calculate how many units we can buy with the cash amount
-            rawQty = qtyValue / fillPrice;
+            // Futures contracts cost price × point value, rather than price alone.
+            rawQty = qtyValue / (fillPrice * pointValue);
             break;
 
         case 'percent_of_equity': {
             // Calculate quantity based on percentage of equity
             // qty_value=10 means 10% of equity
             const positionValue = (strategy.equity * qtyValue) / 100;
-            rawQty = positionValue / fillPrice;
+            rawQty = positionValue / (fillPrice * pointValue);
             break;
         }
 
