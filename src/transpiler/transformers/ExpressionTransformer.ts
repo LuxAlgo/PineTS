@@ -777,15 +777,23 @@ function transformIdentifierForParam(node: any, scopeManager: ScopeManager): any
             return node;
         }
 
+        // A local series variable (function parameter, or a hoisted `pN` temp)
+        // shadows any same-named GLOBAL. Function parameters must win — Pine
+        // resolves `paramName` inside its function to the parameter, not to a
+        // global declared before it (Raptors: `HTFName(htf)` inside
+        // `BuildAlertMessage(htf, ...)` bound the call argument to the global
+        // series `$.var.glb1_htf` instead of the parameter). Params and temps
+        // are unregistered when their function scope exits, so this is
+        // scope-honest, and a later GLOBAL reference to the same name only
+        // reaches here when no parameter of that name is in scope.
+        if (scopeManager.isLocalSeriesVar(node.name)) {
+            return node;
+        }
+
         // Check if there's a user-defined variable with this name before treating as local series
         // This handles the case where internal parameter names (p1, p2, etc.) collide with user variables
         const [scopedName, kind] = scopeManager.getVariable(node.name);
         const isUserVariable = scopedName !== node.name; // If renamed, it's a user variable
-
-        // If it's a local series variable (hoisted parameter) AND NOT a user variable, return as is
-        if (scopeManager.isLocalSeriesVar(node.name) && !isUserVariable) {
-            return node;
-        }
 
         // If it's a user variable, transform it
         if (isUserVariable) {
