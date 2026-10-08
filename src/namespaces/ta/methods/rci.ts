@@ -9,8 +9,6 @@ class RankRing {
     ring: BarRing;
     vals: number[] = [];
     slots: number[] = [];
-    calls = 0;
-    lastIdx = -1;
 
     constructor(
         readonly length: number,
@@ -23,10 +21,6 @@ class RankRing {
     }
 
     write(idx: number, x: number): void {
-        if (idx !== this.lastIdx) {
-            this.calls++;
-            this.lastIdx = idx;
-        }
         const s = this.ring.slot(idx);
         this.remove(this.ring.valueOf(s), s);
         this.ring.write(idx, x);
@@ -91,7 +85,7 @@ function rankCorrelation(values: number[], length: number): number {
 export function rci(context: any) {
     return (source: any, _length: any, _callId?: string) => {
         const length = Series.from(_length).get(0);
-        if (length < 2 || !validLength(length)) return NaN;
+        if (!validLength(length)) return NaN;
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `rci_${length}`;
@@ -103,8 +97,9 @@ export function rci(context: any) {
         const currentValue = series.get(0);
         win.write(idx, currentValue == null ? NaN : currentValue);
 
-        // TradingView's first value comes one bar after the window is full (bar_index = length).
-        if (win.calls <= length) return NaN;
+        // TradingView's first value comes one bar after the window is full (bar_index = length); a first
+        // call after that reads the bars before it (backfill)
+        if (length < 2 || idx < length) return NaN;
 
         // slot s holds bar idx - d(s); d = length is the bar that left the window
         const ring = win.ring;

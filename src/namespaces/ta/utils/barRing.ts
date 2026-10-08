@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { MonoDeque } from './windows';
 
 /**
  * The source of `ta.highest` / `ta.lowest` / `ta.highestbars` / `ta.lowestbars` / `ta.linreg` / `ta.rci`
@@ -88,10 +89,24 @@ export class TvExtreme {
     private lastIdx = -1;
     private savedBest = NaN;
     private savedBestBar = -2;
+    // the values of the previous calls (from the last na), for a rescan of a window without skipped
+    // bars, where the slots hold exactly those values: O(1) amortized instead of O(length)
+    private dq: MonoDeque;
+    private pendingBar = -1;
+    private pendingVal = NaN;
+    // the most recent bar without a call
+    private lastGap = -Infinity;
     /** The extreme found by the last `step`. */
     value = NaN;
 
-    constructor(private readonly max: boolean) {}
+    constructor(private readonly max: boolean) {
+        this.dq = new MonoDeque(max);
+    }
+
+    private queue(bar: number, v: number): void {
+        if (nanLike(v)) this.dq.clear();
+        else this.dq.push(bar, v);
+    }
 
     private better(a: number, b: number): boolean {
         return this.max ? a > b : a < b;
@@ -109,6 +124,10 @@ export class TvExtreme {
             this.best = NaN;
             this.bestBar = -2;
             this.lastIdx = -1;
+            this.dq.clear();
+            for (let b = Math.max(0, idx - length); b < idx; b++) this.queue(b, series.get(idx - b));
+            this.pendingBar = -1;
+            this.lastGap = -Infinity;
         }
         // a second call on the same bar (live bar) starts from the state before the first one
         if (idx === this.lastIdx) {
@@ -118,7 +137,13 @@ export class TvExtreme {
             this.savedBest = this.best;
             this.savedBestBar = this.bestBar;
             this.lastIdx = idx;
+            if (this.pendingBar >= 0) {
+                this.queue(this.pendingBar, this.pendingVal);
+                if (idx - this.pendingBar > 1) this.lastGap = idx - 1;
+            }
+            this.pendingBar = idx;
         }
+        this.pendingVal = x;
 
         this.ring.write(idx, x);
         if (nanLike(x)) {
@@ -137,6 +162,21 @@ export class TvExtreme {
     }
 
     private rescan(idx: number, length: number): void {
+        const from = idx - length + 1;
+        if (this.lastGap < from) {
+            // x (the current value) is not na here; an older equal value wins
+            const x = this.pendingVal;
+            this.dq.expire(from);
+            const p = this.dq.first(from);
+            if (p >= 0 && !this.better(x, this.dq.valAt(p))) {
+                this.best = this.dq.valAt(p);
+                this.bestBar = this.dq.seqAt(p);
+            } else {
+                this.best = x;
+                this.bestBar = idx;
+            }
+            return;
+        }
         let best = NaN;
         let bar = -1;
         for (let i = 0; i < length; i++) {
