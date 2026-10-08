@@ -1368,6 +1368,8 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
     const currentTime = Series.from(context.data.openTime).get(0);
     const mintick = context.pine?.syminfo?.mintick ?? 0.01;
     let anyExitFilledThisBar = false;
+    // Exit events of ALL orders are collected first and executed in bar-path order (see below).
+    const deferredExits: { order: Order; ev: any; matchingDir: number; matchingQty: number; matching: any[]; favorableFirst: boolean }[] = [];
     const limitSlack = limitFillSlack(context);
 
     // Two-phase evaluation (TV broker-emulator order precedence at the
@@ -1736,6 +1738,13 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                 trailEvent = { qty: Infinity, price, kind: 'trailing' };
             };
 
+            if (!trailArmedThisBar) {
+                // The open is the first price traded in the bar: an already-armed trail's running peak includes it
+                // before any intra-bar segment is evaluated, so a gap in the trade's favour tightens the trigger at
+                // once (TradingView fills a retrace from the open at open-minus-offset, not at the prior peak's level).
+                if (isLong) order.trail_peak = Math.max(order.trail_peak ?? -Infinity, openPrice);
+                else order.trail_peak = Math.min(order.trail_peak ?? Infinity, openPrice);
+            }
             if (trailArmedThisBar) {
                 // Peak is already the bar's favorable extreme (set by the
                 // arming logic). Don't update again.
@@ -1750,6 +1759,10 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
                     const seg3 = isLong ? closePrice <= trig : closePrice >= trig;
                     if (seg3) emitTrail(trig);
                 }
+            } else if ((isLong ? openPrice <= triggerFromPeak() : openPrice >= triggerFromPeak())) {
+                // Armed in a prior bar and the bar OPENS past the standing trigger:
+                // TradingView fills the trailing stop at the open (gap-through), like any other stop.
+                emitTrail(openPrice);
             } else if (favorableFirst) {
                 // Already armed in a prior bar. Full segment model.
                 updatePeak();
@@ -1770,83 +1783,91 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             }
         }
 
-        // Path-ordered event list (mirrors the old checkTp/checkSl/
-        // checkTrail priority: TP leg first on favorable-first bars;
-        // SL then trail then TP on adverse-first bars).
+        // The adverse-side legs (SL and trailing) are hit in PATH order, not in leg order: along the adverse move the
+        // level nearest the open (highest for a long, lowest for a short) is reached first. Putting SL ahead of the
+        // trail fills the fixed leg whenever both are crossed in a bar even when the trail's level was reached first.
+        const adverseLegs: FillEvent[] = [...slEvents, ...(trailEvent ? [trailEvent] : [])]
+            .sort((a, b) => (isLong ? b.price - a.price : a.price - b.price));
         const events: FillEvent[] = favorableFirst
-            ? [...tpEvents, ...slEvents, ...(trailEvent ? [trailEvent] : [])]
-            : [...slEvents, ...(trailEvent ? [trailEvent] : []), ...tpEvents];
+            ? [...tpEvents, ...adverseLegs]
+            : [...adverseLegs, ...tpEvents];
+        for (const ev of events) deferredExits.push({ order, ev, matchingDir, matchingQty, matching, favorableFirst });
+    }
 
-        if (events.length > 0) {
+    // TradingView evaluates every working exit order's legs along the bar's assumed intra-bar path together: the
+    // first level reached fills, whichever ORDER it belongs to. Executing order by order lets an older order (e.g.
+    // the initial hard stop) close the position at a level the path reaches only AFTER another order's trailing
+    // level. Sort all events of this bar by path position, then execute with per-order qty caps.
+    const pathKey = (x: { ev: any; matchingDir: number; favorableFirst: boolean }): [number, number] => {
+        const isLongPos = x.matchingDir > 0;
+        const favorableLeg = x.ev.kind === 'profit';
+        const gap = x.ev.price === openPrice;
+        const phase = gap ? 0 : favorableLeg === x.favorableFirst ? 1 : 2;
+        // within a phase, the level nearest the open is reached first
+        const along = favorableLeg ? (isLongPos ? x.ev.price : -x.ev.price) : (isLongPos ? -x.ev.price : x.ev.price);
+        return [phase, along];
+    };
+    deferredExits.sort((a, b) => { const ka = pathKey(a), kb = pathKey(b); return ka[0] - kb[0] || ka[1] - kb[1]; });
+    const capLeft = new Map<Order, number>();
+    const lastFillOf = new Map<Order, number>();
+    const remainingFor = (order: Order) =>
+        strategy.opentrades.filter((t) => !order.from_entry || t.entry_id === order.from_entry).reduce((sum, t) => sum + Math.abs(t.size), 0);
+    for (const { order, ev, matchingDir, matchingQty, matching } of deferredExits) {
+        if (order.status !== 'pending') continue;
+        if (!capLeft.has(order)) {
             // qty / qty_percent caps apply to the TOTAL closed by this order.
-            let capRemaining = matchingQty;
-            if (order.qty && order.qty > 0) capRemaining = Math.min(order.qty, matchingQty);
+            let cap = matchingQty;
+            if (order.qty && order.qty > 0) cap = Math.min(order.qty, matchingQty);
             else if (order.qty_percent && order.qty_percent > 0) {
                 // qty_percent of the trades' entry quantity (two 25% exits on 8 contracts close 2 each)
-                const entryQty = matching.reduce((sum, t) => sum + (t._entry_qty ?? Math.abs(t.size)), 0);
-                capRemaining = Math.min(matchingQty, partialCloseQty(context, entryQty, order.qty_percent));
+                const entryQty = matching.reduce((sum: number, t: any) => sum + (t._entry_qty ?? Math.abs(t.size)), 0);
+                cap = Math.min(matchingQty, partialCloseQty(context, entryQty, order.qty_percent));
             }
-
-            const remainingMatchingQty = () =>
-                strategy.opentrades.filter((t) => !order.from_entry || t.entry_id === order.from_entry).reduce((sum, t) => sum + Math.abs(t.size), 0);
-
-            let lastFill = NaN;
-            let closedAny = false;
-            for (const ev of events) {
-                if (capRemaining <= 1e-9) break;
-                const remaining = remainingMatchingQty();
-                if (remaining <= 1e-9) break;
-                const qtyThis = Math.min(ev.qty === Infinity ? remaining : ev.qty, capRemaining, remaining);
-                // Slippage (closing side direction) applies to the stop and trailing legs;
-                // the take-profit leg is a limit order and fills at its price.
-                const fillPrice = ev.kind === 'profit' ? ev.price : applySlippage(context, -matchingDir, ev.price);
-
-                // Resolve which per-leg comment to stamp on the closed
-                // trade. strategy.exit() exposes comment_profit /
-                // comment_loss / comment_trailing — each fires only when
-                // its leg triggers. Fall back to the generic `comment`.
-                const legComment =
-                    ev.kind === 'profit'
-                        ? (order.comment_profit ?? order.comment)
-                        : ev.kind === 'loss'
-                          ? (order.comment_loss ?? order.comment)
-                          : (order.comment_trailing ?? order.comment);
-
-                // Bracket fills close their SOURCE lot (per-lot binding);
-                // the trail event has no source lot and closes FIFO.
-                closeMatching(
-                    context,
-                    order.from_entry,
-                    qtyThis,
-                    fillPrice,
-                    currentTime,
-                    {
-                        triggerKind: ev.kind,
-                        exitId: order.id,
-                        exitComment: legComment,
-                    },
-                    ev.tradeId,
-                );
-                capRemaining -= qtyThis;
-                lastFill = fillPrice;
-                closedAny = true;
-            }
-
-            // The order is consumed when nothing matching remains open or
-            // its qty cap is exhausted; otherwise it stays pending so the
-            // surviving trades' brackets remain active on later bars (TV
-            // brackets persist until filled or replaced).
-            if (closedAny) anyExitFilledThisBar = true;
-            if (closedAny && (remainingMatchingQty() <= 1e-9 || capRemaining <= 1e-9)) {
-                order.status = 'filled';
-                order.fill_price = lastFill;
-                order.fill_bar = context.idx;
-                order.fill_time = currentTime;
-            }
-            // Trades this order reduced: it (and a later call with its id) no longer applies to them.
-            for (const [t, before] of sizesBefore) {
-                if (Math.abs(t.size) < before) (t._exits_filled ??= new Set()).add(order.id);
-            }
+            capLeft.set(order, cap);
+        }
+        const capRemaining = capLeft.get(order) as number;
+        if (capRemaining <= 1e-9) continue;
+        const remaining = remainingFor(order);
+        if (remaining <= 1e-9) continue;
+        const qtyThis = Math.min(ev.qty === Infinity ? remaining : ev.qty, capRemaining, remaining);
+        // Slippage (closing side direction) applies to the stop and trailing legs; the take-profit leg is a limit
+        // order and fills at its price.
+        const fillPrice = ev.kind === 'profit' ? ev.price : applySlippage(context, -matchingDir, ev.price);
+        // Resolve which per-leg comment to stamp on the closed trade. strategy.exit() exposes comment_profit /
+        // comment_loss / comment_trailing — each fires only when its leg triggers. Fall back to the generic `comment`.
+        const legComment =
+            ev.kind === 'profit'
+                ? (order.comment_profit ?? order.comment)
+                : ev.kind === 'loss'
+                  ? (order.comment_loss ?? order.comment)
+                  : (order.comment_trailing ?? order.comment);
+        // Bracket fills close their SOURCE lot (per-lot binding); the trail event has no source lot and closes FIFO.
+        const sizesBefore = new Map(strategy.opentrades.map((t) => [t, Math.abs(t.size)]));
+        closeMatching(
+            context,
+            order.from_entry,
+            qtyThis,
+            fillPrice,
+            currentTime,
+            { triggerKind: ev.kind, exitId: order.id, exitComment: legComment },
+            ev.tradeId,
+        );
+        // Trades this order reduced: it (and a later call with its id) no longer applies to them.
+        for (const [t, before] of sizesBefore) {
+            if (Math.abs(t.size) < before) (t._exits_filled ??= new Set()).add(order.id);
+        }
+        capLeft.set(order, capRemaining - qtyThis);
+        lastFillOf.set(order, fillPrice);
+        anyExitFilledThisBar = true;
+    }
+    // The order is consumed when nothing matching remains open or its qty cap is exhausted; otherwise it stays
+    // pending so the surviving trades' brackets remain active on later bars (TV brackets persist until filled or replaced).
+    for (const [order, lastFill] of lastFillOf) {
+        if (remainingFor(order) <= 1e-9 || (capLeft.get(order) as number) <= 1e-9) {
+            order.status = 'filled';
+            order.fill_price = lastFill;
+            order.fill_bar = context.idx;
+            order.fill_time = currentTime;
         }
     }
 

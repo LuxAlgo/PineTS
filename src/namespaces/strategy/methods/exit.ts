@@ -178,6 +178,29 @@ export function exit(context: any) {
             _placedWithPosition: context.strategy.opentrades.length > 0,
         };
 
+        // TradingView semantic: when `trail_price` is already reached by the market
+        // at placement (the common "seed the trail at the arm-bar close" pattern), the trailing stop is
+        // live from the next bar with its initial level at trail_price - offset, i.e. peak = trail_price.
+        // Arming only when a LATER bar touches trail_price and seeding the peak at that bar's extreme fills
+        // one bar late and optimistically. Direction comes from the matching open trades; if none are open
+        // yet (exit placed ahead of its entry) the existing behaviour stands.
+        if (order.trail_price !== undefined && Number.isFinite(currentClose)) {
+            const matchingOpen = (context.strategy.opentrades as any[]).filter(
+                (t: any) => !order.from_entry || t.entry_id === order.from_entry,
+            );
+            if (matchingOpen.length > 0) {
+                const isLongPos = matchingOpen[0].size > 0;
+                const reached = isLongPos ? currentClose >= order.trail_price : currentClose <= order.trail_price;
+                if (reached) {
+                    // The trail rides behind the running favourable extreme. When the activation level is already
+                    // behind the market (scripts commonly pass a far-away sentinel such as 1 or 1e6 to mean "trail
+                    // from now"), the peak starts at the market price at activation, i.e. the placing bar's close.
+                    order.trail_armed = true;
+                    order.trail_peak = isLongPos ? Math.max(order.trail_price, currentClose) : Math.min(order.trail_price, currentClose);
+                }
+            }
+        }
+
         // Pine semantic: calling strategy.exit with the same `id` REPLACES the
         // prior pending exit order (allowing dynamic TP/SL adjustment each
         // bar). Without this, stale exits accumulate across the strategy's
@@ -186,17 +209,12 @@ export function exit(context: any) {
         // checks geometrically, the old order fires at a phantom price.
         // Same id + same from_entry scope is the replacement key.
         //
-        // Trail state carry-over: `trail_armed` and `trail_peak` are NOT
-        // user-supplied parameters — they're engine-accumulated state that
-        // tracks the trail's progress across bars (running high for a long,
-        // running low for a short). When the user calls strategy.exit every
-        // bar (the canonical "persistent" pattern), naive replacement would
-        // reset these to false/NaN every bar, preventing the trail from ever
-        // accumulating beyond a single bar's range. TV's behavior is that
-        // the trail's state persists across re-calls — only the user-tunable
-        // parameters (trail_points, trail_offset, limit, stop, etc.) are
-        // refreshed. Mirror that by copying the trail state forward whenever
-        // the prior order had armed.
+        // A re-placed exit (same id and from_entry) is a NEW order on TradingView: its trailing state starts
+        // over from the new trail_price / trail_points, it does not inherit the replaced order's running peak.
+        // Evidence (alexgrover, LuxAlgo/PineTS#367): BINANCE:BTCUSDT 1h, `strategy.exit(..., trail_price = close,
+        // trail_offset = 20000)` re-called every bar — a long from 2026-09-01 04:00 exits on the 06:00 bar at
+        // 78979.99 on TradingView (= the 05:00 close 79179.99 minus the offset), while a carried-over peak (the
+        // 05:00 high 79220.61) gave 79020.61. Immediate activation below seeds the peak from the new trail_price.
         const exitId = order.id;
         const list = context.strategy.pending_orders as Order[];
         for (let i = list.length - 1; i >= 0; i--) {
@@ -204,10 +222,7 @@ export function exit(context: any) {
             if (o.category === 'exit' && o.id === exitId &&
                 (o.from_entry ?? '') === (order.from_entry ?? '') &&
                 o.status === 'pending') {
-                if (o.trail_armed) {
-                    order.trail_armed = true;
-                    order.trail_peak  = o.trail_peak;
-                }
+
                 list.splice(i, 1);
             }
         }
