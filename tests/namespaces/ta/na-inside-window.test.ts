@@ -44,7 +44,6 @@ Object.assign(EXPR, {
     'corr g close': 'ta.correlation(g, close, 5)',
     'corr h volume': 'ta.correlation(h, volume, 5)',
     'stoch g': 'ta.stoch(g, high, low, 5)',
-    'stoch close g h': 'ta.stoch(close, g, h, 5)',
     'rising g 3': b('ta.rising(g, 3)'),
     'falling g 3': b('ta.falling(g, 3)'),
     'rising h 2': b('ta.rising(h, 2)'),

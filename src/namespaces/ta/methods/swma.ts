@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { BACKFILL_FROM_SOURCE, CallWindow } from '../utils/windows';
 
 /**
  * SWMA - Symmetrically Weighted Moving Average
@@ -21,53 +22,14 @@ export function swma(context: any) {
         const weights = [1, 2, 2, 1]; // Symmetric weights
         const weightSum = 6; // Sum of weights
 
-        // Incremental SWMA calculation using rolling window
+        // The last 4 values; in a local block, as on TradingView, a skipped bar repeats the last call's value
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `swma`;
-
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                // Tentative state
-                currentWindow: [],
-            };
-        }
-
-        const state = context.taState[stateKey];
-
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-            }
-            state.lastIdx = context.idx;
-        }
-
-        const currentValue = Series.from(source).get(0);
-
-        // Use committed state
-        const window = [...state.prevWindow];
-
-        // Add current value to window (most recent at front)
-        window.unshift(currentValue);
-
-        while (window.length > period) {
-            window.pop();
-        }
-
-        // Backfill from source if window is undersized (dynamic length recovery)
-        if (window.length < period && context.idx >= period - 1) {
-            const series = Series.from(source);
-            while (window.length < period) {
-                window.push(series.get(window.length));
-            }
-        }
-
-        // Update tentative state
-        state.currentWindow = window;
-
+        if (!context.taState[stateKey]) context.taState[stateKey] = new CallWindow(true);
+        const win: CallWindow = context.taState[stateKey];
+        win.begin(context.idx);
+        win.push(context.idx, Series.from(source).get(0), period, BACKFILL_FROM_SOURCE, source);
+        const window = win.values(win.size);
         if (window.length < period) {
             return NaN;
         }

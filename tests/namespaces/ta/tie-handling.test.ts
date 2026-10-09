@@ -3,12 +3,13 @@
 /**
  * Tie handling in `ta.pivothigh` / `ta.pivotlow` and `ta.highestbars` / `ta.lowestbars`.
  *
- * Expected values match TradingView (Sep 2026) for the periodic series below.
+ * Expected values match TradingView (Oct 9, 2026) for the periodic series below.
  *
  *   - Pivots are ASYMMETRIC. A bar equal to the candidate on the LEFT does not
  *     disqualify it (only a strictly higher / lower left bar does); a bar equal to the
  *     candidate on the RIGHT does disqualify it — the later equal bar becomes the pivot.
- *   - `highestbars` / `lowestbars` return the offset of the OLDEST bar among ties.
+ *   - `highestbars` / `lowestbars` return the offset of the NEWEST bar among ties
+ *     (the oldest until TradingView's change of Oct 9, 2026).
  *
  * Series (period 28, k = bar_index % 28):
  *   k:   0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27
@@ -26,10 +27,10 @@ const TV: Record<string, (number | 'na')[]> = {
     pl:   ['na', 'na', 1, 'na', 'na', 'na', 'na', 'na', 2, 'na', 'na', 'na', 'na', 'na', 'na', 3, 'na', 'na', 'na', 'na', 2, 'na', 'na', 'na', 'na', 1, 'na', 'na'],
     ph11: [8, 'na', 'na', 7, 'na', 7, 'na', 'na', 'na', 'na', 'na', 9, 'na', 'na', 'na', 9, 'na', 'na', 5, 'na', 'na', 'na', 8, 'na', 'na', 'na', 'na', 'na'],
     pl11: ['na', 1, 'na', 'na', 4, 'na', 'na', 2, 'na', 3, 'na', 'na', 'na', 'na', 3, 'na', 'na', 2, 'na', 2, 'na', 'na', 'na', 'na', 1, 'na', 'na', 'na'],
-    hb5:  [-2, -3, -4, -4, -2, -3, -4, -3, -4, 0, 0, -1, -2, -3, -4, -1, -2, -3, -4, -4, 0, 0, -1, -2, -3, -4, 0, -1],
-    lb5:  [0, -1, -2, -3, -4, -4, 0, -1, -2, -3, -4, -4, -4, 0, -1, -2, 0, -1, -2, -3, -4, -3, -4, 0, -1, -2, -3, -4],
-    hb3:  [-2, -2, 0, -1, -2, -1, -2, -2, -1, 0, 0, -1, -2, -2, 0, -1, -2, -2, -1, 0, 0, 0, -1, -2, -2, 0, 0, -1],
-    lb3:  [0, -1, -2, -2, -1, 0, 0, -1, -2, -2, -2, -2, 0, 0, -1, -2, 0, -1, -2, -1, -2, -2, 0, 0, -1, -2, -2, -2],
+    hb5:  [-1, -2, -3, -4, 0, -1, -2, -3, -4, 0, 0, -1, -2, -3, 0, -1, -2, -3, -4, -4, 0, 0, -1, -2, -3, -4, 0, 0],
+    lb5:  [0, -1, -2, -3, -4, -4, 0, -1, -2, -3, -4, -3, -4, 0, -1, -2, 0, -1, 0, -1, -2, -3, -4, 0, -1, -2, -3, -4],
+    hb3:  [-1, -2, 0, -1, 0, -1, -2, 0, 0, 0, 0, -1, -2, -2, 0, -1, -2, -2, -1, 0, 0, 0, -1, -2, -2, 0, 0, 0],
+    lb3:  [0, -1, -2, -2, -1, 0, 0, -1, -2, -1, -2, -2, 0, 0, -1, -2, 0, -1, 0, -1, -2, -2, 0, 0, -1, -2, -2, -2],
 };
 
 const SCRIPT = `//@version=6
@@ -111,12 +112,12 @@ plot(ta.pivotlow(1, 1), "pl")`);
 });
 
 describe('ta.highestbars / ta.lowestbars tie handling (TradingView parity)', () => {
-    it('returns the offset of the OLDEST bar among ties', async () => {
+    it('returns the offset of the NEWEST bar among ties', async () => {
         const byK = await runByK();
-        expect(byK.hb5[4]).toBe(-2); // window 1,2,7,4,7 → ties at -2 and 0
-        expect(byK.hb5[27]).toBe(-1); // window 1,5,7,8,8 → ties at -1 and 0
-        expect(byK.lb5[18]).toBe(-2); // window 9,8,2,5,2 → ties at -2 and 0
-        expect(byK.lb5[19]).toBe(-3); // window 8,2,5,2,6 → ties at -3 and -1
+        expect(byK.hb5[4]).toBe(0); // window 1,2,7,4,7 → ties at -2 and 0
+        expect(byK.hb5[27]).toBe(0); // window 1,5,7,8,8 → ties at -1 and 0
+        expect(byK.lb5[18]).toBe(0); // window 9,8,2,5,2 → ties at -2 and 0
+        expect(byK.lb5[19]).toBe(-1); // window 8,2,5,2,6 → ties at -3 and -1
         for (const name of ['hb5', 'lb5', 'hb3', 'lb3']) expect(byK[name], name).toEqual(TV[name]);
     });
 });

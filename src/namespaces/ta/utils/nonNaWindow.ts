@@ -1,8 +1,103 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { CountsTail, ExtremeTail, History, SortedTail } from './history';
+
 export const isNa = (v: any): boolean => v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v));
 
-type Entry = { v: number; n: number };
+/** The window of one call: `length` values, newest first, their sum and (when kept) their order. */
+export interface NonNaView {
+    sum: number;
+    /** `i`-th newest value. */
+    at(i: number): number;
+    /** The `length` values, newest first (an array reused by the next call). */
+    values(): number[];
+    /** `k`-th smallest value (0-based); only for a window created with `'sorted'`. */
+    kth(k: number): number;
+    /** Most frequent value, the smallest among equally frequent ones; only for `'counts'`. */
+    mode(): number;
+    /** Largest / smallest value (the newest among equal ones); only for `'extremes'`. */
+    max(): number;
+    min(): number;
+    /** Bar index of that value. */
+    maxBar(): number;
+    minBar(): number;
+}
+
+/** What a window keeps besides its values and sum. */
+export type Track = 'sorted' | 'counts' | 'extremes' | false;
+
+/** The source of a window: a series, or a function of the offset (0 = current bar). */
+export type ValueSource = { get(k: number): any } | ((k: number) => number);
+
+const read = (src: ValueSource, k: number): number => (typeof src === 'function' ? src(k) : src.get(k));
+
+// bars read back for the first call's backfill (beyond the window itself)
+const BACKFILL_BARS = 5000;
+
+class NonNaState implements NonNaView {
+    h = new History(1);
+    lastIdx = -1;
+    savedEnd = 0;
+    sorted: SortedTail | null;
+    counts: CountsTail | null;
+    hi: ExtremeTail | null;
+    lo: ExtremeTail | null;
+    // bar index of each value (with `'extremes'`)
+    bars: History | null;
+    length = 0;
+    sum = NaN;
+
+    constructor(track: Track) {
+        this.sorted = track === 'sorted' ? new SortedTail() : null;
+        this.counts = track === 'counts' ? new CountsTail() : null;
+        this.hi = track === 'extremes' ? new ExtremeTail(true, true) : null;
+        this.lo = track === 'extremes' ? new ExtremeTail(false, true) : null;
+        this.bars = track === 'extremes' ? new History() : null;
+    }
+
+    push(v: number, bar: number): void {
+        this.h.push(v);
+        this.bars?.push(bar);
+    }
+
+    max(): number {
+        return this.h.get(this.hi!.find(this.h, this.length));
+    }
+
+    min(): number {
+        return this.h.get(this.lo!.find(this.h, this.length));
+    }
+
+    maxBar(): number {
+        return this.bars!.get(this.hi!.find(this.h, this.length));
+    }
+
+    minBar(): number {
+        return this.bars!.get(this.lo!.find(this.h, this.length));
+    }
+
+    at(i: number): number {
+        return this.h.at(i);
+    }
+
+    private scratch: number[] = [];
+    values(): number[] {
+        const n = this.length;
+        const out = this.scratch;
+        out.length = n;
+        const v = this.h.view(n);
+        for (let i = 0; i < n; i++) out[i] = v[n - 1 - i];
+        return out;
+    }
+
+    kth(k: number): number {
+        return this.sorted!.sorted[k];
+    }
+
+    mode(): number {
+        return this.counts!.counts.mode();
+    }
+}
 
 /**
  * The last `length` non-na values of a source, newest first, and their sum: the window TradingView's
@@ -10,57 +105,69 @@ type Entry = { v: number; n: number };
  * skipped, not counted, so a bar whose value is na leaves the window as it was. `undefined` while
  * fewer than `length` non-na values have been seen.
  *
- * `valueAt(k)` reads the source `k` bars back (0 = current). State lives in `context.taState[key]`
- * with the usual committed / tentative split. Each value keeps the number of the call it was read on,
- * so a call made after skipped bars (the function called inside an `if`) backfills from the source
- * right behind the oldest value it holds. Once a backfill has reached the first bar, calls on
- * consecutive bars do not scan the history again (a long na stretch would make that quadratic).
+ * In a local block the values are those of the calls, as on TradingView; `length` may change from call
+ * to call (a series length), the window then reaching further back into the earlier calls. The values
+ * before the first call are read from the source (PineTS's backfill, for a function first called on a
+ * later bar, e.g. on the last bar only).
+ *
+ * `valueAt` reads the source `k` bars back (0 = current): a series or a function; `current`, when given,
+ * is the current value (`valueAt` is then only read for the backfill). State lives in
+ * `context.taState[key]`; a bar evaluated again (live bar) starts from the values of the previous bars.
+ *
+ * The values are kept with prefix sums (History), so the sum of any window costs O(1); `'sorted'` /
+ * `'counts'` keep the window ordered / counted, O(log length) a value; `'extremes'` its maximum and
+ * minimum (and their bars), O(log length) a query.
  */
 export function nonNaWindow(
     context: any,
     key: string,
-    valueAt: (k: number) => number,
-    length: number
-): { values: number[]; sum: number } | undefined {
+    valueAt: ValueSource,
+    length: number,
+    track: Track = false,
+    current?: number,
+): NonNaView | undefined {
     if (!context.taState) context.taState = {};
-    let state = context.taState[key];
-    if (!state) {
-        state = context.taState[key] = {
-            lastIdx: -1,
-            prev: { entries: [] as Entry[], sum: 0, calls: 0, callIdx: -1, exhausted: false, length: NaN },
-            current: { entries: [] as Entry[], sum: 0, calls: 0, callIdx: -1, exhausted: false, length: NaN },
-        };
-    }
-    if (context.idx > state.lastIdx) {
-        if (state.lastIdx >= 0) state.prev = { ...state.current, entries: [...state.current.entries] };
-        state.lastIdx = context.idx;
-    }
+    let s: NonNaState = context.taState[key];
+    if (!s) s = context.taState[key] = new NonNaState(track);
+    const h = s.h;
+    if (!(length >= 1)) return undefined;
+    h.keepFor(length);
+    s.bars?.keepFor(length);
 
-    const prev = state.prev;
-    const calls = prev.calls + 1;
-    const entries: Entry[] = [...prev.entries];
-    let sum = prev.sum;
-    let exhausted = prev.exhausted && prev.callIdx === context.idx - 1 && prev.length === length;
-
-    const value = valueAt(0);
-    if (!isNa(value)) {
-        entries.unshift({ v: value, n: calls });
-        sum += value;
-    }
-    while (entries.length > length) sum -= entries.pop()!.v;
-
-    let rebuilt = prev.length !== length;
-    if (entries.length < length && !exhausted && (calls >= length || context.idx >= length - 1)) {
-        let k = entries.length ? calls - entries[entries.length - 1].n + 1 : 1;
-        for (; entries.length < length && k <= context.idx; k++) {
-            const v = valueAt(k);
-            if (!isNa(v)) entries.push({ v, n: calls - k });
+    if (context.idx !== s.lastIdx) {
+        if (s.lastIdx < 0) {
+            for (let k = Math.min(context.idx, BACKFILL_BARS + 2 * length); k >= 1; k--) {
+                const v = read(valueAt, k);
+                if (!isNa(v)) s.push(v, context.idx - k);
+            }
+        } else {
+            h.compact();
+            s.bars?.compact();
         }
-        exhausted = entries.length < length;
-        rebuilt = true;
+        s.savedEnd = h.end;
+        s.sorted?.commit();
+        s.counts?.commit();
+        s.hi?.commit(h);
+        s.lo?.commit(h);
+        s.lastIdx = context.idx;
+    } else {
+        h.truncate(s.savedEnd);
+        s.bars?.truncate(s.savedEnd);
+        s.sorted?.rollback();
+        s.counts?.rollback();
+        s.hi?.rollback();
+        s.lo?.rollback();
     }
-    if (rebuilt) sum = entries.reduce((s, e) => s + e.v, 0);
 
-    state.current = { entries, sum, calls, callIdx: context.idx, exhausted, length };
-    return entries.length < length ? undefined : { values: entries.map((e) => e.v), sum };
+    const value = current === undefined ? read(valueAt, 0) : current;
+    if (!isNa(value)) s.push(value, context.idx);
+    s.hi?.sync(h);
+    s.lo?.sync(h);
+
+    if (h.size < length) return undefined;
+    s.sorted?.sync(h, length);
+    s.counts?.sync(h, length);
+    s.length = length;
+    s.sum = h.sum(length);
+    return s;
 }

@@ -78,6 +78,28 @@ state.prevEma = ema;
 - **Performance**: O(1) calculation per bar for most indicators.
 - **Memory Efficiency**: Only necessary state (e.g., previous value, running sum) is stored, not full history arrays for intermediate steps.
 
+### Rolling Windows
+
+Functions over the last `length` values use the helpers of `src/namespaces/ta/utils/windows.ts` and `utils/nonNaWindow.ts`, so a bar costs the same whatever the length. Never copy a window array per bar (`[...state.window]`, `unshift`): that alone makes a function O(length) per bar.
+
+- **Committed / tentative**: a window keeps the values committed on the previous bar plus the change of the current call, applied only when the next bar starts. A bar evaluated again (live bar, or a second call with the same key) starts from the same committed window.
+- **`CallWindow`** (`ExtremeWindow`, `WeightedWindow`, `SortedWindow`): the values of the function's calls, with the backfill from the source history for a short window (a call inside an `if` or on the last bar only). `push` is O(1); a backfill or a smaller length rebuilds the window. Running values the caller keeps go in `agg` / `tAgg`. With `carry`, a bar on which the call did not run repeats the last call's value.
+- **`nonNaWindow`**: the last `length` non-na values of the calls with their running sum, optionally kept sorted (`'sorted'`) or counted (`'counts'`).
+- **`RecentExtreme`**: the highest / lowest of the calls made within the last `length` bars.
+
+**Local blocks.** Called inside an `if` that skips bars, TradingView's functions do not all see the same history (`tests/namespaces/ta/local-block-semantics.test.ts`):
+
+| History | Functions | Window |
+|---|---|---|
+| the last `length` calls | `sma`, `median`, `stdev`, `variance`, `vwma`, `range`, `mode`, both percentiles, `math.sum`, `valuewhen` | `nonNaWindow` / `CallWindow` |
+| the last `length` bars, a skipped bar repeating the last call's value (`source[i]`) | `wma`, `hma`, `alma`, `swma`, `change`, `mom`, `roc`, `percentrank`, `stoch`, `wpr`, `pivothigh`, `pivotlow` | `CallWindow` with `carry` |
+| both | `dev` / `cci` (mean over calls, deviations over bars), `cog` (sum over calls, weighted sum over bars) | both |
+| the change from the previous call, summed over calls | `cmo`, `mfi` | `nonNaWindow` |
+| the calls of the last `length` bars | `highest`, `lowest`, `highestbars`, `lowestbars` (exact for regular gaps only) | `RecentExtreme` |
+
+At the top level (a call on every bar) all of these are the same window.
+- **Running sums vs fresh sums**: a running sum (`S + x - y`) is fine for averages, and weighted sums are re-summed every `length` values to bound float drift. Where a result cancels (`E[x²] - E[x]²` in `ta.variance` / `ta.correlation`), sum the window afresh instead.
+
 ## Implementation Specifics
 
 ### 1. Tuple Returns (Double Bracket Convention)

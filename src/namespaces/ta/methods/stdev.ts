@@ -12,12 +12,13 @@ export function stdev(context: any) {
         const series = Series.from(source);
 
         // Over the last `length` non-na values (na values are skipped, as on TradingView).
-        const window = nonNaWindow(context, _callId || `stdev_${length}_${bias}`, (k) => series.get(k), length);
+        const window = nonNaWindow(context, _callId || `stdev_${length}_${bias}`, series, length);
         if (!window) return NaN;
 
         const mean = window.sum / length;
         let sumSquaredDiff = 0;
-        for (const v of window.values) sumSquaredDiff += Math.pow(v - mean, 2);
+        const values = window.values();
+        for (let i = 0; i < length; i++) sumSquaredDiff += Math.pow(values[i] - mean, 2);
 
         const divisor = bias ? length : length - 1;
         const stdev = Math.sqrt(sumSquaredDiff / divisor);

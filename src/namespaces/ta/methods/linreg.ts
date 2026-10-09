@@ -1,88 +1,42 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { LinregCall } from '../utils/barRing';
 
 export function linreg(context: any) {
     return (source: any, _length: any, _offset: any, _callId?: string) => {
         const length = Series.from(_length).get(0);
         const offset = Series.from(_offset).get(0);
 
-        // Linear Regression
+        // Linear Regression over the window as TradingView reads it (in a local block, bars the block
+        // skipped are read from slots written earlier, or repeat the last call's value: LinregCall)
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `linreg_${length}_${offset}`;
+        if (!context.taState[stateKey]) context.taState[stateKey] = new LinregCall();
+        const win: LinregCall = context.taState[stateKey];
+        const series = Series.from(source);
+        const sums = win.step(context.idx, series.get(0), length, series);
+        if (!sums) return NaN;
 
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = { 
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevCallCount: 0,
-                // Tentative state
-                currentWindow: [],
-                currentCallCount: 0
-            };
-        }
-
-        const state = context.taState[stateKey];
-        
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-                state.prevCallCount = state.currentCallCount;
-            }
-            state.lastIdx = context.idx;
-        }
-
-        const currentValue = Series.from(source).get(0);
-
-        const window = [...state.prevWindow];
-        window.unshift(currentValue);
-
-        while (window.length > length) {
-            window.pop();
-        }
-
-        // Track actual call count for callsite-correct backfill
-        const callCount = state.prevCallCount + 1;
-        if (window.length < length && (callCount >= length || context.idx >= length - 1)) {
-            const series = Series.from(source);
-            while (window.length < length) {
-                window.push(series.get(window.length));
-            }
-        }
-
-        state.currentWindow = window;
-        state.currentCallCount = callCount;
-
-        if (window.length < length) {
-            return NaN;
-        }
-
-        let sumX = 0;
-        let sumY = 0;
-        let sumXY = 0;
-        let sumXX = 0;
+        // x = 0 for the oldest bar ... length - 1 for the current one, so Σx·y = N - S where N weighs the
+        // current value with `length` and the oldest with 1.
         const n = length;
-
-        // Calculate regression coefficients
-        // window[0] is most recent (x = length - 1), window[length-1] is oldest (x = 0)
-        for (let j = 0; j < length; j++) {
-            const x = length - 1 - j; // Most recent bar has highest x value
-            const y = window[j];
-            sumX += x;
-            sumY += y;
-            sumXY += x * y;
-            sumXX += x * x;
-        }
+        const sumX = (n * (n - 1)) / 2;
+        const sumXX = ((n - 1) * n * (2 * n - 1)) / 6;
+        const sumY = sums[0];
+        const sumXY = sums[1] - sums[0];
 
         const denominator = n * sumXX - sumX * sumX;
+        // A single value has no regression line: TradingView keeps the last call's slope and intercept
+        // (the intercept being that line's value on the oldest bar of its window).
         if (denominator === 0) {
-            return NaN;
+            if (!win.line) return NaN;
+            return context.precision(win.line[1] + win.line[0] * (length - 1 - offset));
         }
 
         const slope = (n * sumXY - sumX * sumY) / denominator;
         const intercept = (sumY - slope * sumX) / n;
+        win.line = [slope, intercept];
 
         // Pine formula: intercept + slope * (length - 1 - offset)
         const linRegValue = intercept + slope * (length - 1 - offset);

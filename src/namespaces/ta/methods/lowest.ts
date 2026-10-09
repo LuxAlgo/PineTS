@@ -1,89 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { nonNaWindow } from '../utils/nonNaWindow';
 
 export function lowest(context: any) {
     return (source: any, _length: any, _callId?: string) => {
-        // if the _length is of type string, this is probably the _callId 
-        // ==> this is a weak approach to determine syntaxes : ta.low(length) vs ta.low(source, length)
+        // if the _length is of type string, this is probably the _callId
+        // ==> this is a weak approach to determine syntaxes : ta.lowest(length) vs ta.lowest(source, length)
         if (typeof _length === 'string' && _callId === undefined) {
-            _callId = _length
-            _length = source
+            _callId = _length;
+            _length = source;
             source = context.data.low;
         }
 
         const length = Series.from(_length).get(0);
+        const series = Series.from(source);
 
-        // Rolling minimum
-        if (!context.taState) context.taState = {};
-        const stateKey = _callId || `lowest_${length}`;
-
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                prevCallCount: 0,
-                // Tentative state
-                currentWindow: [],
-                currentCallCount: 0,
-            };
-        }
-
-        const state = context.taState[stateKey];
-
-        // Commit logic
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-                state.prevCallCount = state.currentCallCount;
-            }
-            state.lastIdx = context.idx;
-        }
-
-        const currentValue = Series.from(source).get(0);
-
-        // Use committed state
-        const window = [...state.prevWindow];
-
-        window.unshift(currentValue);
-
-        while (window.length > length) {
-            window.pop();
-        }
-
-        // Track actual call count for callsite-correct backfill
-        const callCount = state.prevCallCount + 1;
-
-        // Backfill from source series when the window is undersized.
-        // Use both callCount (for top-level calls) and context.idx
-        // (for conditional blocks where callCount < length but enough
-        // chart bars exist to look back through the source series).
-        if (window.length < length && (callCount >= length || context.idx >= length - 1)) {
-            const series = Series.from(source);
-            while (window.length < length) {
-                window.push(series.get(window.length));
-            }
-        }
-
-        // Update tentative state
-        state.currentWindow = window;
-        state.currentCallCount = callCount;
-
-        if (window.length < length) {
-            return NaN;
-        }
-
-        // TradingView resets the window at na: only the bars since the most recent na
-        // take part (the window is newest → oldest, so that is the prefix before the
-        // first na), and an na on the current bar yields na
-        // (tests/namespaces/ta/na-window-semantics.test.ts).
-        const firstNa = window.findIndex((v) => v === undefined || isNaN(v));
-        const validValues = firstNa === -1 ? window : window.slice(0, firstNa);
-        if (validValues.length === 0) {
-            return NaN;
-        }
-        const min = Math.min(...validValues);
-        return context.precision(min);
+        // As on TradingView (since 2026-10-09): the last `length` non-na values, the calls' values in a
+        // local block (an na value is skipped, as by ta.sma); `length` may change from call to call.
+        const win = nonNaWindow(context, _callId || `lowest_${length}`, series, length, 'extremes');
+        return win ? context.precision(win.min()) : NaN;
     };
 }

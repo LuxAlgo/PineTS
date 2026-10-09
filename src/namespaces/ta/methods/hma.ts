@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { CallWindow } from '../utils/windows';
 
 export function hma(context: any) {
     return (source: any, _period: any, _callId?: string) => {
@@ -18,97 +19,34 @@ export function hma(context: any) {
         const wma2 = wmaFn(source, period, _callId ? `${_callId}_wma2` : undefined);
 
         const rawIsNa = isNaN(wma1) || isNaN(wma2);
-
-        // Create synthetic source for final WMA: 2*wma1 - wma2
-        // We need to feed this into WMA calculation
-        // Store the raw value in a temporary series
-        if (!context.taState) context.taState = {};
-        const stateKey = _callId || `hma_raw_${period}`;
-
-        if (!context.taState[stateKey]) {
-            context.taState[stateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevValues: [],
-                // Tentative state
-                currentValues: [],
-            };
-        }
-
-        const rawState = context.taState[stateKey];
-
-        // Commit logic for raw values
-        if (context.idx > rawState.lastIdx) {
-            if (rawState.lastIdx >= 0) {
-                rawState.prevValues = [...rawState.currentValues];
-            }
-            rawState.lastIdx = context.idx;
-        }
-
         const rawHma = 2 * wma1 - wma2;
-        
-        // Use committed values as base
-        const values = [...rawState.prevValues];
-        values.unshift(rawHma);
-        
-        // Keep history manageable (though not strictly necessary for simple series, but helps debugging/memory)
-        if (values.length > sqrtPeriod + 1) values.pop();
-        
-        rawState.currentValues = values;
 
         // Apply WMA to the raw HMA values
+        if (!context.taState) context.taState = {};
         const hmaStateKey = _callId ? `${_callId}_hma_final` : `hma_final_${period}`;
-        
-        if (!context.taState[hmaStateKey]) {
-            context.taState[hmaStateKey] = {
-                lastIdx: -1,
-                // Committed state
-                prevWindow: [],
-                // Tentative state
-                currentWindow: [],
-            };
-        }
-
-        const state = context.taState[hmaStateKey];
-
-        // Commit logic for final WMA
-        if (context.idx > state.lastIdx) {
-            if (state.lastIdx >= 0) {
-                state.prevWindow = [...state.currentWindow];
-            }
-            state.lastIdx = context.idx;
-        }
-
-        // Use committed window
-        const window = [...state.prevWindow];
+        if (!context.taState[hmaStateKey]) context.taState[hmaStateKey] = new CallWindow(true);
+        const win: CallWindow = context.taState[hmaStateKey];
+        win.begin(context.idx);
 
         // An na bar (source na, so both inner WMAs are na) returns na and weighs the last raw value
         // in its slot, like `ta.wma` on an na source. Before the first raw value nothing is kept.
         if (rawIsNa) {
-            if (!window.length) return NaN;
-            window.unshift(window[0]);
-            while (window.length > sqrtPeriod) window.pop();
-            state.currentWindow = window;
+            if (!win.ring.size) return NaN;
+            win.push(context.idx, win.ring.at(0), sqrtPeriod);
             return NaN;
         }
-        window.unshift(rawHma);
+        win.push(context.idx, rawHma, sqrtPeriod);
 
-        if (window.length < sqrtPeriod) {
-            state.currentWindow = window;
+        if (win.size < sqrtPeriod) {
             return NaN;
         }
 
-        while (window.length > sqrtPeriod) {
-            window.pop();
-        }
-
-        state.currentWindow = window;
-
+        // A window of sqrt(period) values: summed directly
         let numerator = 0;
         let denominator = 0;
         for (let i = 0; i < sqrtPeriod; i++) {
             const weight = sqrtPeriod - i;
-            numerator += window[i] * weight;
+            numerator += win.at(i) * weight;
             denominator += weight;
         }
 

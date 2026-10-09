@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { extremeBarsOffset } from '../utils/extremeBars';
 
 /**
  * Highest Bars
@@ -19,32 +20,10 @@ export function highestbars(context: any) {
         const length = Series.from(_length).get(0);
         const series = Series.from(source);
 
-        // Stateless calculation (accesses past data via Series),
-        // but result depends on historical data availability.
-
-        if (context.idx < length - 1) {
-            return NaN;
-        }
-
-        let maxVal = -Infinity;
-        let maxOffset = NaN;
-
-        for (let i = 0; i < length; i++) {
-            const val = series.get(i);
-
-            // TradingView resets the window at na: only the bars since the most recent
-            // na take part, and an na on the current bar yields offset 0
-            // (tests/namespaces/ta/na-window-semantics.test.ts).
-            if (val === undefined || isNaN(val)) break;
-
-            // `>=` so that, scanning newest → oldest, an older bar with the same value
-            // overwrites: TradingView returns the offset of the OLDEST bar among ties.
-            if (isNaN(maxOffset) || val >= maxVal) {
-                maxVal = val;
-                maxOffset = -i;
-            }
-        }
-
-        return isNaN(maxOffset) ? 0 : maxOffset;
+        // As on TradingView (since 2026-10-09): the last `length` non-na values (the calls' in a local
+        // block), the NEWEST bar among equal values (extremeBarsOffset).
+        const offset = extremeBarsOffset(context, _callId, series, length, true);
+        // Result depends on historical data availability.
+        return context.idx < length - 1 ? NaN : offset;
     };
 }

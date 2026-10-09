@@ -84,8 +84,9 @@ plot(ta.lowestbars(low, 10), "lbl")`);
         for (let i = 9; i < h.length; i++) {
             const hw = window(h, i, 10).reverse();
             const lw = window(l, i, 10).reverse();
-            expect(hb[i]).toBe(-hw.lastIndexOf(Math.max(...hw)));
-            expect(lb[i]).toBe(-lw.lastIndexOf(Math.min(...lw)));
+            // the newest bar among equal values (TradingView since Oct 9, 2026)
+            expect(hb[i]).toBe(-hw.indexOf(Math.max(...hw)));
+            expect(lb[i]).toBe(-lw.indexOf(Math.min(...lw)));
             expect(hb[i]).toBe(hbh[i]);
             expect(lb[i]).toBe(lbl[i]);
         }
