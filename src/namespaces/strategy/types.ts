@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 LuxAlgo
 
+import type { EquityReplay } from './equityExcursions';
+
 /**
  * Strategy configuration options.
  *
@@ -82,6 +84,10 @@ export interface Trade {
      * before an older lot's (TV ledger convention).
      */
     _bracket_entry?: number;
+    _entry_fill_path?: number; // Entry location on its historical bar path.
+    _excursion_bar?: number;
+    _excursion_base_drawdown?: number; // Peak carried into the current bar.
+    _excursion_base_runup?: number;
 }
 
 /**
@@ -103,6 +109,7 @@ export interface Order {
     oca_name?: string;
     oca_type?: 'cancel' | 'reduce' | 'none';
     comment?: string;
+    _fill_path?: number; // Historical path location before slippage.
     fill_price?: number;
     fill_bar?: number;
     fill_time?: number;
@@ -198,6 +205,7 @@ export interface Order {
  * also indexable for the per-trade getter equivalents.
  */
 export interface StrategyState {
+    _equity_replay?: EquityReplay;
     config: StrategyConfig;
 
     // Trade collections (arrays — `.length` is the Pine count)

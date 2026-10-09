@@ -1,0 +1,55 @@
+{
+  "sourceSha256": "37fb4e138073c3267c6a20859c921d0760fd6d48f9f5afe9eff1df3291bd6b4c",
+  "candles": 300,
+  "trades": 10,
+  "perTradeMatch": true,
+  "mismatches": [],
+  "aggregate": {
+    "maxDrawdown": 1809.5,
+    "maxRunup": 2856,
+    "netProfit": 1468.5
+  },
+  "aggregateReference": {
+    "maxDrawdown": 1809.5,
+    "maxRunup": 2856,
+    "netProfit": 1468.5
+  },
+  "aggregateMatch": true,
+  "aggregateMismatches": [],
+  "aggregateScope": "Fixture comparison only; general native parity unverified",
+  "captureDateUTC": "2026-10-06",
+  "testedCommit": "9104034ad89f0accf4ca971837c24282785ed42b",
+  "symbol": "CME_MINI:MNQ1!",
+  "timeframe": "D",
+  "chartType": "ordinary_candles",
+  "reportScope": "chart",
+  "barMagnifier": false,
+  "metadata": {
+    "pointvalue": 2,
+    "mincontract": 1,
+    "mintick": 0.25
+  },
+  "environment": {
+    "node": "22.22.2",
+    "platform": "macOS arm64"
+  },
+  "comparisonTolerance": 1e-08,
+  "comparedFields": [
+    "entryTime",
+    "exitTime",
+    "entryPrice",
+    "exitPrice",
+    "size",
+    "commission",
+    "profit",
+    "maxDrawdown",
+    "maxRunup"
+  ],
+  "limitations": [
+    "One long-only bracket fixture; no native multi-position/reversal/partial/commission/slippage comparison.",
+    "Native equity accessor returned report summary without a curve; no equity-curve match claimed.",
+    "Native bar open timestamps are exact. closeTime is derived from session17:00-16:00; no on-close/immediate fill comparison claimed.",
+    "300 captured chart bars cover the complete September2026 entry window; earlier inactive history omitted.",
+    "Raw native candles, full report, account and saved-script identifiers retained locally only."
+  ]
+}
