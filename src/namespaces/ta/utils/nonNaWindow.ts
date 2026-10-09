@@ -15,9 +15,12 @@ export interface NonNaView {
     kth(k: number): number;
     /** Most frequent value, the smallest among equally frequent ones; only for `'counts'`. */
     mode(): number;
-    /** Largest / smallest value; only for `'extremes'`. */
+    /** Largest / smallest value (the newest among equal ones); only for `'extremes'`. */
     max(): number;
     min(): number;
+    /** Bar index of that value. */
+    maxBar(): number;
+    minBar(): number;
 }
 
 /** What a window keeps besides its values and sum. */
@@ -39,14 +42,22 @@ class NonNaState implements NonNaView {
     counts: CountsTail | null;
     hi: ExtremeTail | null;
     lo: ExtremeTail | null;
+    // bar index of each value (with `'extremes'`)
+    bars: History | null;
     length = 0;
     sum = NaN;
 
     constructor(track: Track) {
         this.sorted = track === 'sorted' ? new SortedTail() : null;
         this.counts = track === 'counts' ? new CountsTail() : null;
-        this.hi = track === 'extremes' ? new ExtremeTail(true) : null;
-        this.lo = track === 'extremes' ? new ExtremeTail(false) : null;
+        this.hi = track === 'extremes' ? new ExtremeTail(true, true) : null;
+        this.lo = track === 'extremes' ? new ExtremeTail(false, true) : null;
+        this.bars = track === 'extremes' ? new History() : null;
+    }
+
+    push(v: number, bar: number): void {
+        this.h.push(v);
+        this.bars?.push(bar);
     }
 
     max(): number {
@@ -55,6 +66,14 @@ class NonNaState implements NonNaView {
 
     min(): number {
         return this.h.get(this.lo!.find(this.h, this.length));
+    }
+
+    maxBar(): number {
+        return this.bars!.get(this.hi!.find(this.h, this.length));
+    }
+
+    minBar(): number {
+        return this.bars!.get(this.lo!.find(this.h, this.length));
     }
 
     at(i: number): number {
@@ -96,7 +115,8 @@ class NonNaState implements NonNaView {
  * `context.taState[key]`; a bar evaluated again (live bar) starts from the values of the previous bars.
  *
  * The values are kept with prefix sums (History), so the sum of any window costs O(1); `'sorted'` /
- * `'counts'` keep the window ordered / counted, O(log length) a value.
+ * `'counts'` keep the window ordered / counted, O(log length) a value; `'extremes'` its maximum and
+ * minimum (and their bars), O(log length) a query.
  */
 export function nonNaWindow(
     context: any,
@@ -112,14 +132,18 @@ export function nonNaWindow(
     const h = s.h;
     if (!(length >= 1)) return undefined;
     h.keepFor(length);
+    s.bars?.keepFor(length);
 
     if (context.idx !== s.lastIdx) {
         if (s.lastIdx < 0) {
             for (let k = Math.min(context.idx, BACKFILL_BARS + 2 * length); k >= 1; k--) {
                 const v = read(valueAt, k);
-                if (!isNa(v)) h.push(v);
+                if (!isNa(v)) s.push(v, context.idx - k);
             }
-        } else h.compact();
+        } else {
+            h.compact();
+            s.bars?.compact();
+        }
         s.savedEnd = h.end;
         s.sorted?.commit();
         s.counts?.commit();
@@ -128,6 +152,7 @@ export function nonNaWindow(
         s.lastIdx = context.idx;
     } else {
         h.truncate(s.savedEnd);
+        s.bars?.truncate(s.savedEnd);
         s.sorted?.rollback();
         s.counts?.rollback();
         s.hi?.rollback();
@@ -135,7 +160,7 @@ export function nonNaWindow(
     }
 
     const value = current === undefined ? read(valueAt, 0) : current;
-    if (!isNa(value)) h.push(value);
+    if (!isNa(value)) s.push(value, context.idx);
     s.hi?.sync(h);
     s.lo?.sync(h);
 

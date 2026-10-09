@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
-import { CarryHistory, ExtremeTail } from '../utils/history';
+import { nonNaWindow } from '../utils/nonNaWindow';
 
 class StochState {
-    highs = new CarryHistory(0, undefined, false);
-    lows = new CarryHistory(0, undefined, false);
-    hi = new ExtremeTail(true);
-    lo = new ExtremeTail(false);
+    lastIdx = -1;
     // the value of the previous call (committed) and of this one
     prev = NaN;
     cur = NaN;
@@ -46,8 +43,8 @@ function result(context: any, state: StochState, value: number): number {
  * - A bar whose value would be NaN because of an na input (source, high, low) repeats the previous value
  * - A flat range (highest equal to lowest) repeats the previous value when the source equals it and
  *   is NaN otherwise
- * - In a local block the highs and lows are those of the last `length` bars, a skipped bar repeating
- *   the last call's; `length` may change from call to call
+ * - The highs and lows are the last `length` non-na values (in a local block, of the calls), as
+ *   ta.highest / ta.lowest; `length` may change from call to call
  */
 export function stoch(context: any) {
     return (source: any, high: any, low: any, _length: any, _callId?: string) => {
@@ -62,32 +59,21 @@ export function stoch(context: any) {
         const currentHigh = Series.from(high).get(0);
         const currentLow = Series.from(low).get(0);
 
-        state.highs.push(context.idx, currentHigh, length);
-        state.lows.push(context.idx, currentLow, length);
-        const hh = state.highs.h;
-        const lh = state.lows.h;
-        if (state.highs.newBar) {
+        if (context.idx !== state.lastIdx) {
             state.prev = state.cur;
-            state.hi.commit(hh);
-            state.lo.commit(lh);
-        } else {
-            state.hi.rollback();
-            state.lo.rollback();
+            state.lastIdx = context.idx;
         }
-        state.hi.sync(hh);
-        state.lo.sync(lh);
+        const hw = nonNaWindow(context, `${stateKey}_h`, Series.from(high), length, 'extremes', currentHigh);
+        const lw = nonNaWindow(context, `${stateKey}_l`, Series.from(low), length, 'extremes', currentLow);
 
         // Not enough data yet
-        if (!(length >= 1) || hh.size < length) {
+        if (!hw || !lw) {
             return result(context, state, NaN);
         }
 
-        // Highest high and lowest low like ta.highest / ta.lowest: only the bars since the most
-        // recent na in the window take part, and an na on the current bar makes them na.
-        const jh = state.hi.find(hh, length);
-        const jl = state.lo.find(lh, length);
-        const highest = jh < 0 ? NaN : hh.get(jh);
-        const lowest = jl < 0 ? NaN : lh.get(jl);
+        // Highest high and lowest low like ta.highest / ta.lowest: the last `length` non-na values
+        const highest = hw.max();
+        const lowest = lw.min();
 
         // Calculate stochastic
         const range = highest - lowest;

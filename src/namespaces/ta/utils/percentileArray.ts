@@ -30,12 +30,19 @@ export class PercentileArray {
     // undo of the current bar's changes, for a bar computed again (live bar)
     private undoLog: (() => void)[] = [];
 
-    /** The array after the call on bar `idx`; undefined while fewer than `length` values are held. */
-    step(idx: number, x: any, length: number, series: Series): number[] | undefined {
+    private lastTick: unknown = undefined;
+
+    /**
+     * The array after the call on bar `idx`; undefined while fewer than `length` values are held. `tick`
+     * identifies the script's execution: a second call in the same one (a loop) adds its value too, as on
+     * TradingView, while a new execution of the same bar (live bar) starts from the previous bars.
+     */
+    step(idx: number, x: any, length: number, series: Series, tick?: unknown): number[] | undefined {
         const v = x == null ? NaN : Number(x);
         this.carry.push(idx, v, length, series);
         if (this.carry.newBar) this.commit();
-        else this.rollback();
+        else if (tick === undefined || tick !== this.lastTick) this.rollback();
+        this.lastTick = tick;
 
         this.insert(v);
         this.held.push(v);

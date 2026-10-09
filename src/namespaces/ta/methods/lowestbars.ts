@@ -20,10 +20,8 @@ export function lowestbars(context: any) {
         const length = Series.from(_length).get(0);
         const series = Series.from(source);
 
-        // TradingView resets the window at na: only the bars since the most recent
-        // na take part, and an na on the current bar yields offset 0
-        // (tests/namespaces/ta/na-window-semantics.test.ts). Among equal values the
-        // OLDEST bar wins; in a local block the window is the calls of the last `length` bars.
+        // As on TradingView (since 2026-10-09): the last `length` non-na values (the calls' in a local
+        // block), the NEWEST bar among equal values (extremeBarsOffset).
         const offset = extremeBarsOffset(context, _callId, series, length, false);
         // Result depends on historical data availability.
         return context.idx < length - 1 ? NaN : offset;

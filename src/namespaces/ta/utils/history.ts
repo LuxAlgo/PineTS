@@ -288,8 +288,8 @@ export class CountsTail extends TailTracker {
 /**
  * Maximum (minimum) of the newest `n` entries of a History, for any `n`: the entries greater (smaller)
  * than every later one, oldest first, so the extreme of a window is the first of them inside it (the
- * oldest among equal values). Only the entries after the most recent na take part. O(log n) a query,
- * O(1) amortized a push; `commit` / `rollback` as for the trackers.
+ * oldest among equal values, or with `newest` the newest). Only the entries after the most recent na
+ * take part. O(log n) a query, O(1) amortized a push; `commit` / `rollback` as for the trackers.
  */
 export class ExtremeTail {
     private idx: number[] = [];
@@ -303,7 +303,10 @@ export class ExtremeTail {
     private pushedCount = 0;
     private saved = { head: 0, lastNa: -1, synced: 0 };
 
-    constructor(private readonly max: boolean) {}
+    constructor(
+        private readonly max: boolean,
+        private readonly newest = false,
+    ) {}
 
     commit(h: History): void {
         // drop the entries no longer kept by the history
@@ -344,7 +347,7 @@ export class ExtremeTail {
             }
             while (this.idx.length > this.head) {
                 const w = this.val[this.val.length - 1];
-                if (!(this.max ? w < v : w > v)) break;
+                if (!(this.max ? w < v || (this.newest && w === v) : w > v || (this.newest && w === v))) break;
                 if (this.pushedCount > 0) {
                     this.pushedCount--;
                 } else this.popped.push([this.idx[this.idx.length - 1], w]);

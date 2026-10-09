@@ -58,9 +58,10 @@ const ref = {
         return (sy - slope * sx) / n + slope * (n - 1 - offset);
     },
     cog: (w: number[]) => -w.reduce((a, v, i) => a + v * (i + 1), 0) / w.reduce((a, b) => a + b, 0),
+    // newest first; the newest among equal values (TradingView since Oct 9, 2026)
     highestbars: (w: number[]) => {
         let best = 0;
-        w.forEach((v, i) => v >= w[best] && (best = i));
+        w.forEach((v, i) => v > w[best] && (best = i));
         return -best;
     },
     median: (w: number[]) => {
@@ -284,7 +285,7 @@ describe('rolling window state', () => {
                 while (!on[j]) j--;
                 return vals[j];
             });
-        // TradingView's rci / highest read bar b from slot b % (n + 1), last written by the call on a bar
+        // TradingView's rci reads bar b from slot b % (n + 1), last written by the call on a bar
         // b - m(n + 1) (0 if none; the bars before the first call hold their own value: backfill)
         const firstCall = on.indexOf(true);
         const slot = (b: number, n: number) => {
@@ -292,26 +293,6 @@ describe('rolling window state', () => {
             return b < firstCall ? vals[b] : 0;
         };
         const slots = (i: number, n: number) => Array.from({ length: n }, (_, k) => slot(i - k, n));
-        // highest as TradingView keeps it: the extreme and its bar, replaced by a greater value, else
-        // rescanned (slots) when n bars old
-        const highestRef: number[] = [];
-        let best = NaN;
-        let bestBar = -1;
-        for (let i = 0; i < vals.length; i++) {
-            if (!on[i]) continue;
-            if (bestBar >= 0 && vals[i] > best) {
-                best = vals[i];
-                bestBar = i;
-            } else if (bestBar < 0 || i - bestBar >= 10) {
-                best = -Infinity;
-                for (let k = 0; k < 10 && i - k >= 0; k++)
-                    if (slot(i - k, 10) >= best) {
-                        best = slot(i - k, 10);
-                        bestBar = i - k;
-                    }
-            }
-            highestRef[i] = best;
-        }
         for (let i = 100; i < vals.length; i++) {
             if (!on[i]) continue;
             expect(got.sma[i], `sma ${i}`).toBeCloseTo(ref.sma(calls(i, 10)), 8);
@@ -321,7 +302,7 @@ describe('rolling window state', () => {
             expect(got.wma[i], `wma ${i}`).toBeCloseTo(ref.wma(carry(i, 10)), 8);
             expect(got.change[i], `change ${i}`).toBe(vals[i] - carry(i, 11)[10]);
             expect(got.percentrank[i], `percentrank ${i}`).toBeCloseTo(ref.percentrank(carry(i, 11)), 8);
-            expect(got.highest[i], `highest ${i}`).toBe(highestRef[i]);
+            expect(got.highest[i], `highest ${i}`).toBe(Math.max(...calls(i, 10)));
         }
     });
 });

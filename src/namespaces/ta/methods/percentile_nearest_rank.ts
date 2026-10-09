@@ -27,7 +27,7 @@ export function percentile_nearest_rank(context: any) {
         if (!context.taState) context.taState = {};
         const key = _callId || `pnr_${length}_${percentage}`;
         const win: PercentileArray = (context.taState[key] ??= new PercentileArray());
-        const values = win.step(context.idx, series.get(0), length, series);
+        const values = win.step(context.idx, series.get(0), length, series, context._execTick);
         if (!values || context.idx < length - 1) return NaN;
 
         // Nearest Rank: index = ceil(P/100 * N) - 1

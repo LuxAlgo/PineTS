@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
-import { ExtremeCall } from '../utils/barRing';
+import { nonNaWindow } from '../utils/nonNaWindow';
 
 export function highest(context: any) {
     return (source: any, _length: any, _callId?: string) => {
@@ -16,20 +16,9 @@ export function highest(context: any) {
         const length = Series.from(_length).get(0);
         const series = Series.from(source);
 
-        // TradingView resets the window at na: only the bars since the most recent na
-        // take part, and an na on the current bar yields na
-        // (tests/namespaces/ta/na-window-semantics.test.ts). In a local block, TradingView's own
-        // algorithm (ExtremeCall): with a constant length, bars the block skipped are read from slots
-        // written earlier; with a varying length, they repeat the last call's value.
-        if (!context.taState) context.taState = {};
-        const stateKey = _callId || `highest_${length}`;
-        if (!context.taState[stateKey]) context.taState[stateKey] = new ExtremeCall(true);
-        const win: ExtremeCall = context.taState[stateKey];
-        const bar = win.step(context.idx, series.get(0), length, series);
-
-        if (context.idx < length - 1 || bar < 0) {
-            return NaN;
-        }
-        return context.precision(win.value);
+        // As on TradingView (since 2026-10-09): the last `length` non-na values, the calls' values in a
+        // local block (an na value is skipped, as by ta.sma); `length` may change from call to call.
+        const win = nonNaWindow(context, _callId || `highest_${length}`, series, length, 'extremes');
+        return win ? context.precision(win.max()) : NaN;
     };
 }

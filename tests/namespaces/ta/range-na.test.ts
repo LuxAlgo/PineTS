@@ -148,12 +148,14 @@ describe('ta.range skips na (TradingView parity)', () => {
         for (const name of Object.keys(TV_HEAD)) expectCells(values(name).slice(0, 10).map(toCell), TV_HEAD[name], name);
     });
 
-    it('leaves ta.highest / ta.lowest resetting at na', async () => {
+    it('agrees with ta.highest - ta.lowest, which skip na as well (TradingView since Oct 9, 2026)', async () => {
         const { values } = await run();
         const hl5 = values('hl5');
-        // k=5 of the second period (bar 37): highest and lowest only see the 9 after the na at k=4
-        expect(hl5[POS_PERIOD + 5]).toBe(0);
-        expect(Number.isNaN(hl5[POS_PERIOD + 4])).toBe(true);
+        // TradingView: highest / lowest of the same series give 9 / 1 at k=5 and 7 / 1 at k=4
+        // (tests/namespaces/ta/na-window-semantics.test.ts)
+        expect(hl5[POS_PERIOD + 5]).toBe(8);
+        expect(hl5[POS_PERIOD + 4]).toBe(6);
+        expect(hl5[POS_PERIOD + 5]).toBe(values('r5')[POS_PERIOD + 5]);
     });
 
     it('backfills from the source history when first called late (barstate.islast)', async () => {
