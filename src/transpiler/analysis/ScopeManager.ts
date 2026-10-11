@@ -536,6 +536,18 @@ export class ScopeManager {
         return newName;
     }
 
+    /**
+     * Hide a variable just declared in the current scope so its initializer resolves
+     * to the enclosing binding. Returns a callback that restores the declaration.
+     */
+    hideCurrentScopeVariable(name: string): () => void {
+        const scope = this.scopes[this.scopes.length - 1];
+        const declared = scope?.get(name);
+        if (declared === undefined) return () => {};
+        scope.delete(name);
+        return () => scope.set(name, declared);
+    }
+
     getVariable(name: string): [string, string] {
         // If it's a loop variable, return it as is
         if (this.loopVars.has(name)) {

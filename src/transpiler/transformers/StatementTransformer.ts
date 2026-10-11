@@ -343,6 +343,9 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
         // Transform non-context variables to use the context object
         const newName = scopeManager.addVariable(decl.id.name, varNode.kind);
         const kind = varNode.kind; // 'const', 'let', or 'var'
+        // Pine resolves a declaration's initializer before the new name exists, so
+        // `x = x + 1` in a block reads the outer `x` (TradingView shadowing).
+        const restoreDeclared = scopeManager.hideCurrentScopeVariable(decl.id.name);
 
         // Only treat as an array pattern variable when it actually has the destructured
         // MemberExpression shape (e.g. _tmp_0[0]) from the AnalysisPass rewrite.
@@ -592,6 +595,8 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                 );
             }
         }
+
+        restoreDeclared();
 
         // Create the target variable reference using ASTFactory
         const targetVarRef = createScopedVariableReference(decl.id.name, scopeManager);
