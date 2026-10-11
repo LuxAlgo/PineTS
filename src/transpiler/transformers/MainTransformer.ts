@@ -178,7 +178,8 @@ const COMPARISON_METHODS: Record<string, string> = {
 const RELATIONAL_OPERATORS = new Set(['<', '<=', '>', '>=']);
 
 // Loop-control comparisons whose operands are integer counters (never `na`):
-// the `test`/`update` of for/while/do-while headers, and the generated loop
+// the `test`/`update` of for/while/do-while headers, a range loop's direction,
+// and the generated loop
 // guard (flagged `_skipCompare`). Routing these through the helpers would add
 // a per-iteration call for no benefit, so relational ops here stay native.
 // `==`/`!=` still transform everywhere (unchanged from prior behavior).
@@ -192,6 +193,10 @@ function isLoopControlRelational(node: any, ancestors: any[]): boolean {
         const anc = ancestors[k];
         const child = ancestors[k + 1];
         if (anc.type === 'ForStatement' && (child === anc.test || child === anc.update)) return true;
+        // The direction a range loop fixes at entry: `let i = start, __for_up0 = i <= end`.
+        if (anc.type === 'ForStatement' && child === anc.init) {
+            if (ancestors.slice(k + 1).some((a) => a.type === 'VariableDeclarator' && /^__for_up\d+$/.test(a.id?.name))) return true;
+        }
         if ((anc.type === 'WhileStatement' || anc.type === 'DoWhileStatement') && child === anc.test) return true;
     }
     return false;

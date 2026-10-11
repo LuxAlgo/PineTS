@@ -65,6 +65,8 @@ export class Parser {
     private functionParamNames: Map<string, string[] | null> = new Map();
     // Opening `[` of each tuple literal, for errors reported at the literal.
     private tupleLiteralStart: WeakMap<object, Token> = new WeakMap();
+    // Numbers each range loop's direction variable.
+    private forLoopCount = 0;
     constructor(tokens: Token[]) {
         this.tokens = tokens;
         this.pos = 0;
@@ -1629,11 +1631,16 @@ export class Parser {
 
             // Build for loop with runtime direction detection.
             // Pine Script: `for i = start to end [by step]`
-            // Direction is determined at runtime (start <= end → increment, else decrement).
-            // Generated: for (let i = start; start <= end ? i <= end : i >= end; start <= end ? i++ : i--)
-            const init = new VariableDeclaration([new VariableDeclarator(loopVar, start)], VariableDeclarationKind.LET);
-
-            const directionCheck = new BinaryExpression('<=', start, end);
+            // Direction is fixed when the loop starts (start <= end → increment, else
+            // decrement); `end` is re-read each iteration. Re-reading `start` for the
+            // direction would flip `for i = array.size(a) - 1 to 0` once the body
+            // removes an element.
+            // Generated: for (let i = start, up = i <= end; up ? i <= end : i >= end; up ? i++ : i--)
+            const directionCheck = new Identifier(`__for_up${this.forLoopCount++}`);
+            const init = new VariableDeclaration(
+                [new VariableDeclarator(loopVar, start), new VariableDeclarator(directionCheck, new BinaryExpression('<=', loopVar, end))],
+                VariableDeclarationKind.LET
+            );
             const test = new ConditionalExpression(
                 directionCheck,
                 new BinaryExpression('<=', loopVar, end),
