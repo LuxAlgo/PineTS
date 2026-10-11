@@ -145,7 +145,16 @@ export class Str {
      * (yyyy, MM, dd, HH, mm, ss, EEE, EEEE, MMM, MMMM, a, h, S, Z, etc.).
      * Text inside single quotes is treated as a literal; '' produces a literal '.
      */
-    format_time(time: any, format: string = "yyyy-MM-dd'T'HH:mm:ssZ", timezone?: string) {
+    format_time(time: any, format: any = "yyyy-MM-dd'T'HH:mm:ssZ", timezone?: any) {
+        // Named arguments (`str.format_time(t, timezone = "UTC-5")`) arrive as a trailing options object.
+        const named = [format, timezone].find((arg) => arg && typeof arg === 'object' && !Array.isArray(arg));
+        if (named) {
+            if (named === format) format = "yyyy-MM-dd'T'HH:mm:ssZ";
+            if (named === timezone) timezone = undefined;
+            if (named.format !== undefined) format = named.format;
+            if (named.timezone !== undefined) timezone = named.timezone;
+        }
+        if (isNa(format)) format = "yyyy-MM-dd'T'HH:mm:ssZ";
         // TradingView formats an na time as the epoch (1970-01-01).
         const ts = isNa(time) ? 0 : Number(time);
         const tz = timezone || this.context.pine?.syminfo?.timezone || 'UTC';
