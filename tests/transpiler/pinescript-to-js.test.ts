@@ -167,7 +167,7 @@ plot(sum)
         const jsCode = result.toString();
 
         expect(jsCode).toContain('for (');
-        expect(jsCode).toContain('let i = 0;');
+        expect(jsCode).toContain('let i = 0, __for_up0 = i <= 10');
         expect(jsCode).toContain('i <= 10');
         expect(jsCode).toContain('i++');
     });

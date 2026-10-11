@@ -792,31 +792,19 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
     scopeManager.setSuppressHoisting(true);
     // Handle initialization
     if (node.init && node.init.type === 'VariableDeclaration') {
-        // Keep the original loop variable name
-        const decl = node.init.declarations[0];
-        const originalName = decl.id.name;
-        scopeManager.addLoopVariable(originalName, originalName);
+        // Keep the original loop variable names: the loop variable and, for range
+        // loops, the direction flag fixed at loop entry.
+        const declarations = node.init.declarations.map((decl: any) => {
+            scopeManager.addLoopVariable(decl.id.name, decl.id.name);
+            return { type: 'VariableDeclarator', id: { type: 'Identifier', name: decl.id.name }, init: decl.init };
+        });
+        node.init = { type: 'VariableDeclaration', kind: node.init.kind, declarations };
 
-        // Keep the original variable declaration
-        node.init = {
-            type: 'VariableDeclaration',
-            kind: node.init.kind,
-            declarations: [
-                {
-                    type: 'VariableDeclarator',
-                    id: {
-                        type: 'Identifier',
-                        name: originalName,
-                    },
-                    init: decl.init,
-                },
-            ],
-        };
-
-        // Transform any identifiers in the init expression
+        // Transform any identifiers in the init expressions
         // Must wrap Series identifiers in $.get() so the loop variable receives
         // the concrete value, not a raw Series object (e.g. `for i = bar_index to 0`).
-        if (decl.init) {
+        for (const decl of declarations) {
+            if (!decl.init) continue;
             walk.recursive(decl.init, scopeManager, {
                 Identifier(node: any, state: ScopeManager) {
                     if (!scopeManager.isLoopVariable(node.name) && !node.computed) {
@@ -974,8 +962,7 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
     // Clean up loop variable so it doesn't leak to outer scope
     // (prevents shadowing issues when the same name is reused later)
     if (node.init && node.init.type === 'VariableDeclaration') {
-        const decl = node.init.declarations[0];
-        scopeManager.removeLoopVariable(decl.id.name);
+        for (const decl of node.init.declarations) scopeManager.removeLoopVariable(decl.id.name);
     }
 }
 
