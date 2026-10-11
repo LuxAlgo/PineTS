@@ -1412,9 +1412,18 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             // Nothing to exit. In the pre-entry phase the order may be
             // WAITING on an entry that fills at this bar's open (TV: exit
             // orders placed before their entry wait for it) — leave it
-            // pending. After entries have filled (intrabar phase), an
-            // exit with no matching trades is dead — clear it.
-            if (phase === 'intrabar') order.status = 'cancelled';
+            // pending. After entries have filled (intrabar phase), check
+            // if there's still a pending entry order for this exit's
+            // from_entry — if so, keep the exit waiting; otherwise it's
+            // orphaned and should be cancelled.
+            if (phase === 'intrabar') {
+                const hasPendingEntry = order.from_entry
+                    ? strategy.pending_orders.some(
+                          (o) => o.status === 'pending' && (o.category ?? 'entry') === 'entry' && o.id === order.from_entry
+                      )
+                    : false;
+                if (!hasPendingEntry) order.status = 'cancelled';
+            }
             continue;
         }
 
