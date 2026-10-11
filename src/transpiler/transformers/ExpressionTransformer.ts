@@ -102,6 +102,8 @@ export function createScopedVariableAccess(name: string, scopeManager: ScopeMana
     return ASTFactory.createGetCall(varRef, 0);
 }
 
+const COMPLEX_INDEX_TYPES = ['BinaryExpression', 'UnaryExpression', 'LogicalExpression', 'ConditionalExpression'];
+
 export function transformArrayIndex(node: any, scopeManager: ScopeManager): void {
     if (node.computed && node.property.type === 'Identifier') {
         // If index is a loop variable, we still need to transform the object to use $.get()
@@ -169,7 +171,10 @@ export function transformArrayIndex(node: any, scopeManager: ScopeManager): void
             const plainIdentifier = ASTFactory.createIdentifier(node.object.name);
             // Mark this identifier to skip further transformations
             plainIdentifier._skipTransformation = true;
-            const getCall = ASTFactory.createGetCall(plainIdentifier, node.property);
+            // No walker revisits the offset once it is inside $.get(), so lower an
+            // expression offset here: `src[n + 1]` reads `n` too.
+            const offset = COMPLEX_INDEX_TYPES.includes(node.property.type) ? transformHistoryOffset(node.property, scopeManager) : node.property;
+            const getCall = ASTFactory.createGetCall(plainIdentifier, offset);
             Object.assign(node, getCall);
             node._indexTransformed = true;
             return;
