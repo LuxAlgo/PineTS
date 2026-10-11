@@ -1683,7 +1683,79 @@ export function processExitOrders(context: any, phase: 'open' | 'intrabar' = 'in
             }
             if (kind === 'profit') {
                 const openPastTp = isLong ? openPrice >= (tp as number) + limitSlack : openPrice <= (tp as number) - limitSlack;
-                tpEvents.push({ qty: tQty, price: openPastTp ? openPrice : (tp as number), kind: 'profit', tradeId: t.id });
+                
+                // Same-bar entry bug fixes:
+                // When an entry fills INTRABAR (same bar), the open happened BEFORE the entry existed,
+                // so we must not fill the exit at the open price (Bug A). Additionally, we must check
+                // if the TP is actually reachable AFTER the entry fills along the intrabar path (Bug B).
+                const sameBarEntry = t.entry_bar_index === context.idx;
+                
+                let shouldFill = true;
+                let fillPrice = openPastTp ? openPrice : (tp as number);
+                
+                if (sameBarEntry && openPastTp) {
+                    // Bug A fix: Never use open price for same-bar entries (open happened before entry)
+                    fillPrice = tp as number;
+                }
+                
+                if (sameBarEntry && phase === 'intrabar') {
+                    // Bug B fix: Check if TP is reachable AFTER entry fills along the intrabar path.
+                    // TradingView's assumed intrabar path (Bar Magnifier off):
+                    //   favorable-first (open closer to high for longs): O -> H -> L -> C
+                    //   adverse-first (open closer to low for longs):    O -> L -> H -> C
+                    //
+                    // For a long limit entry, it fills when price descends to/through the entry price.
+                    // For a short limit entry, it fills when price ascends to/through the entry price.
+                    
+                    const entryPrice = t.entry_price;
+                    const tpPrice = tp as number;
+                    
+                    if (favorableFirst) {
+                        // Favorable-first path: O -> H -> L -> C
+                        // For a LONG limit entry, it fills during the H -> L descent (when price descends through entry).
+                        // Post-entry path: entryPrice -> L -> C (continues down to L, then up to C).
+                        // TP is reachable if it's in the range [L, C].
+                        //
+                        // For a SHORT limit entry, it fills during the O -> H ascent (when price ascends through entry).
+                        // Post-entry path: entryPrice -> H -> L -> C (continues up to H, then down through L to C).
+                        // TP is reachable if it's in the range [min(H, C), max(H, C)] = [L, H] ∪ [H, C] = [L, C] when H > C, or [C, H] when C > H.
+                        if (isLong) {
+                            // Long: TP must be in [L, C] range
+                            shouldFill = tpPrice >= lowPrice && tpPrice <= closePrice;
+                        } else {
+                            // Short: TP must be reachable in H -> L -> C path after entry during O -> H
+                            // After entry at entryPrice during O -> H, path is entryPrice -> H -> L -> C
+                            // TP must be in this post-entry path: between entryPrice and C (going through H and L)
+                            // For a short TP < entry, so: TP >= lowPrice (can reach it during H -> L or L -> C)
+                            shouldFill = tpPrice >= lowPrice;
+                        }
+                    } else {
+                        // Adverse-first path: O -> L -> H -> C
+                        // For a LONG limit entry, it fills during the O -> L descent.
+                        // Post-entry path: entryPrice -> L -> H -> C (continues down to L, then up through H to C).
+                        // TP >= entry is reachable if it's between L and C (passing through H).
+                        //
+                        // For a SHORT limit entry, it fills during the L -> H ascent.
+                        // Post-entry path: entryPrice -> H -> C (continues up to H, then to C).
+                        // TP <= entry is reachable if it's between H and C (or C and H if C > H).
+                        if (isLong) {
+                            // Long: TP must be reachable in L -> H -> C path after entry during O -> L
+                            // TP >= entry, and entry is somewhere between O and L
+                            // After entry, path goes: entry -> L (down) -> H (up) -> C
+                            // TP is reachable if: L <= TP <= max(H, C)
+                            shouldFill = tpPrice >= lowPrice && tpPrice <= Math.max(highPrice, closePrice);
+                        } else {
+                            // Short: TP must be in [min(H, C), H] range after entry during L -> H
+                            // After entry at entryPrice during L -> H, path is entryPrice -> H -> C
+                            // TP < entry, reachable if between H and C
+                            shouldFill = (tpPrice <= highPrice && tpPrice >= closePrice) || (tpPrice >= highPrice && tpPrice <= closePrice);
+                        }
+                    }
+                }
+                
+                if (shouldFill) {
+                    tpEvents.push({ qty: tQty, price: fillPrice, kind: 'profit', tradeId: t.id });
+                }
             }
         }
 
