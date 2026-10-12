@@ -344,15 +344,13 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
         const newName = scopeManager.addVariable(decl.id.name, varNode.kind);
         const kind = varNode.kind; // 'const', 'let', or 'var'
 
-        // Only treat as an array pattern variable when it actually has the destructured
-        // MemberExpression shape (e.g. _tmp_0[0]) from the AnalysisPass rewrite.
-        // The arrayPatternElements set is global (not scoped), so a same-named variable
-        // inside a function body may be falsely flagged — guard with a shape check.
-        const isArrayPatternVar =
-            scopeManager.isArrayPatternElement(decl.id.name) &&
-            decl.init &&
-            decl.init.type === 'MemberExpression' &&
-            decl.init.computed;
+        // Only treat as an array pattern variable when it is one of the declarators the
+        // AnalysisPass's ArrayPattern split actually produced (`_arrayPatternSplit`, set there).
+        // This used to test the element's NAME against a program-wide set plus a shape heuristic,
+        // and a user's own `p = close[1]` inside a switch arm — same name as a tuple element
+        // elsewhere, init a computed member — was lowered as a tuple read of the wrong store
+        // (`$.get($.let.close, 0)[1]`, measured 1 Oct; the audit's #26).
+        const isArrayPatternVar = decl._arrayPatternSplit === true;
 
         // Transform identifiers in the init expression
         if (decl.init && !isArrowFunction && !isArrayPatternVar) {
@@ -419,6 +417,54 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
 
                             // Continue walking the arguments
                             node.arguments.forEach((arg) => c(arg, { parent: node }));
+                        },
+                        // Same rule as the implicit-return walker: a `for` header declaration is not a
+                        // statement-level declaration, so it is flagged and left alone while the walk
+                        // continues (lowering it garbles the header).
+                        ForStatement(node: any, state: any, c: any) {
+                            if (node.init && node.init.type === 'VariableDeclaration') node.init._skipTransformation = true;
+                            if (node.init) c(node.init, state);
+                            if (node.test) c(node.test, state);
+                            if (node.update) c(node.update, state);
+                            if (node.body) c(node.body, state);
+                        },
+                        ForOfStatement(node: any, state: any, c: any) {
+                            if (node.left && node.left.type === 'VariableDeclaration') node.left._skipTransformation = true;
+                            if (node.left) c(node.left, state);
+                            if (node.right) c(node.right, state);
+                            if (node.body) c(node.body, state);
+                        },
+                        ForInStatement(node: any, state: any, c: any) {
+                            if (node.left && node.left.type === 'VariableDeclaration') node.left._skipTransformation = true;
+                            if (node.left) c(node.left, state);
+                            if (node.right) c(node.right, state);
+                            if (node.body) c(node.body, state);
+                        },
+                        // The same rule as the implicit-return walker: a declaration produced by
+                        // the AnalysisPass's ArrayPattern split (the `_tupleArity` temp, or a marked
+                        // element) goes through the standard lowering, and so does a declaration that
+                        // REASSIGNS a name the context already knows — an arm's `p = 10` must land in
+                        // the store the outer readers use. A fresh name reached by this walk (a loop
+                        // accumulator of the IIFE) is the IIFE's own plain JS local and must stay one.
+                        VariableDeclaration(node: any, state: any, c: any) {
+                            const isTupleSplit = node.declarations.some((d: any) => {
+                                if (d._tupleArity !== undefined || d._arrayPatternSplit === true) return true;
+                                if (!d.id || d.id.type !== 'Identifier') return false;
+                                const [scopedName] = scopeManager.getVariable(d.id.name);
+                                return scopedName !== d.id.name;
+                            });
+                            if (isTupleSplit) {
+                                transformVariableDeclaration(node, scopeManager);
+                                return;
+                            }
+                            // Not a tuple split: descend by hand, the way the base visitor would (a
+                            // custom visitor replaces the default descent). Only the INIT is walked —
+                            // the base visitor visits a declarator's id as a `Pattern`, so it is never
+                            // rewritten, and walking it as an Identifier emitted an invalid
+                            // `let $.get(e, 0) = …`.
+                            node.declarations.forEach((d: any) => {
+                                if (d.init) c(d.init, state);
+                            });
                         },
                         BinaryExpression(node: any, state: any, c: any) {
                             // Set parent references for operands
@@ -1497,6 +1543,60 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                             newBody.push(stmt);
                         });
                         node.body = newBody;
+                    },
+                    // A `for` header declaration (`for (let i = 0; …)`) is not a statement-level
+                    // declaration: lowering it garbles the header (`SyntaxError: Unexpected token ';'`,
+                    // measured by tests/transpiler/parser-fixes.test.ts). Loop variables stay plain,
+                    // exactly as MainTransformer's own loop handling keeps them — so the header is
+                    // flagged and the walk continues over test/update/body.
+                    ForStatement(node: any, state: ScopeManager, c: any) {
+                        if (node.init && node.init.type === 'VariableDeclaration') node.init._skipTransformation = true;
+                        if (node.init) c(node.init, state);
+                        if (node.test) c(node.test, state);
+                        if (node.update) c(node.update, state);
+                        if (node.body) c(node.body, state);
+                    },
+                    ForOfStatement(node: any, state: ScopeManager, c: any) {
+                        if (node.left && node.left.type === 'VariableDeclaration') node.left._skipTransformation = true;
+                        if (node.left) c(node.left, state);
+                        if (node.right) c(node.right, state);
+                        if (node.body) c(node.body, state);
+                    },
+                    ForInStatement(node: any, state: ScopeManager, c: any) {
+                        if (node.left && node.left.type === 'VariableDeclaration') node.left._skipTransformation = true;
+                        if (node.left) c(node.left, state);
+                        if (node.right) c(node.right, state);
+                        if (node.body) c(node.body, state);
+                    },
+                    // A declaration reached by THIS walk needs the standard lowering ONLY when it is
+                    // part of the AnalysisPass's ArrayPattern split — the temp (marked `_tupleArity`)
+                    // and the pattern elements (init is `temp_N[i]`). Those are otherwise left as plain
+                    // JS locals inside a block while their readers resolve through the context store:
+                    // the arm dies with `ReferenceError: x is not defined`
+                    // (volume-bubbles-liquidity-heatmap, 1 Oct), and the temp is written to a JS local
+                    // that nothing reads. Any OTHER declaration here is a deliberate plain JS local of
+                    // the IIFE (a loop accumulator, for instance) and lowering it breaks it — measured
+                    // as NaN tuples in tests/transpiler/tuple-parity.test.ts.
+                    VariableDeclaration(node: any, state: ScopeManager, c: any) {
+                        const isTupleSplit = node.declarations.some((d: any) => {
+                            if (d._tupleArity !== undefined || d._arrayPatternSplit === true) return true;
+                            if (!d.id || d.id.type !== 'Identifier') return false;
+                            const [scopedName] = state.getVariable(d.id.name);
+                            return scopedName !== d.id.name;
+                        });
+                        if (isTupleSplit) {
+                            transformVariableDeclaration(node, state);
+                            return;
+                        }
+                        // Not a tuple split: descend by hand the way the base visitor would — a custom
+                        // visitor REPLACES the default descent in acorn-walk. Only the INIT is walked:
+                        // the base visitor visits a declarator's id as a `Pattern` (so it is never
+                        // rewritten), and walking it as an Identifier emitted `let $.get(e, 0) = …`
+                        // (`SyntaxError: Unexpected token '.'`, measured by
+                        // tests/transpiler/switch-and-declaration-parsing.test.ts).
+                        node.declarations.forEach((d: any) => {
+                            if (d.init) c(d.init, state);
+                        });
                     },
                 });
             }
