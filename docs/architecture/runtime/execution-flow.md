@@ -121,6 +121,37 @@ for await (const pageContext of generator) {
 -   Automatically recalculates last candle on updates (for live data)
 -   Each page yields only new results, not cumulative
 
+### Projecting pages
+
+Consumers that need cumulative runtime state can supply a `pageProjection` as
+the fourth argument. This skips construction of the page `Context` and its
+namespace helpers; the existing three-argument API still yields `Context` pages.
+
+```typescript
+const generator = pineTS.run(code, undefined, 1, {
+    pageProjection: (context, previousResultLength) => ({
+        barIndex: context.idx,
+        newValues: context.result.close.slice(previousResultLength),
+    }),
+});
+for await (const page of generator) {
+    if (page === null) continue; // Idle live poll
+    console.log(page.barIndex, page.newValues);
+}
+```
+
+The projection receives the same mutable full execution context at each
+completed page boundary, after the page's bars have executed. Its second argument
+is the previous result length, useful for slicing array or object-of-array
+results. Copy values if you need a retained snapshot. Returning `{ fullContext:
+context }` gives access to cumulative state, which later pages continue to update.
+Treat that state as read-only so the consumer does not change subsequent
+execution. The projection does not alter page size, state continuity, strategy
+finalization, live rollback or the `null` signal for idle live polls. Projection
+errors reject the iterator's `next()` call. This option requires a positive
+integer page size and applies to `run()` pagination; `stream()` keeps its existing
+page event API.
+
 **Live Streaming Behavior:**
 
 When live streaming is enabled (`eDate` undefined + provider source):
