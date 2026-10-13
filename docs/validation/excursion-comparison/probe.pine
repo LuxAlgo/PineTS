@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Original public validation probe for PineTS #393; no private strategy logic.
+//@version=6
+strategy("PineTS per-trade excursion comparison", overlay=true, initial_capital=1000000, default_qty_type=strategy.fixed, default_qty_value=1, pyramiding=1, commission_type=strategy.commission.cash_per_contract, commission_value=0, slippage=0, margin_long=0, margin_short=0, process_orders_on_close=false, calc_on_order_fills=false, calc_on_every_tick=false, use_bar_magnifier=false)
+start = timestamp("UTC", 2026, 9, 1, 0, 0)
+finish = timestamp("UTC", 2026, 10, 1, 0, 0)
+active = time >= start and time < finish
+if active and strategy.position_size == 0
+    strategy.entry("L", strategy.long)
+if strategy.position_size > 0
+    strategy.exit("Bracket", "L", stop=strategy.position_avg_price * 0.99, limit=strategy.position_avg_price * 1.01)
+if time >= finish
+    strategy.close_all()
+plot(open, "OHLC open")
+plot(high, "OHLC high")
+plot(low, "OHLC low")
+plot(close, "OHLC close")
+plot(syminfo.pointvalue, "pointvalue")
+plot(syminfo.mincontract, "mincontract")
+plot(syminfo.mintick, "mintick")
+plot(strategy.position_size, "position size")
+plot(strategy.max_drawdown, "aggregate drawdown")
+plot(strategy.max_runup, "aggregate runup")
