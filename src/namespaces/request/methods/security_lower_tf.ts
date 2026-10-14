@@ -332,6 +332,15 @@ export function security_lower_tf(context: any) {
         const ctxSeconds = timeframeSeconds(ctxTimeframe);
         const reqSeconds = timeframeSeconds(reqTimeframe);
 
+        // An array data source holds the chart's own series only: nothing can
+        // load a lower timeframe for a secondary context.
+        if (Array.isArray(context.source) && formatTimeframe(ctxTimeframe) !== formatTimeframe(reqTimeframe)) {
+            throw new Error(
+                `request.security_lower_tf needs a market data provider to load ${_symbol || context.tickerId || 'the chart symbol'} "${_timeframe}": ` +
+                `an array data source only holds the chart's own symbol and timeframe`,
+            );
+        }
+
         if (reqSeconds > ctxSeconds) {
             if (_ignore_invalid_timeframe) return NaN;
             throw new Error(`Timeframe ${_timeframe} is not lower than or equal to chart timeframe ${context.timeframe}`);

@@ -200,6 +200,16 @@ export function security(context: any) {
 
         // Same length is not enough: "7D" bars follow the yearly day grid, "W" bars start on Mondays.
         const isSameTimeframe = formatTimeframe(ctxTimeframe) === formatTimeframe(reqTimeframe);
+
+        // An array data source holds the chart's own series only: nothing can
+        // load another symbol or timeframe for a secondary context.
+        if (Array.isArray(context.source) && !(isSameTimeframe && isSameSymbol)) {
+            throw new Error(
+                `request.security needs a market data provider to load ${_symbol || context.tickerId || 'the chart symbol'} "${_timeframe}": ` +
+                `an array data source only holds the chart's own symbol and timeframe`,
+            );
+        }
+
         if (isSameTimeframe && isSameSymbol) {
             // Resolve any helper objects (TimeComponentHelper, NAHelper, Series, etc.)
             // in the expression that haven't been extracted to their primitive values yet.
