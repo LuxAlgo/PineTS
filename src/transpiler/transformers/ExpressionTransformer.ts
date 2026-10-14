@@ -9,6 +9,7 @@ import {
     NAMESPACES_LIKE,
     ASYNC_METHODS,
     CALLSITE_ID_NAMESPACES,
+    CALLSITE_ID_FUNCTIONS,
     BUILTIN_METHOD_NAMES,
     ORDERFLOW_METHODS,
     FOOTPRINT_ROW_METHODS,
@@ -1936,6 +1937,23 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
         // recognised as a `Vis` at runtime (`Context.callMethod`).
         if (node.callee.name === 'Type' && node._udtName && scopeManager.isMethodReceiverTypeName(node._udtName)) {
             node.arguments.push({ type: 'Literal', value: node._udtName, raw: JSON.stringify(node._udtName) });
+        }
+
+        // Bare plot functions (bgcolor, barcolor, plotchar, …) get the same
+        // trailing `{ __callsiteId }` as plot.* calls, so untitled calls are
+        // keyed by their call site (`bgcolor#0`) instead of all sharing "plot".
+        if (CALLSITE_ID_FUNCTIONS.includes(node.callee.name) && scopeManager.isContextBound(node.callee.name)) {
+            node.arguments.push({
+                type: 'ObjectExpression',
+                properties: [{
+                    type: 'Property',
+                    key: { type: 'Identifier', name: '__callsiteId' },
+                    value: scopeManager.getNextBareCallsiteId(node.callee.name),
+                    kind: 'init',
+                    computed: false,
+                    shorthand: false,
+                }],
+            });
         }
 
         // Inject unique call ID for the function call only if it is a user-defined function

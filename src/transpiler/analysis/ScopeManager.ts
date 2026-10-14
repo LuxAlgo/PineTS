@@ -80,6 +80,7 @@ export class ScopeManager {
     private taCallIdCounter: number = 0;
     private userCallIdCounter: number = 0;
     private plotCallIdCounter: number = 0;
+    private bareCallIdCounters: Map<string, number> = new Map();
     private alertCallIdCounter: number = 0;
     private loopGuardCounter: number = 0;
     private hoistingStack: any[][] = [];
@@ -223,6 +224,16 @@ export class ScopeManager {
         return {
             type: 'Literal',
             value: `#${this.plotCallIdCounter++}`,
+        };
+    }
+    // Bare plot functions (bgcolor, barcolor, …) get keys in their own space,
+    // `bgcolor#0`, so they never shift the `#N` keys of untitled plot() calls.
+    public getNextBareCallsiteId(fnName: string): any {
+        const n = this.bareCallIdCounters.get(fnName) ?? 0;
+        this.bareCallIdCounters.set(fnName, n + 1);
+        return {
+            type: 'Literal',
+            value: `${fnName}#${n}`,
         };
     }
     public getNextAlertCallId(): any {
