@@ -52,6 +52,11 @@ export type PineTypeMap<T> = {
         : never;
 };
 
+/** True for the trailing named-arguments object the transpiler emits (`f(a, title="x")` → `f(a, {title: "x"})`). */
+export function isNamedArgsBag(arg: any): boolean {
+    return TYPE_CHECK.remaining_options(arg);
+}
+
 /**
  * Extract a transpiler-injected callsite ID from the end of an arguments array.
  * The transpiler appends { __callsiteId: "_pN" } as the last argument for
