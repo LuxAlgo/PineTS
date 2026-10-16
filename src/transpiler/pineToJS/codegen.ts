@@ -1372,13 +1372,17 @@ export class CodeGenerator {
         // Generate init
         if (node.init) {
             if (node.init.type === 'VariableDeclaration') {
-                // Generate variable declaration inline
-                const decl = node.init.declarations[0];
-                this.write(`${node.init.kind} ${decl.id.name}`);
-                if (decl.init) {
-                    this.write(' = ');
-                    this.generateExpression(decl.init);
-                }
+                // Generate variable declaration inline: the loop variable, then the
+                // direction flag range loops carry.
+                this.write(`${node.init.kind} `);
+                node.init.declarations.forEach((decl, index) => {
+                    if (index) this.write(', ');
+                    this.write(decl.id.name);
+                    if (decl.init) {
+                        this.write(' = ');
+                        this.generateExpression(decl.init);
+                    }
+                });
             } else {
                 this.generateExpression(node.init);
             }
