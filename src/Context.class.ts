@@ -39,6 +39,7 @@ import { BUILTIN_METHOD_NAMES } from './transpiler/settings';
 import { PineRuntimeError } from './errors/PineRuntimeError';
 import type { IndicatorOptions } from './types/PineTypes';
 import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
+import { DRAWING_PARAMS, withNamedArgs } from './namespaces/drawingParams';
 
 // Stand-in for an na drawing in getter / setter calls: getters return na (`get_text` and
 // `get_tooltip` the na string), setters and anything else do nothing.
@@ -639,8 +640,13 @@ export class Context {
         if (root && !this.pine[root]) this.pine[root] = {};
 
         const target = root ? this.pine[root] : this.pine;
+        const named = DRAWING_PARAMS[root];
         for (const entry of entries) {
             if (typeof instance[entry] === 'function') {
+                // Drawing helpers take named arguments too. Wrapped on the helper itself, so the
+                // objects' method syntax (`l.set_extend(extend = …)` → `helper.set_extend(l, {…})`)
+                // gets them as well.
+                if (named && named[entry]) instance[entry] = withNamedArgs(instance[entry].bind(instance), named[entry]);
                 target[entry] = instance[entry].bind(instance);
             } else {
                 target[entry] = instance[entry];
