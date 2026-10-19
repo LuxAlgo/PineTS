@@ -5,6 +5,7 @@ import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { PineArray } from './namespaces/array/array.index';
 import { PineMap } from './namespaces/map/map.index';
 import { PineMatrix } from './namespaces/matrix/matrix.index';
+import { PineMatrixObject } from './namespaces/matrix/PineMatrixObject';
 import { Barstate } from './namespaces/Barstate';
 import { Session } from './namespaces/Session';
 import { Core, NAHelper, AlertHelper } from './namespaces/Core';
@@ -904,7 +905,13 @@ export class Context {
         // PineMapObject wraps a JS Map as `.map` — iterating yields [key, value]
         // pairs (Pine's `for v in map` semantics).
         if (source.map instanceof Map) return source.map;
+        if (source instanceof PineMatrixObject) return this._matrixRows(source);
         return source;
+    }
+
+    /** A matrix iterates its rows, each a copy as returned by `matrix.row()`. */
+    private _matrixRows(m: PineMatrixObject): PineArrayObject[] {
+        return m.matrix.map((_, i) => m.row(i));
     }
 
     /**
@@ -918,6 +925,7 @@ export class Context {
         if (source == null) return [].entries();
         if (Array.isArray(source.array)) return source.array.entries();
         if (source.map instanceof Map) return source.map.entries();
+        if (source instanceof PineMatrixObject) return this._matrixRows(source).entries();
         if (Array.isArray(source)) return source.entries();
         // Map / Set / other iterables that already yield tuples
         if (typeof source.entries === 'function') return source.entries();

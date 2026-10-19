@@ -38,6 +38,8 @@ import {
 } from './ast';
 import { NAMESPACE_COLLISION_NAMES } from '../settings';
 
+const TYPE_QUALIFIERS = ['const', 'simple', 'series'];
+
 export class Parser {
     private tokens: Token[];
     private pos: number;
@@ -807,7 +809,7 @@ export class Parser {
         // `var const int x = 1` — a type qualifier may sit between the keyword and the type.
         if (
             this.peek().type === TokenType.IDENTIFIER &&
-            ['const', 'simple', 'series'].includes(this.peek().value) &&
+            TYPE_QUALIFIERS.includes(this.peek().value) &&
             this.peek(1).type === TokenType.IDENTIFIER
         ) {
             this.advance();
@@ -935,6 +937,10 @@ export class Parser {
 
         // First token must be IDENTIFIER (already checked by caller)
         if (this.peek(offset).type !== TokenType.IDENTIFIER) return false;
+        // A qualifier may precede any type form: const array<bool> x =
+        if (TYPE_QUALIFIERS.includes(this.peek(offset).value) && this.peek(offset + 1).type === TokenType.IDENTIFIER) {
+            offset++;
+        }
         offset++;
 
         // Skip dotted type name: chart.point, line.style, etc.
@@ -982,6 +988,10 @@ export class Parser {
     // Parse typed variable declaration (int x = ... or series float x = ...)
     // Also handles: type[] name = ..., type<generic> name = ..., ns.type[] name = ...
     parseTypedVarDeclaration() {
+        let qualifier = '';
+        if (TYPE_QUALIFIERS.includes(this.peek().value) && this.peek(1).type === TokenType.IDENTIFIER) {
+            qualifier = this.advance().value + ' ';
+        }
         let varType = this.advance().value;
 
         // Handle dotted type names: chart.point, line.style, etc.
@@ -1030,6 +1040,7 @@ export class Parser {
                 varType += ' ' + this.advance().value;
             }
         }
+        varType = qualifier + varType;
 
         const name = this.variableName(this.expectName().value);
 
