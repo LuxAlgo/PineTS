@@ -103,6 +103,27 @@ describe('var / varip with a type qualifier', () => {
     });
 });
 
+describe('const with a generic type (#376)', () => {
+    it('const array, matrix and map declarations', async () => {
+        expect(
+            await firstValues(
+                [
+                    'const array<bool> flags = array.from(true, false)',
+                    'const array<float> vals = array.from(1.5, 2.5, 3.0)',
+                    'const matrix<float> mx = matrix.new<float>(2, 2, 1.0)',
+                    'const map<string, float> mp = map.new<string, float>()',
+                    'nflags = flags.size()',
+                    'vsum = vals.sum()',
+                    'first = flags.get(0) ? 1 : 0',
+                    'rows = mx.rows()',
+                    'mpsize = mp.size()',
+                ],
+                ['nflags', 'vsum', 'first', 'rows', 'mpsize']
+            )
+        ).toEqual({ nflags: [2, 2, 2, 2, 2], vsum: [7, 7, 7, 7, 7], first: [1, 1, 1, 1, 1], rows: [2, 2, 2, 2, 2], mpsize: [0, 0, 0, 0, 0] });
+    });
+});
+
 describe('a variable and a user function with the same name', () => {
     it('variable declared before the function', async () => {
         expect(await firstValues(['res = bar_index * 3', 'res() => 100', 'v = res + res()'], ['res', 'v'])).toEqual({

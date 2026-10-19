@@ -136,4 +136,52 @@ plot(idxsum, "idxsum")
         const last = (a: any[]) => a[a.length - 1].value;
         expect(last(plots['idxsum'].data)).toBe(0 + 1);
     });
+
+    // A matrix header iterates its rows as arrays (#378). Expected values from TradingView.
+    it('iterates the rows of a matrix, in both forms and inside a function', async () => {
+        const code = `
+//@version=6
+indicator("for-in matrix")
+m = matrix.new<float>(2, 3, 1.0)
+m.set(1, 2, 5.0)
+float total = 0.0
+for row in m
+    total += row.sum()
+float idxw = 0.0
+for [i, row] in m
+    idxw += (i + 1) * row.sum()
+f(matrix<float> mm) =>
+    float s = 0.0
+    for r in mm
+        s += r.max()
+    s
+int cnt = 0
+for r in matrix.new<int>(0, 0)
+    cnt += 1
+plot(total, "total")
+plot(idxw, "idxw")
+plot(f(m), "fn")
+plot(cnt, "empty")
+        `;
+        const { plots } = await mkPts().run(code);
+        const last = (a: any[]) => a[a.length - 1].value;
+        expect(last(plots['total'].data)).toBe(10);
+        expect(last(plots['idxw'].data)).toBe(17);
+        expect(last(plots['fn'].data)).toBe(6);
+        expect(last(plots['empty'].data)).toBe(0);
+    });
+
+    it('a row is a copy: changing it leaves the matrix unchanged', async () => {
+        const code = `
+//@version=6
+indicator("for-in matrix row copy")
+m = matrix.new<float>(2, 2, 1.0)
+for row in m
+    row.set(0, 100.0)
+plot(m.get(0, 0) + m.get(1, 0), "sum")
+        `;
+        const { plots } = await mkPts().run(code);
+        const last = (a: any[]) => a[a.length - 1].value;
+        expect(last(plots['sum'].data)).toBe(2);
+    });
 });
