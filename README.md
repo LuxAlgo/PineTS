@@ -112,6 +112,7 @@ console.log('SMA values:', plots['SMA 20'].data);
 - **Time series semantics**: lookbacks, `var` / `let` persistence, bar state
 - **Live streaming**: recalculate on new bars with an event based API
 - **Multiple timeframes**: `request.security()` for MTF indicators
+- **Libraries**: `import` / `export`, with library sources from GitHub, local files, any URL, or memory
 - **High precision**: matches TradingView®'s calculation precision
 - **Your data**: Binance, FMP, Alpaca, or any OHLCV array
 
@@ -328,6 +329,7 @@ Full guides live at **[docs.luxalgo.com/developers/pinets](https://docs.luxalgo.
 - [Getting Started](https://docs.luxalgo.com/developers/pinets/getting-started)
 - [Initialization and Usage](https://docs.luxalgo.com/developers/pinets/initialization-and-usage)
 - [Data Providers](https://docs.luxalgo.com/developers/pinets/data-providers)
+- [Libraries (import / export)](https://docs.luxalgo.com/developers/pinets/libraries)
 - [Pagination and Live Streaming](https://docs.luxalgo.com/developers/pinets/pagination)
 - [Architecture](https://docs.luxalgo.com/developers/pinets/architecture)
 - [API Coverage](https://docs.luxalgo.com/developers/pinets/api-coverage)
@@ -417,6 +419,7 @@ npx pinets-cli run rsi.pine --symbol BTCUSDT --timeframe 60 --quiet
 | ✅      | Strategy namespace                           |
 | ✅      | Market data Providers                        |
 | ✅      | Additional data providers                    |
+| ✅      | Libraries (`import` / `export`)              |
 | 🎯     | Pine Script® v6 full compatibility           |
 
 

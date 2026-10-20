@@ -62,14 +62,14 @@ pine.setImportResolver(github);
 
 Before transpiling, PineTS asks the resolver for every library the script imports, and for the libraries those import in turn. `request.security()` contexts use the resolver of the script that created them. A script that imports a library fails to run when no resolver is set, or when the resolver does not know one of the script's own imports.
 
-| Resolver                     | Registry               | Source of the libraries                       |
-| ---------------------------- | ---------------------- | --------------------------------------------- |
-| `GitHubImportResolver`       | `ImportResolver.GitHub` | A GitHub repository, folder or file           |
-| `FileImportResolver`         | `ImportResolver.File`   | Local files (Node.js only)                    |
-| `UrlImportResolver`          | `ImportResolver.Url`    | Any URL                                       |
-| `MapImportResolver`          | `ImportResolver.Map`    | Sources held in memory                        |
-| `ChainImportResolver`        | -                      | Several resolvers, asked in turn              |
-| `FunctionImportResolver`     | -                      | A function `(path, info) => source`           |
+| Resolver                 | Registry                | Source of the libraries             |
+| ------------------------ | ----------------------- | ----------------------------------- |
+| `GitHubImportResolver`   | `ImportResolver.GitHub` | A GitHub repository, folder or file |
+| `FileImportResolver`     | `ImportResolver.File`   | Local files (Node.js only)          |
+| `UrlImportResolver`      | `ImportResolver.Url`    | Any URL                             |
+| `MapImportResolver`      | `ImportResolver.Map`    | Sources held in memory              |
+| `ChainImportResolver`    | -                       | Several resolvers, asked in turn    |
+| `FunctionImportResolver` | -                       | A function `(path, info) => source` |
 
 ---
 
@@ -88,16 +88,16 @@ const github = new GitHubImportResolver({ url: 'https://github.com/acme/private-
 const signals = new GitHubImportResolver({ url: 'https://github.com/acme/pine-libraries/blob/main/libraries/Signals' });
 ```
 
-| Option       | Type       | Required            | Description                                                                                  |
-| ------------ | ---------- | ------------------- | -------------------------------------------------------------------------------------------- |
-| `url`        | `string`   | Yes (or `owner` + `repo`) | Repository, folder (`/tree/<ref>/<folder>`) or file (`/blob/<ref>/<file>`) URL       |
-| `owner`      | `string`   | No                  | Repository owner, instead of `url`                                                           |
-| `repo`       | `string`   | No                  | Repository name, instead of `url`                                                            |
-| `ref`        | `string`   | No                  | Branch, tag or commit; the default branch otherwise                                          |
-| `path`       | `string`   | No                  | Folder, or template with `{user}`, `{name}`, `{version}`, `{path}` placeholders              |
-| `token`      | `string`   | No                  | Access token, for private repositories                                                       |
-| `extensions` | `string[]` | No                  | Suffixes tried after the path. Default `['', '.pine']`                                        |
-| `fetch`      | `function` | No                  | `fetch` implementation; the global one by default                                            |
+| Option       | Type       | Required                  | Description                                                                     |
+| ------------ | ---------- | ------------------------- | ------------------------------------------------------------------------------- |
+| `url`        | `string`   | Yes (or `owner` + `repo`) | Repository, folder (`/tree/<ref>/<folder>`) or file (`/blob/<ref>/<file>`) URL  |
+| `owner`      | `string`   | No                        | Repository owner, instead of `url`                                              |
+| `repo`       | `string`   | No                        | Repository name, instead of `url`                                               |
+| `ref`        | `string`   | No                        | Branch, tag or commit; the default branch otherwise                             |
+| `path`       | `string`   | No                        | Folder, or template with `{user}`, `{name}`, `{version}`, `{path}` placeholders |
+| `token`      | `string`   | No                        | Access token, for private repositories                                          |
+| `extensions` | `string[]` | No                        | Suffixes tried after the path. Default `['', '.pine']`                          |
+| `fetch`      | `function` | No                        | `fetch` implementation; the global one by default                               |
 
 Without a token, files are read from `raw.githubusercontent.com`; with one, through the GitHub contents API, which also serves private repositories. A missing file means "unknown library".
 
@@ -116,8 +116,8 @@ ImportResolver.File.configure({ dir: './pine/libraries' });
 const versioned = new FileImportResolver({ dir: './pine/{user}/{name}-v{version}.pine', extensions: [''] });
 ```
 
-| Option       | Type       | Required | Description                                                                    |
-| ------------ | ---------- | -------- | ------------------------------------------------------------------------------ |
+| Option       | Type       | Required | Description                                                                     |
+| ------------ | ---------- | -------- | ------------------------------------------------------------------------------- |
 | `dir`        | `string`   | Yes      | Folder holding one file per library, or a path template (placeholders as above) |
 | `extensions` | `string[]` | No       | Suffixes tried after the path. Default `['', '.pine', '.txt']`                  |
 
@@ -134,11 +134,11 @@ ImportResolver.Url.configure({
 });
 ```
 
-| Option    | Type                 | Required | Description                                                        |
-| --------- | -------------------- | -------- | ------------------------------------------------------------------ |
-| `url`     | `string \| function` | Yes      | URL template (placeholders as above), or `(info) => url`           |
-| `headers` | `object`             | No       | Request headers                                                    |
-| `fetch`   | `function`           | No       | `fetch` implementation; the global one by default                  |
+| Option    | Type                 | Required | Description                                              |
+| --------- | -------------------- | -------- | -------------------------------------------------------- |
+| `url`     | `string \| function` | Yes      | URL template (placeholders as above), or `(info) => url` |
+| `headers` | `object`             | No       | Request headers                                          |
+| `fetch`   | `function`           | No       | `fetch` implementation; the global one by default        |
 
 ---
 
@@ -177,7 +177,7 @@ pine.setImportResolver(
             new MapImportResolver({ libraries: { 'PineCoders/AllTimeHighLow/1': localCopy } }),
             new GitHubImportResolver({ url: 'https://github.com/acme/pine-libraries/tree/main/libraries', token }),
         ],
-    })
+    }),
 );
 ```
 
@@ -187,8 +187,8 @@ pine.setImportResolver(
 
 Each resolver keeps what it resolves: the source of a library, or the fact that it does not know it. A library is therefore fetched **once per resolver**, across runs, across the `PineTS` instances sharing the resolver, and by `request.security()` contexts. Concurrent requests for one library share one fetch, and a failed fetch is tried again on the next run.
 
-| Option          | Type     | Default            | Description                                   |
-| --------------- | -------- | ------------------ | --------------------------------------------- |
+| Option          | Type     | Default                 | Description                                |
+| --------------- | -------- | ----------------------- | ------------------------------------------ |
 | `cacheDuration` | `number` | the resolver's lifetime | How long a resolved library is kept, in ms |
 
 `configure()` and `clearCache()` empty the cache. `MapImportResolver` and `ChainImportResolver` do not cache themselves (lookups are in memory, and each chained resolver has its own cache).
