@@ -10,8 +10,7 @@ import { scanDeclaration } from './scanDeclaration';
 import { propsForDeclaration } from './propsSchema';
 import { buildPropProxy } from './propProxy';
 import { resolveImports } from '../imports/resolveImports';
-import type { CachedImportResolver } from '../imports/CachedImportResolver';
-import type { ImportResolverLike } from '../imports/types';
+import type { IImportResolver } from '../imports/IImportResolver';
 import type { IPineInput, IPineProp, PreparedScript } from './types';
 
 /**
@@ -50,8 +49,10 @@ export class Indicator {
 
     // Lazy artifacts — populated on first prepare() call.
     private _prepared: PreparedScript | null = null;
-    // Sources of the imported libraries, keyed by import path — set by resolveImports().
+    // Sources of the imported libraries, keyed by import path, and the resolver
+    // they came from — set by resolveImports().
     private _libraries: Record<string, string> | null = null;
+    private _librariesResolver: IImportResolver | null = null;
     private _inputMeta: IPineInput[] | null = null;
     private _inputValues: Record<string, unknown> = {};
     private _explicitOverrides = new Set<string>(); // canonical keys the user wrote via .input.X = ...
@@ -133,13 +134,18 @@ export class Indicator {
 
     /**
      * Fetch the sources of the libraries the script imports (and theirs)
-     * through `resolver`, for `prepare()` to link. Done once per Indicator;
-     * `PineTS.run()` calls it with the resolver set by `setImportResolver`.
+     * through `resolver`, for `prepare()` to link. `PineTS.run()` calls it with
+     * the resolver set by `setImportResolver`. Run with another resolver, the
+     * Indicator is transpiled again if that resolver serves other sources.
      * Throws when the script imports a library the resolver does not know.
      */
-    public async resolveImports(resolver: ImportResolverLike | CachedImportResolver | null | undefined): Promise<void> {
-        if (this._libraries || this._prepared || typeof this.source !== 'string') return;
-        this._libraries = await resolveImports(this.source, resolver);
+    public async resolveImports(resolver: IImportResolver | null): Promise<void> {
+        if (typeof this.source !== 'string') return;
+        if (this._libraries && this._librariesResolver === resolver) return;
+        const libraries = await resolveImports(this.source, resolver);
+        if (this._libraries && !sameSources(this._libraries, libraries)) this._prepared = null;
+        this._libraries = libraries;
+        this._librariesResolver = resolver;
     }
 
     /** True iff the script references any built-in in `VIEWPORT_DEPENDENT_BUILTINS`. */
@@ -265,6 +271,11 @@ export class Indicator {
         this._ensurePropsScanned();
         return this._propProxy!;
     }
+}
+
+function sameSources(a: Record<string, string>, b: Record<string, string>): boolean {
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
 }
 
 /**

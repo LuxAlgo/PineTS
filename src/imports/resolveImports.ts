@@ -3,8 +3,8 @@
 
 import { scanImports, type ImportSpec } from '../transpiler/pineToJS/imports';
 import { extractPineScriptVersion } from '../transpiler/pineToJS/version';
-import { CachedImportResolver } from './CachedImportResolver';
-import type { ImportResolverLike } from './types';
+import { toImportResolver } from './Function/FunctionImportResolver.class';
+import type { IImportResolver, ImportResolverFn } from './IImportResolver';
 
 /**
  * Fetch the libraries a Pine Script source imports, and theirs, through
@@ -17,7 +17,7 @@ import type { ImportResolverLike } from './types';
  */
 export async function resolveImports(
     source: string,
-    resolver: ImportResolverLike | CachedImportResolver | null | undefined,
+    resolver: IImportResolver | ImportResolverFn | null | undefined,
 ): Promise<Record<string, string>> {
     const libraries: Record<string, string> = {};
     if (!/^import\s/m.test(source) || extractPineScriptVersion(source) === null) return libraries;
@@ -29,7 +29,7 @@ export async function resolveImports(
                 `Call pineTS.setImportResolver(...) with a resolver that returns the library sources.`,
         );
     }
-    const cached = resolver instanceof CachedImportResolver ? resolver : new CachedImportResolver(resolver);
+    const r = toImportResolver(resolver);
 
     // Each library is fetched once; whoever starts a fetch awaits it, so a
     // circular import cannot make two fetches wait on each other.
@@ -38,8 +38,8 @@ export async function resolveImports(
         if (started.has(spec.path)) return;
         started.add(spec.path);
         const { path, user, name, version } = spec;
-        const library = await cached.resolve(path, { path, user, name, version, importer });
-        if (library === null) {
+        const library = await r.resolve(path, { path, user, name, version, importer });
+        if (typeof library !== 'string') {
             if (importer === undefined) throw new Error(`Import "${path}" could not be resolved: the import resolver returned no source`);
             return;
         }

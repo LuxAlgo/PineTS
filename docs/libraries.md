@@ -20,119 +20,230 @@ plot(allTime.lo(close))
 
 ## Table of Contents
 
-- [Providing library sources](#providing-library-sources)
-- [Built-in resolvers](#built-in-resolvers)
-- [Writing a resolver](#writing-a-resolver)
-- [What is supported](#what-is-supported)
+- [Import Resolvers](#import-resolvers)
+- [GitHub](#github)
+- [Local Files](#local-files)
+- [URL](#url)
+- [In-Memory Sources](#in-memory-sources)
+- [Combining Resolvers](#combining-resolvers)
+- [Caching](#caching)
+- [Custom Resolvers](#custom-resolvers)
+- [What is Supported](#what-is-supported)
 - [Limitations](#limitations)
 
 ---
 
-## Providing library sources
+## Import Resolvers
 
-PineTS does not download libraries from TradingView. You tell it where library sources come from with an **import resolver**: a function that receives the import path (`user/library/version`) and returns the library's Pine Script source.
+PineTS does not download libraries from TradingView. An **import resolver** tells it where library sources come from: given an import path (`user/library/version`), it returns the library's Pine Script source. Set one on the `PineTS` instance before running a script that imports libraries:
 
-```javascript
+**1. Singleton** (from the `ImportResolver` registry):
+
+```typescript
 import { PineTS, Provider, ImportResolver } from 'pinets';
 
-const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', '1h', 500);
+ImportResolver.GitHub.configure({ url: 'https://github.com/acme/pine-libraries/tree/main/libraries' });
 
-pineTS.setImportResolver(
-    ImportResolver.fromMap({
-        'PineCoders/AllTimeHighLow/1': allTimeHighLowSource,
-    })
-);
-
-const { plots } = await pineTS.run(scriptSource);
+const pine = new PineTS(Provider.Binance, 'BTCUSDT', '1h', 500);
+pine.setImportResolver(ImportResolver.GitHub);
+const { plots } = await pine.run(scriptSource);
 ```
 
-Before transpiling, PineTS asks the resolver for every library the script imports, and for the libraries those import in turn. Each path is requested **once per resolver**: results are cached, across runs and for the secondary contexts of `request.security()`. A resolver that throws is asked again on the next run.
+**2. Direct instantiation** (for an instance with its own configuration):
 
-A script that imports a library fails to run when no resolver is set, or when the resolver does not know one of the script's own imports.
+```typescript
+import { PineTS, Provider, GitHubImportResolver } from 'pinets';
 
-## Built-in resolvers
+const github = new GitHubImportResolver({ url: 'https://github.com/acme/private-libraries/tree/main/libraries', token: process.env.GITHUB_TOKEN });
 
-| Resolver                                   | Source of the libraries                                                                 |
-| ------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `ImportResolver.fromMap(sources)`          | Strings in memory (object or `Map`)                                                     |
-| `ImportResolver.fromFiles(dir, options?)`  | Local files, Node.js only                                                               |
-| `ImportResolver.fromUrl(url, options?)`    | Any URL, with `{user}`, `{name}`, `{version}`, `{path}` placeholders                    |
-| `ImportResolver.fromGitHub(location, options?)` | A GitHub repository, folder or file                                                |
-| `ImportResolver.chain(...resolvers)`       | Each resolver in turn; the first source found wins                                      |
-
-### `fromMap`
-
-Keys are looked up by full path, then by `user/library` (any version), then by library name alone:
-
-```javascript
-ImportResolver.fromMap({
-    'PineCoders/AllTimeHighLow/1': athSource, // this version only
-    'TradingView/ta': taSource, // any version of TradingView/ta
-    Signals: signalsSource, // any library named "Signals"
-});
+const pine = new PineTS(Provider.Binance, 'BTCUSDT', '1h', 500);
+pine.setImportResolver(github);
 ```
 
-### `fromFiles`
+Before transpiling, PineTS asks the resolver for every library the script imports, and for the libraries those import in turn. `request.security()` contexts use the resolver of the script that created them. A script that imports a library fails to run when no resolver is set, or when the resolver does not know one of the script's own imports.
 
-A folder holding one file per library, named after the library, with no extension or `.pine` / `.txt`; or a path template:
+| Resolver                     | Registry               | Source of the libraries                       |
+| ---------------------------- | ---------------------- | --------------------------------------------- |
+| `GitHubImportResolver`       | `ImportResolver.GitHub` | A GitHub repository, folder or file           |
+| `FileImportResolver`         | `ImportResolver.File`   | Local files (Node.js only)                    |
+| `UrlImportResolver`          | `ImportResolver.Url`    | Any URL                                       |
+| `MapImportResolver`          | `ImportResolver.Map`    | Sources held in memory                        |
+| `ChainImportResolver`        | -                      | Several resolvers, asked in turn              |
+| `FunctionImportResolver`     | -                      | A function `(path, info) => source`           |
 
-```javascript
-ImportResolver.fromFiles('./pine/libraries');
-ImportResolver.fromFiles('./pine/{user}/{name}-v{version}.pine', { extensions: [''] });
+---
+
+## GitHub
+
+Reads libraries from a GitHub repository. **Requires a location** (`url`, or `owner` and `repo`); private repositories also need a token.
+
+```typescript
+// a folder holding one file per library, named after the library
+ImportResolver.GitHub.configure({ url: 'https://github.com/acme/pine-libraries/tree/main/libraries' });
+
+// a private repository
+const github = new GitHubImportResolver({ url: 'https://github.com/acme/private-libraries/tree/main/libraries', token: process.env.GITHUB_TOKEN });
+
+// one file: serves the library named after it
+const signals = new GitHubImportResolver({ url: 'https://github.com/acme/pine-libraries/blob/main/libraries/Signals' });
 ```
 
-### `fromUrl`
+| Option       | Type       | Required            | Description                                                                                  |
+| ------------ | ---------- | ------------------- | -------------------------------------------------------------------------------------------- |
+| `url`        | `string`   | Yes (or `owner` + `repo`) | Repository, folder (`/tree/<ref>/<folder>`) or file (`/blob/<ref>/<file>`) URL       |
+| `owner`      | `string`   | No                  | Repository owner, instead of `url`                                                           |
+| `repo`       | `string`   | No                  | Repository name, instead of `url`                                                            |
+| `ref`        | `string`   | No                  | Branch, tag or commit; the default branch otherwise                                          |
+| `path`       | `string`   | No                  | Folder, or template with `{user}`, `{name}`, `{version}`, `{path}` placeholders              |
+| `token`      | `string`   | No                  | Access token, for private repositories                                                       |
+| `extensions` | `string[]` | No                  | Suffixes tried after the path. Default `['', '.pine']`                                        |
+| `fetch`      | `function` | No                  | `fetch` implementation; the global one by default                                            |
 
-```javascript
-ImportResolver.fromUrl('https://example.com/pine/{user}/{name}/{version}.pine', {
+Without a token, files are read from `raw.githubusercontent.com`; with one, through the GitHub contents API, which also serves private repositories. A missing file means "unknown library".
+
+**Versions.** The default file path is the folder plus the library name: the version in the import is not part of it, since a repository usually holds the latest version of each library. To serve several versions, use a `path` template with `{version}` (`libraries/{name}/v{version}.pine`), or point a second resolver at an older `ref`.
+
+---
+
+## Local Files
+
+Reads libraries from local files. **Node.js only**: not available in browser builds.
+
+```typescript
+ImportResolver.File.configure({ dir: './pine/libraries' });
+// ./pine/libraries/<name>, then <name>.pine, then <name>.txt
+
+const versioned = new FileImportResolver({ dir: './pine/{user}/{name}-v{version}.pine', extensions: [''] });
+```
+
+| Option       | Type       | Required | Description                                                                    |
+| ------------ | ---------- | -------- | ------------------------------------------------------------------------------ |
+| `dir`        | `string`   | Yes      | Folder holding one file per library, or a path template (placeholders as above) |
+| `extensions` | `string[]` | No       | Suffixes tried after the path. Default `['', '.pine', '.txt']`                  |
+
+---
+
+## URL
+
+Fetches each library from a URL. A 404 response means "unknown library"; any other error status throws.
+
+```typescript
+ImportResolver.Url.configure({
+    url: 'https://example.com/pine/{user}/{name}/{version}.pine',
     headers: { Authorization: `Bearer ${token}` },
 });
 ```
 
-A 404 response means "unknown library"; any other error status throws.
+| Option    | Type                 | Required | Description                                                        |
+| --------- | -------------------- | -------- | ------------------------------------------------------------------ |
+| `url`     | `string \| function` | Yes      | URL template (placeholders as above), or `(info) => url`           |
+| `headers` | `object`             | No       | Request headers                                                    |
+| `fetch`   | `function`           | No       | `fetch` implementation; the global one by default                  |
 
-### `fromGitHub`
+---
 
-Takes a repository, folder (`/tree/...`) or file (`/blob/...`) URL, or `{ owner, repo, ref?, path? }`:
+## In-Memory Sources
 
-```javascript
-// a folder holding one file per library, named after the library
-ImportResolver.fromGitHub('https://github.com/acme/pine-libraries/tree/main/libraries');
+Library sources you already hold as strings: read from disk, a database, an API, a bundled import. Keys are looked up by full path, then by `user/library` (any version), then by library name alone.
 
-// a private repository: pass a token
-ImportResolver.fromGitHub('https://github.com/acme/private-libraries/tree/main/libraries', { token: process.env.GITHUB_TOKEN });
-
-// one file: serves the library named after it
-ImportResolver.fromGitHub('https://github.com/acme/pine-libraries/blob/main/libraries/Signals');
+```typescript
+ImportResolver.Map.configure({
+    libraries: {
+        'PineCoders/AllTimeHighLow/1': athSource, // this version only
+        'TradingView/ta': taSource, // any version of TradingView/ta
+        Signals: signalsSource, // any library named "Signals"
+    },
+});
 ```
 
-Without a token, files are read from `raw.githubusercontent.com`; with one, through the GitHub contents API, which also serves private repositories. A file path is the folder plus the library name, then `.pine` (`extensions` option). The version is not part of it, since a repository usually holds the latest version of each library; use a `path` template with `{version}` if yours keeps several.
+| Option      | Type            | Required | Description                     |
+| ----------- | --------------- | -------- | ------------------------------- |
+| `libraries` | `object \| Map` | No       | Library sources, keyed as above |
 
-### Combining resolvers
+Lookups are not cached: a source added to the `libraries` object later is found.
 
-```javascript
-pineTS.setImportResolver(
-    ImportResolver.chain(
-        ImportResolver.fromMap({ 'PineCoders/AllTimeHighLow/1': localCopy }),
-        ImportResolver.fromGitHub('https://github.com/acme/pine-libraries/tree/main/libraries', { token })
-    )
+---
+
+## Combining Resolvers
+
+`ChainImportResolver` asks each resolver in turn; the first source found wins. Functions are accepted next to resolvers.
+
+```typescript
+import { ChainImportResolver, MapImportResolver, GitHubImportResolver } from 'pinets';
+
+pine.setImportResolver(
+    new ChainImportResolver({
+        resolvers: [
+            new MapImportResolver({ libraries: { 'PineCoders/AllTimeHighLow/1': localCopy } }),
+            new GitHubImportResolver({ url: 'https://github.com/acme/pine-libraries/tree/main/libraries', token }),
+        ],
+    })
 );
 ```
 
-## Writing a resolver
+---
 
-Any function `(path, info) => string | null` (or one returning a promise), or an object with such a `resolve` method, is a resolver. `info` holds `user`, `name`, `version`, and `importer`, the path of the library holding the import (undefined for the script itself). Return `null` for a library you do not know.
+## Caching
 
-```javascript
-pineTS.setImportResolver(async (path, { name }) => {
+Each resolver keeps what it resolves: the source of a library, or the fact that it does not know it. A library is therefore fetched **once per resolver**, across runs, across the `PineTS` instances sharing the resolver, and by `request.security()` contexts. Concurrent requests for one library share one fetch, and a failed fetch is tried again on the next run.
+
+| Option          | Type     | Default            | Description                                   |
+| --------------- | -------- | ------------------ | --------------------------------------------- |
+| `cacheDuration` | `number` | the resolver's lifetime | How long a resolved library is kept, in ms |
+
+`configure()` and `clearCache()` empty the cache. `MapImportResolver` and `ChainImportResolver` do not cache themselves (lookups are in memory, and each chained resolver has its own cache).
+
+---
+
+## Custom Resolvers
+
+A plain function `(path, info) => source | null` works as a resolver; `setImportResolver` wraps it in a `FunctionImportResolver`, which caches like the others. `info` holds `path`, `user`, `name`, `version`, and `importer`, the path of the library holding the import (undefined for the script itself). Return `null` for a library you do not know.
+
+```typescript
+pine.setImportResolver(async (path, { name }) => {
     const res = await fetch(`https://my-server/libraries/${name}`);
     return res.ok ? res.text() : null;
 });
 ```
 
+For a reusable resolver, implement the `IImportResolver` interface or extend `BaseImportResolver`, which provides the caching and the configuration check:
+
+```typescript
+import { BaseImportResolver, ImportResolver } from 'pinets';
+import type { ImportInfo, BaseImportResolverConfig } from 'pinets';
+
+interface MyConfig extends BaseImportResolverConfig {
+    apiKey: string;
+}
+
+class MyImportResolver extends BaseImportResolver<MyConfig> {
+    private _apiKey: string | null = null;
+
+    constructor(config?: MyConfig) {
+        super({ requiresConfig: true, resolverName: 'My' });
+        if (config) this.configure(config);
+    }
+
+    configure(config: MyConfig): void {
+        super.configure(config);
+        this._apiKey = config.apiKey;
+    }
+
+    protected async _resolveNative(info: ImportInfo) {
+        const res = await fetch(`https://my-server/libraries/${info.user}/${info.name}/${info.version}`, { headers: { 'X-Key': this._apiKey! } });
+        return res.ok ? res.text() : null;
+    }
+}
+
+// Optional: add it to the registry
+ImportResolver['My'] = new MyImportResolver();
+```
+
 To fetch the libraries of a script yourself, ahead of a run, use `resolveImports(source, resolver)`: it returns `{ [path]: source }` for the script's imports and theirs.
 
-## What is supported
+---
+
+## What is Supported
 
 - **Exported functions, methods, types and enums**: `alias.f()`, `alias.Type.new()`, `alias.Type` in type annotations (`alias.Type p = ...`, `array<alias.Type>`), `alias.Enum.field`, imported enums in `input.enum()`.
 - **Methods** with either syntax: `obj.method()` or `alias.method(obj)`.
@@ -148,3 +259,4 @@ To fetch the libraries of a script yourself, ahead of a run, use `resolveImports
 
 - A library runs with the language semantics of the importing script's Pine Script version. They differ in a few cases between v5 and v6 (lazy `and` / `or`, division of `const int` values), which matters when a v6 script imports a v5 library.
 - Library sources are not fetched from TradingView: provide them through a resolver.
+- A function declared with a library type as its return type (`export alias.Type f() =>`) does not parse yet.

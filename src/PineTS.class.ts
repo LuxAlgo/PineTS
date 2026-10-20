@@ -6,8 +6,8 @@ import { splitTickerModifier, withTickerModifier } from './tickerModifier';
 import { createSyminfo } from './namespaces/Syminfo';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
-import { CachedImportResolver } from './imports/CachedImportResolver';
-import type { ImportResolverLike } from './imports/types';
+import { toImportResolver } from './imports/Function/FunctionImportResolver.class';
+import type { IImportResolver, ImportResolverFn } from './imports/IImportResolver';
 import { processBarOrders, barPath, beginStrategyBar, riskStartBar, riskAtBarClose, processOrdersOnClose, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState, snapToTick } from './namespaces/strategy/utils';
 
 import { parseTimeframe, timeframeSeconds } from './timeframe';
@@ -68,8 +68,13 @@ export class PineTS {
     private _currentIndicator: Indicator | null = null;
 
     private _isSecondaryContext: boolean = false;
-    public markAsSecondary() {
+    /**
+     * Mark this instance as the secondary context of a `request.*` call.
+     * It inherits what its parent runs with: the import resolver.
+     */
+    public markAsSecondary(parent?: Context) {
         this._isSecondaryContext = true;
+        if (parent) this._importResolver = parent.importResolver;
     }
 
     private _syminfo: ISymbolInfo;
@@ -126,19 +131,19 @@ export class PineTS {
         this._alertMode = mode;
     }
 
-    private _importResolver: CachedImportResolver | null = null;
+    private _importResolver: IImportResolver | null = null;
 
     /**
      * Set where the libraries of `import <user>/<library>/<version> [as alias]`
-     * statements come from. The resolver receives the import path and returns
-     * the library's Pine Script source (or null when it does not know it); see
-     * `ImportResolver` for ready-made resolvers (in-memory map, URL, GitHub,
-     * local files). Each library is requested once: results are cached by the
-     * resolver wrapper, which is shared with `request.security` contexts.
-     * @param resolver A resolver function or `{ resolve }` object; `null` removes it
+     * statements come from: an import resolver (`ImportResolver.GitHub`,
+     * `new FileImportResolver({ dir })`, ...), or a plain function
+     * `(path, info) => source | null`, which is wrapped in a `FunctionImportResolver`.
+     * Resolvers cache what they resolve, so a library is fetched once per
+     * resolver, across runs and `request.security` contexts.
+     * @param resolver An import resolver or function; `null` removes it
      */
-    public setImportResolver(resolver: ImportResolverLike | CachedImportResolver | null) {
-        this._importResolver = resolver == null ? null : resolver instanceof CachedImportResolver ? resolver : new CachedImportResolver(resolver);
+    public setImportResolver(resolver: IImportResolver | ImportResolverFn | null) {
+        this._importResolver = resolver == null ? null : toImportResolver(resolver);
     }
 
     // ── Visible-range / host environment ────────────────────────────────

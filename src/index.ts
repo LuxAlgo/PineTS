@@ -26,6 +26,28 @@ export { PineTS, Context, Provider, Indicator, PineRuntimeError };
 export type { IPineInput, IPineProp, PineInputType, PineInputDisplay, PinePropType, PreparedScript } from './Indicator';
 export { INDICATOR_PROPS, STRATEGY_PROPS, propsForDeclaration } from './Indicator';
 
-// Library imports (`import user/library/version as alias`)
-export { ImportResolver, CachedImportResolver, resolveImports } from './imports';
-export type { ImportInfo, ImportResolverFn, ImportResolverLike, GitHubLocation, GitHubOptions } from './imports';
+// Import resolver classes for direct instantiation (`import user/library/version as alias`)
+export {
+    ImportResolver,
+    BaseImportResolver,
+    MapImportResolver,
+    FileImportResolver,
+    UrlImportResolver,
+    GitHubImportResolver,
+    ChainImportResolver,
+    FunctionImportResolver,
+    resolveImports,
+} from './imports';
+
+// Import resolver types
+export type {
+    IImportResolver,
+    ImportInfo,
+    ImportResolverFn,
+    BaseImportResolverConfig,
+    MapImportResolverConfig,
+    FileImportResolverConfig,
+    UrlImportResolverConfig,
+    GitHubImportResolverConfig,
+    ChainImportResolverConfig,
+} from './imports';

@@ -11,12 +11,12 @@
 import { describe, it, expect } from 'vitest';
 import { PineTS } from '../../src/PineTS.class';
 import { Provider } from '../../src/marketData/Provider.class';
-import { ImportResolver } from '../../src/imports';
+import { MapImportResolver } from '../../src/imports';
 import { transpile } from '../../src/transpiler/index';
 
 const makePineTS = (libraries: Record<string, string>, eDate = '2024-01-05') => {
     const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date(eDate).getTime());
-    pineTS.setImportResolver(ImportResolver.fromMap(libraries));
+    pineTS.setImportResolver(new MapImportResolver({ libraries }));
     return pineTS;
 };
 const series = (ctx: any, title: string) => ctx.plots[title].data.map((d: any) => d.value);

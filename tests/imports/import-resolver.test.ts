@@ -5,14 +5,27 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ImportResolver, CachedImportResolver, resolveImports, type ImportInfo } from '../../src/imports';
+import {
+    ImportResolver,
+    BaseImportResolver,
+    MapImportResolver,
+    FileImportResolver,
+    UrlImportResolver,
+    GitHubImportResolver,
+    ChainImportResolver,
+    FunctionImportResolver,
+    resolveImports,
+    type ImportInfo,
+} from '../../src/imports';
 import { PineTS } from '../../src/PineTS.class';
+import { Indicator } from '../../src/Indicator';
 import { Provider } from '../../src/marketData/Provider.class';
 
 const info = (p: string): ImportInfo => {
     const [user, name, version] = p.split('/');
     return { path: p, user, name, version: Number(version) };
 };
+const resolve = (r: { resolve: (p: string, i: ImportInfo) => Promise<string | null> }, p: string) => r.resolve(p, info(p));
 
 const lib = (name: string, body = 'export f() => 1') => `//@version=6\nlibrary("${name}")\n${body}\n`;
 
@@ -24,89 +37,125 @@ const fakeFetch = (files: Record<string, string>, seen: { url: string; headers?:
         return { ok: body !== undefined, status: body !== undefined ? 200 : 404, statusText: '', text: async () => body ?? '' };
     }) as any;
 
-describe('ImportResolver.fromMap', () => {
-    it('looks a library up by path, then user/name, then name', async () => {
-        const r = ImportResolver.fromMap({ 'u/A/2': 'exact', 'u/A': 'any version', B: 'by name' });
-        expect(await r('u/A/2', info('u/A/2'))).toBe('exact');
-        expect(await r('u/A/3', info('u/A/3'))).toBe('any version');
-        expect(await r('x/B/1', info('x/B/1'))).toBe('by name');
-        expect(await r('x/C/1', info('x/C/1'))).toBeNull();
-        expect(await ImportResolver.fromMap(new Map([['u/A/1', 'map']]))('u/A/1', info('u/A/1'))).toBe('map');
-    });
+// Counts _resolveNative calls; `answer` decides each result.
+class CountingResolver extends BaseImportResolver {
+    calls: string[] = [];
+    constructor(private readonly answer: (p: string, n: number) => Promise<string | null> | string | null) {
+        super({ requiresConfig: false, resolverName: 'Counting' });
+    }
+    protected _resolveNative(i: ImportInfo) {
+        this.calls.push(i.path);
+        return this.answer(i.path, this.calls.length);
+    }
+}
 
-    it('does not read inherited object properties', async () => {
-        expect(await ImportResolver.fromMap({})('u/constructor/1', info('u/constructor/1'))).toBeNull();
-    });
-});
-
-describe('CachedImportResolver', () => {
-    it('calls the resolver once per path, concurrent requests included', async () => {
-        const calls: string[] = [];
-        const cached = new CachedImportResolver(async (p) => {
-            calls.push(p);
-            await new Promise((r) => setTimeout(r, 5));
+describe('BaseImportResolver', () => {
+    it('resolves each path once, concurrent requests and unknown libraries included', async () => {
+        const r = new CountingResolver(async (p) => {
+            await new Promise((done) => setTimeout(done, 5));
             return p === 'u/A/1' ? 'A' : null;
         });
-        const results = await Promise.all([
-            cached.resolve('u/A/1', info('u/A/1')),
-            cached.resolve('u/A/1', info('u/A/1')),
-            cached.resolve('u/B/1', info('u/B/1')),
-        ]);
-        expect(results).toEqual(['A', 'A', null]);
-        expect(await cached.resolve('u/B/1', info('u/B/1'))).toBeNull();
-        expect(calls).toEqual(['u/A/1', 'u/B/1']);
-        cached.clear();
-        await cached.resolve('u/A/1', info('u/A/1'));
-        expect(calls).toEqual(['u/A/1', 'u/B/1', 'u/A/1']);
+        expect(await Promise.all([resolve(r, 'u/A/1'), resolve(r, 'u/A/1'), resolve(r, 'u/B/1')])).toEqual(['A', 'A', null]);
+        expect(await resolve(r, 'u/B/1')).toBeNull();
+        expect(r.calls).toEqual(['u/A/1', 'u/B/1']);
+        r.clearCache();
+        await resolve(r, 'u/A/1');
+        expect(r.calls).toEqual(['u/A/1', 'u/B/1', 'u/A/1']);
     });
 
-    it('calls a resolver that threw again', async () => {
-        let n = 0;
-        const cached = new CachedImportResolver({
-            resolve: () => {
-                if (n++ === 0) throw new Error('network down');
-                return 'A';
-            },
+    it('asks again after an error, after cacheDuration, and after configure()', async () => {
+        const r = new CountingResolver((_p, n) => {
+            if (n === 1) throw new Error('network down');
+            return `v${n}`;
         });
-        await expect(cached.resolve('u/A/1', info('u/A/1'))).rejects.toThrow('network down');
-        expect(await cached.resolve('u/A/1', info('u/A/1'))).toBe('A');
+        await expect(resolve(r, 'u/A/1')).rejects.toThrow('network down');
+        expect(await resolve(r, 'u/A/1')).toBe('v2');
+        expect(await resolve(r, 'u/A/1')).toBe('v2');
+
+        r.configure({ cacheDuration: 0 });
+        expect(await resolve(r, 'u/A/1')).toBe('v3');
+        expect(await resolve(r, 'u/A/1')).toBe('v4');
+    });
+
+    it('a resolver with required configuration fails early until configured', async () => {
+        await expect(resolve(new GitHubImportResolver(), 'u/A/1')).rejects.toThrow(
+            'The GitHub import resolver requires configuration before use. Call ImportResolver.GitHub.configure({ ... }) or instantiate directly: new GitHubImportResolver({ ... })',
+        );
+        await expect(resolve(new UrlImportResolver(), 'u/A/1')).rejects.toThrow('The Url import resolver requires configuration');
+        await expect(resolve(new FileImportResolver(), 'u/A/1')).rejects.toThrow('The File import resolver requires configuration');
     });
 });
 
-describe('ImportResolver.chain', () => {
-    it('returns the first source found', async () => {
+describe('ImportResolver registry', () => {
+    it('holds ready instances, configured like Provider', async () => {
+        expect(ImportResolver.Map).toBeInstanceOf(MapImportResolver);
+        expect(ImportResolver.GitHub).toBeInstanceOf(GitHubImportResolver);
+        expect(ImportResolver.Url).toBeInstanceOf(UrlImportResolver);
+        expect(ImportResolver.File).toBeInstanceOf(FileImportResolver);
+        const map = new MapImportResolver();
+        map.configure({ libraries: { 'u/A/1': 'A' } });
+        expect(await resolve(map, 'u/A/1')).toBe('A');
+    });
+});
+
+describe('MapImportResolver', () => {
+    it('looks a library up by path, then user/name, then name', async () => {
+        const r = new MapImportResolver({ libraries: { 'u/A/2': 'exact', 'u/A': 'any version', B: 'by name' } });
+        expect(await resolve(r, 'u/A/2')).toBe('exact');
+        expect(await resolve(r, 'u/A/3')).toBe('any version');
+        expect(await resolve(r, 'x/B/1')).toBe('by name');
+        expect(await resolve(r, 'x/C/1')).toBeNull();
+        expect(await resolve(new MapImportResolver({ libraries: new Map([['u/A/1', 'map']]) }), 'u/A/1')).toBe('map');
+    });
+
+    it('sees sources added later, and no inherited object properties', async () => {
+        const libraries: Record<string, string> = {};
+        const r = new MapImportResolver({ libraries });
+        expect(await resolve(r, 'u/A/1')).toBeNull();
+        libraries['u/A/1'] = 'added';
+        expect(await resolve(r, 'u/A/1')).toBe('added');
+        expect(await resolve(r, 'u/constructor/1')).toBeNull();
+    });
+});
+
+describe('ChainImportResolver', () => {
+    it('returns the first source found, functions accepted', async () => {
         const order: string[] = [];
-        const r = ImportResolver.chain((p) => (order.push('map'), p === 'u/A/1' ? 'from map' : null), {
-            resolve: async () => (order.push('remote'), 'from remote'),
+        const r = new ChainImportResolver({
+            resolvers: [
+                (p) => (order.push('function'), p === 'u/A/1' ? 'from function' : null),
+                new CountingResolver(() => (order.push('remote'), 'from remote')),
+            ],
         });
-        expect(await r('u/A/1', info('u/A/1'))).toBe('from map');
-        expect(await r('u/B/1', info('u/B/1'))).toBe('from remote');
-        expect(order).toEqual(['map', 'map', 'remote']);
+        expect(await resolve(r, 'u/A/1')).toBe('from function');
+        expect(await resolve(r, 'u/B/1')).toBe('from remote');
+        expect(order).toEqual(['function', 'function', 'remote']);
     });
 });
 
-describe('ImportResolver.fromUrl', () => {
+describe('UrlImportResolver', () => {
     it('fills the placeholders; a 404 is an unknown library, other errors throw', async () => {
         const seen: any[] = [];
         const fetch = fakeFetch({ 'https://x.test/u/A/7.pine': 'A source' }, seen);
-        const r = ImportResolver.fromUrl('https://x.test/{user}/{name}/{version}.pine', { headers: { 'X-Key': 'k' }, fetch });
-        expect(await r('u/A/7', info('u/A/7'))).toBe('A source');
+        const r = new UrlImportResolver({ url: 'https://x.test/{user}/{name}/{version}.pine', headers: { 'X-Key': 'k' }, fetch });
+        expect(await resolve(r, 'u/A/7')).toBe('A source');
         expect(seen[0].headers).toEqual({ 'X-Key': 'k' });
-        expect(await r('u/B/7', info('u/B/7'))).toBeNull();
+        expect(await resolve(r, 'u/B/7')).toBeNull();
 
-        const failing = ImportResolver.fromUrl('https://x.test/{path}', {
+        const failing = new UrlImportResolver({
+            url: 'https://x.test/{path}',
             fetch: (async () => ({ ok: false, status: 500, statusText: 'Server Error', text: async () => '' })) as any,
         });
-        await expect(failing('u/A/1', info('u/A/1'))).rejects.toThrow('Failed to fetch https://x.test/u/A/1: 500 Server Error');
+        await expect(resolve(failing, 'u/A/1')).rejects.toThrow('Failed to fetch https://x.test/u/A/1: 500 Server Error');
     });
 });
 
-describe('ImportResolver.fromGitHub', () => {
+describe('GitHubImportResolver', () => {
     it('reads a public repository folder from raw.githubusercontent.com, trying the extensions', async () => {
         const seen: any[] = [];
         const fetch = fakeFetch({ 'https://raw.githubusercontent.com/acme/pine-libs/master/Libraries/ta.pine': 'ta source' }, seen);
-        const r = ImportResolver.fromGitHub('https://github.com/acme/pine-libs/tree/master/Libraries', { fetch });
-        expect(await r('TradingView/ta/14', info('TradingView/ta/14'))).toBe('ta source');
+        const r = new GitHubImportResolver({ url: 'https://github.com/acme/pine-libs/tree/master/Libraries', fetch });
+        expect(await resolve(r, 'TradingView/ta/14')).toBe('ta source');
         expect(seen.map((s) => s.url)).toEqual([
             'https://raw.githubusercontent.com/acme/pine-libs/master/Libraries/ta',
             'https://raw.githubusercontent.com/acme/pine-libs/master/Libraries/ta.pine',
@@ -116,52 +165,60 @@ describe('ImportResolver.fromGitHub', () => {
     it('uses the contents API with a token, the default branch when no ref is given', async () => {
         const seen: any[] = [];
         const fetch = fakeFetch({ 'https://api.github.com/repos/acme/pine-libs/contents/AllTimeHighLow': 'ath' }, seen);
-        const r = ImportResolver.fromGitHub({ owner: 'acme', repo: 'pine-libs' }, { token: 'secret', fetch });
-        expect(await r('PineCoders/AllTimeHighLow/1', info('PineCoders/AllTimeHighLow/1'))).toBe('ath');
+        const r = new GitHubImportResolver({ owner: 'acme', repo: 'pine-libs', token: 'secret', fetch });
+        expect(await resolve(r, 'PineCoders/AllTimeHighLow/1')).toBe('ath');
         expect(seen[0].headers).toMatchObject({ Authorization: 'Bearer secret', Accept: 'application/vnd.github.raw' });
+    });
+
+    it('configure() adds to the configuration', async () => {
+        const seen: any[] = [];
+        const r = new GitHubImportResolver({ url: 'https://github.com/acme/pine-libs/tree/main/libs', fetch: fakeFetch({}, seen) });
+        r.configure({ token: 'secret', ref: 'v2' });
+        await resolve(r, 'u/A/1');
+        expect(seen[0].url).toBe('https://api.github.com/repos/acme/pine-libs/contents/libs/A?ref=v2');
+        expect(seen[0].headers.Authorization).toBe('Bearer secret');
     });
 
     it('a file URL serves the library named after the file only', async () => {
         const seen: any[] = [];
         const fetch = fakeFetch({ 'https://raw.githubusercontent.com/acme/pine-libs/master/Libraries/Signals': 'signals' }, seen);
-        const r = ImportResolver.fromGitHub('https://github.com/acme/pine-libs/blob/master/Libraries/Signals', { fetch });
-        expect(await r('acme/Signals/1', info('acme/Signals/1'))).toBe('signals');
-        expect(await r('acme/ta/1', info('acme/ta/1'))).toBeNull();
+        const r = new GitHubImportResolver({ url: 'https://github.com/acme/pine-libs/blob/master/Libraries/Signals', fetch });
+        expect(await resolve(r, 'acme/Signals/1')).toBe('signals');
+        expect(await resolve(r, 'acme/ta/1')).toBeNull();
         expect(seen).toHaveLength(1);
     });
 
     it('accepts path templates and raw file URLs, and rejects other URLs', async () => {
         const seen: any[] = [];
         const fetch = fakeFetch({}, seen);
-        await ImportResolver.fromGitHub(
-            { owner: 'o', repo: 'r', ref: 'v2', path: 'libs/{user}/{name}_v{version}.pine' },
-            { fetch, extensions: [''] },
-        )('u/A/3', info('u/A/3'));
-        await ImportResolver.fromGitHub('https://raw.githubusercontent.com/o/r/main/x/A.pine', { fetch })('u/A/3', info('u/A/3'));
+        await resolve(
+            new GitHubImportResolver({ owner: 'o', repo: 'r', ref: 'v2', path: 'libs/{user}/{name}_v{version}.pine', extensions: [''], fetch }),
+            'u/A/3',
+        );
+        await resolve(new GitHubImportResolver({ url: 'https://raw.githubusercontent.com/o/r/main/x/A.pine', fetch }), 'u/A/3');
         expect(seen.map((s) => s.url)).toEqual([
             'https://raw.githubusercontent.com/o/r/v2/libs/u/A_v3.pine',
             'https://raw.githubusercontent.com/o/r/main/x/A.pine',
         ]);
-        expect(() => ImportResolver.fromGitHub('https://gitlab.com/o/r')).toThrow('Not a GitHub repository URL');
-        expect(() => ImportResolver.fromGitHub('https://github.com/o/r/issues/1')).toThrow('Unsupported GitHub URL');
+        expect(() => new GitHubImportResolver({ url: 'https://gitlab.com/o/r' })).toThrow('Not a GitHub repository URL');
+        expect(() => new GitHubImportResolver({ url: 'https://github.com/o/r/issues/1' })).toThrow('Unsupported GitHub URL');
     });
 });
 
-describe('ImportResolver.fromFiles', () => {
-    it('reads a library from a folder, with or without an extension', async () => {
+describe('FileImportResolver', () => {
+    it('reads a library from a folder, with or without an extension, or from a path template', async () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinets-libs-'));
         try {
             fs.writeFileSync(path.join(dir, 'Signals'), 'signals');
             fs.writeFileSync(path.join(dir, 'ta.txt'), 'ta');
             fs.mkdirSync(path.join(dir, 'u'));
             fs.writeFileSync(path.join(dir, 'u', 'A-2.pine'), 'A2');
-            const r = ImportResolver.fromFiles(dir);
-            expect(await r('acme/Signals/6', info('acme/Signals/6'))).toBe('signals');
-            expect(await r('TradingView/ta/14', info('TradingView/ta/14'))).toBe('ta');
-            expect(await r('a/missing/1', info('a/missing/1'))).toBeNull();
-            expect(
-                await ImportResolver.fromFiles(path.join(dir, '{user}', '{name}-{version}.pine'), { extensions: [''] })('u/A/2', info('u/A/2')),
-            ).toBe('A2');
+            const r = new FileImportResolver({ dir });
+            expect(await resolve(r, 'acme/Signals/6')).toBe('signals');
+            expect(await resolve(r, 'TradingView/ta/14')).toBe('ta');
+            expect(await resolve(r, 'a/missing/1')).toBeNull();
+            const template = new FileImportResolver({ dir: path.join(dir, '{user}', '{name}-{version}.pine'), extensions: [''] });
+            expect(await resolve(template, 'u/A/2')).toBe('A2');
         } finally {
             fs.rmSync(dir, { recursive: true, force: true });
         }
@@ -201,15 +258,38 @@ describe('resolveImports', () => {
 });
 
 describe('PineTS.setImportResolver', () => {
-    it('fetches each library once across runs', async () => {
+    const makePineTS = () => new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-02').getTime());
+    const script = `//@version=6\nindicator("x")\nimport u/A/1 as a\nplot(a.f(), "f")\n`;
+    const last = (ctx: any) => ctx.plots['f'].data.at(-1).value;
+
+    it('a function is wrapped once: each library is fetched once across runs', async () => {
         let requests = 0;
-        const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-02').getTime());
+        const pineTS = makePineTS();
         pineTS.setImportResolver(() => (requests++, lib('A', 'export f() => 41 + 1')));
-        const script = `//@version=6\nindicator("x")\nimport u/A/1 as a\nplot(a.f(), "f")\n`;
-        for (let i = 0; i < 3; i++) {
-            const ctx = await pineTS.run(script);
-            expect(ctx.plots['f'].data.at(-1).value).toBe(42);
-        }
+        for (let i = 0; i < 3; i++) expect(last(await pineTS.run(script))).toBe(42);
         expect(requests).toBe(1);
+    });
+
+    it('instances sharing a resolver share its cache', async () => {
+        let requests = 0;
+        const shared = new FunctionImportResolver(() => (requests++, lib('A', 'export f() => 7')));
+        const a = makePineTS();
+        const b = makePineTS();
+        a.setImportResolver(shared);
+        b.setImportResolver(shared);
+        expect(last(await a.run(script))).toBe(7);
+        expect(last(await b.run(script))).toBe(7);
+        expect(requests).toBe(1);
+    });
+
+    it("an Indicator run with another resolver links that resolver's libraries", async () => {
+        const ind = new Indicator(script);
+        const a = makePineTS();
+        a.setImportResolver(new MapImportResolver({ libraries: { 'u/A/1': lib('A', 'export f() => 1') } }));
+        expect(last(await a.run(ind))).toBe(1);
+        const b = makePineTS();
+        b.setImportResolver(new MapImportResolver({ libraries: { 'u/A/1': lib('A', 'export f() => 2') } }));
+        expect(last(await b.run(ind))).toBe(2);
+        expect(last(await a.run(ind))).toBe(1);
     });
 });
