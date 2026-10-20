@@ -404,6 +404,7 @@ export function security_lower_tf(context: any) {
 
                 const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate);
                 pineTS.markAsSecondary();
+                pineTS.setImportResolver(context.importResolver);
 
                 // Truncated-slice slow path: when the transpiler emitted a
                 // slice for THIS call's expression name, the secondary

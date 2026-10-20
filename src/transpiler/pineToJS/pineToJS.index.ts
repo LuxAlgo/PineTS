@@ -8,31 +8,16 @@ import { Lexer } from './lexer';
 import { Parser } from './parser';
 import { CodeGenerator } from './codegen';
 import { analyzeInputs } from './inputs/analyzeInputs';
+import { linkLibraries } from './linker';
+import { extractPineScriptVersion } from './version';
+
+export { extractPineScriptVersion };
 
 /**
- * Extract Pine Script version from source code
- * Looks for //@version=X comment on its own line (can be anywhere in the file)
- * The line must start with // and contain only @version=X (with optional whitespace)
- * Returns the version number or null if not found
+ * `options.libraries` maps import paths (`user/library/version`) to library
+ * sources; the libraries the script imports are linked into its code. Imports
+ * without a source are listed in `unresolvedImports` and left out of the code.
  */
-export function extractPineScriptVersion(sourceCode: string): number | null {
-    // Match //@version=X where:
-    // - Line starts with optional whitespace, then //
-    // - Followed by optional whitespace, then @version
-    // - Then = with optional whitespace around it
-    // - Then the version number
-    // - Then optional whitespace until end of line
-    // - Nothing else allowed on the line
-    const versionRegex = /^\s*\/\/\s*@version\s*=\s*(\d+)\s*$/im;
-    const match = sourceCode.match(versionRegex);
-
-    if (match && match[1]) {
-        return parseInt(match[1], 10);
-    }
-
-    return null;
-}
-
 export function pineToJS(sourceCode: string, options: any = {}) {
     // Step 0: Detect Pine Script version
     const version = extractPineScriptVersion(sourceCode);
@@ -61,11 +46,15 @@ export function pineToJS(sourceCode: string, options: any = {}) {
         const parser = new Parser(tokens);
         const ast = parser.parse();
 
+        // Step 2a: Link imported libraries
+        const { libraries, ...codegenRest } = options;
+        const link = linkLibraries(ast, libraries);
+
         // Step 2b: Declare inputs (ids, labels, compile-time folded arguments)
         const inputs = analyzeInputs(ast, { version });
 
         // Step 3: Generate JavaScript (pass source code for comments)
-        const codegenOptions = { ...options, sourceCode };
+        const codegenOptions = { ...codegenRest, sourceCode };
         const codegen = new CodeGenerator(codegenOptions);
         const jsCode = codegen.generate(ast);
 
@@ -76,6 +65,8 @@ export function pineToJS(sourceCode: string, options: any = {}) {
             ast: ast,
             tokens: tokens,
             inputs,
+            imports: link.imports,
+            unresolvedImports: link.unresolved,
         };
     } catch (error) {
         return {

@@ -6,6 +6,8 @@ import { splitTickerModifier, withTickerModifier } from './tickerModifier';
 import { createSyminfo } from './namespaces/Syminfo';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
+import { CachedImportResolver } from './imports/CachedImportResolver';
+import type { ImportResolverLike } from './imports/types';
 import { processBarOrders, barPath, beginStrategyBar, riskStartBar, riskAtBarClose, processOrdersOnClose, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState, snapToTick } from './namespaces/strategy/utils';
 
 import { parseTimeframe, timeframeSeconds } from './timeframe';
@@ -122,6 +124,21 @@ export class PineTS {
      */
     public setAlertMode(mode: 'realtime' | 'all') {
         this._alertMode = mode;
+    }
+
+    private _importResolver: CachedImportResolver | null = null;
+
+    /**
+     * Set where the libraries of `import <user>/<library>/<version> [as alias]`
+     * statements come from. The resolver receives the import path and returns
+     * the library's Pine Script source (or null when it does not know it); see
+     * `ImportResolver` for ready-made resolvers (in-memory map, URL, GitHub,
+     * local files). Each library is requested once: results are cached by the
+     * resolver wrapper, which is shared with `request.security` contexts.
+     * @param resolver A resolver function or `{ resolve }` object; `null` removes it
+     */
+    public setImportResolver(resolver: ImportResolverLike | CachedImportResolver | null) {
+        this._importResolver = resolver == null ? null : resolver instanceof CachedImportResolver ? resolver : new CachedImportResolver(resolver);
     }
 
     // ── Visible-range / host environment ────────────────────────────────
@@ -490,6 +507,7 @@ export class PineTS {
         await this.ready();
         if (!periods) periods = this.data.length;
 
+        await ind.resolveImports(this._importResolver);
         const prepared = ind.prepare(this._debugSettings);
         this._usesVisibleRange = prepared.usesVisibleRange;
 
@@ -536,6 +554,7 @@ export class PineTS {
         await this.ready();
         if (!periods) periods = this.data.length;
 
+        await ind.resolveImports(this._importResolver);
         const prepared = ind.prepare(this._debugSettings);
         this._usesVisibleRange = prepared.usesVisibleRange;
 
@@ -1121,6 +1140,7 @@ export class PineTS {
         context.__maxLoops = this._maxLoops;
         context._alertMode = this._alertMode;
         context._fillsOnTickGrid = this._fillsOnTickGrid;
+        context.importResolver = this._importResolver;
 
         // User-explicit prop overrides flow from the Indicator to the runtime.
         // Read by Core.indicator() and initializeStrategy/strategy.any() to

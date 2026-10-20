@@ -67,7 +67,7 @@ parent: API Coverage
 | `hour()`           | ✅     | Hour function         |
 | `int()`            | ✅     | Integer conversion    |
 | `label()`          | ✅     | Label object          |
-| `library()`        |        | Library declaration   |
+| `library()`        | ✅     | Library declaration   |
 | `line()`           | ✅     | Line object           |
 | `linefill()`       | ✅     | Linefill object       |
 | `max_bars_back()`  |        | Maximum bars back     |

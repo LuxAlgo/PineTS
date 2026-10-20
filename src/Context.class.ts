@@ -38,6 +38,7 @@ import { isScalarHelper } from './namespaces/utils';
 import { receiverMatchesMethod } from './namespaces/methodDispatch';
 import { BUILTIN_METHOD_NAMES } from './transpiler/settings';
 import { PineRuntimeError } from './errors/PineRuntimeError';
+import type { CachedImportResolver } from './imports/CachedImportResolver';
 import type { IndicatorOptions } from './types/PineTypes';
 import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
 
@@ -84,6 +85,9 @@ export class Context {
 
     /** The strategy broker trades on the tick grid (see PineTS.setFillsOnTickGrid). */
     public _fillsOnTickGrid: boolean = false;
+
+    /** Resolver of `import`ed libraries (see PineTS.setImportResolver), passed on to request.security contexts. */
+    public importResolver: CachedImportResolver | null = null;
     /** The current bar's raw prices while the broker works on its tick-grid copy. */
     public _rawBar?: { open: number; high: number; low: number; close: number };
 
@@ -205,6 +209,7 @@ export class Context {
 
             nz: core.nz.bind(core),
             indicator: core.indicator.bind(core),
+            library: core.library.bind(core),
             fixnan: core.fixnan.bind(core),
             alertcondition: core.alertcondition.bind(core),
             alert: new AlertHelper(this),

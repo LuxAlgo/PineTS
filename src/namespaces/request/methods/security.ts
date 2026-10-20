@@ -327,6 +327,7 @@ export function security(context: any) {
 
         // Mark as secondary context to prevent infinite recursion
         pineTS.markAsSecondary();
+        pineTS.setImportResolver(context.importResolver);
 
         // Truncated-slice slow path (Phase 4): when the transpiler emitted
         // a slice for THIS call's expression name, the secondary runs the

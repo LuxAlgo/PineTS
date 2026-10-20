@@ -608,6 +608,10 @@ export class CodeGenerator {
                 return this.generateBlockStatement(node);
             case 'TypeDefinition':
                 return this.generateTypeDefinition(node);
+            case 'ImportDeclaration':
+                // Linked away when the library source is available (see linker.ts); an
+                // unresolved import is reported by the caller, not emitted.
+                return;
             default:
                 throw new Error(`Unknown statement type: ${node.type}`);
         }

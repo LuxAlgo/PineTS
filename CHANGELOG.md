@@ -1,5 +1,17 @@
 # Change Log
 
+## [Unreleased]
+
+### Added
+
+- **Libraries: `import` and `export`** (`Unexpected token KEYWORD 'import'`). `import <user>/<library>/<version> [as <alias>]` links the library's exported functions, methods, types and enums into the script: `alias.f()`, `alias.Type.new()`, `alias.Type` annotations, `alias.Enum.field`, `obj.method()` / `alias.method(obj)`. Each call site keeps its own `var` and `ta.*` state, library names never collide with the script's, non-exported methods stay private, and only the declarations the script reaches are linked. Libraries may import libraries. An alias named like a built-in namespace (`import TradingView/ta/7` used as `ta.*`) keeps reaching the built-ins the library does not export. A library script (`library()`, `export`) also runs on its own. Tests: `tests/imports/`, `tests/transpiler/import-export-parsing.test.ts`.
+- **`PineTS.setImportResolver(resolver)`**: where library sources come from, a function `(path, info) => source`. Each library is requested once per resolver, across runs and `request.security` contexts. Ready-made resolvers: `ImportResolver.fromMap`, `fromFiles` (Node.js), `fromUrl`, `fromGitHub` (public, or private with a token) and `chain`; `resolveImports(source, resolver)` collects a script's libraries ahead of a run. See [Libraries](docs/libraries.md).
+
+### Fixed
+
+- **Named arguments of a user method called with method syntax** (`obj.m(a = 1)`) bound to the wrong parameters: the named arguments reached the method as one positional value.
+- **A parameter skipped by a named-argument call** (`f(10, z = 7)` with a defaulted `y`) read as `na` instead of its default value, in functions and methods. Test: `tests/transpiler/method-named-args.test.ts`.
+
 ## [0.12.0] - 2026-10-19 - Strategy Broker Emulator Parity
 
 This release rebuilds the strategy broker emulator on TradingView's intrabar path (open → nearer extreme → farther extreme → close) and aligns orders, fills, margin, risk rules, excursions and the reporting getters with TradingView. Every rule was measured on TradingView strategy runs (BINANCE:BTCUSDT 1h / 1D, BATS:AAPL / NVDA / TSLA 1D, CME ES1! 1D, FX:EURUSD 1h, back-adjusted NYMEX CL1! 1D) and is pinned by tests whose expected values come from those runs.
