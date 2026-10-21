@@ -1474,7 +1474,16 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                     // LHS as a MemberExpression — which doesn't rewrite the
                     // root identifier of an assignment LHS — and `tracker`
                     // leaks bare → "ReferenceError: tracker is not defined".
-                    AssignmentExpression(node: any, state: ScopeManager) {
+                    AssignmentExpression(node: any, state: ScopeManager, c: any) {
+                        // A local of a returned IIFE (`float s = 0.0` in a switch arm) is a plain JS
+                        // variable, as in walkInitExpression: `s += i` must not become `$.set($.let.s, …)`.
+                        if (node.left.type === 'Identifier') {
+                            const [scopedName] = state.getVariable(node.left.name);
+                            if (scopedName === node.left.name && !state.isContextBound(node.left.name)) {
+                                c(node.right, state);
+                                return;
+                            }
+                        }
                         transformAssignmentExpression(node, state);
                     },
                     // c is the callback function for recursion (acorn-walk)
@@ -1490,6 +1499,14 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                     BinaryExpression(node: any, state: any, c: any) {
                         c(node.left, state);
                         c(node.right, state);
+                    },
+                    // Loops inside a returned IIFE (a switch arm that ends in a loop): the header's
+                    // counter must stay a raw JS local (`i++`, not `$.get(i, 0)++`).
+                    ForStatement(node: any, state: ScopeManager, c: any) {
+                        transformForStatement(node, state, c);
+                    },
+                    WhileStatement(node: any, state: ScopeManager, c: any) {
+                        transformWhileStatement(node, state, c);
                     },
                     ArrowFunctionExpression(node: any, state: any, c: any) {
                         // For IIFE arrow functions, manage hoisting like BlockStatement does
@@ -1647,7 +1664,9 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
         }
 
         // Just delegate to the callback to continue the recursion
+        scopeManager.enterFunctionHoistingRoot();
         c(node.body, scopeManager);
+        scopeManager.exitFunctionHoistingRoot();
 
         // Clean up: remove function parameters from local series vars after exiting function scope
         node.params.forEach((param: any) => {

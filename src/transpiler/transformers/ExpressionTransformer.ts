@@ -200,6 +200,59 @@ export function transformArrayIndex(node: any, scopeManager: ScopeManager): void
     }
 }
 
+/** The lookback index of a UDT-field history read, lowered to a scalar (`b.i[n]` must not emit a bare `n`). */
+function transformIndexExpression(property: any, scopeManager: ScopeManager, namespace?: string): any {
+    if (property.type === 'Identifier' && !scopeManager.isContextBound(property.name) && !scopeManager.isLoopVariable(property.name)) {
+        return ASTFactory.createGetCall(transformIdentifierForParam(property, scopeManager), 0);
+    }
+    if (property.type === 'BinaryExpression' || property.type === 'UnaryExpression' ||
+        property.type === 'LogicalExpression' || property.type === 'ConditionalExpression') {
+        return transformOperand(property, scopeManager, namespace);
+    }
+    return property;
+}
+
+/**
+ * A UDT-field history read (`b.c[N]`, `b.outer.inner[N]`). A per-bar instance stores a new object
+ * every bar, so `$.get(<base>, N).c` is the field N bars ago. A `var` instance (and a parameter,
+ * which may hold one) is one object mutated in place, so `$.get(<base>, N)` is today's object: the
+ * history belongs to the field and is recorded per bar with `$.param`, then read N back.
+ *
+ * TradingView takes that record where the top-level statement containing the read runs, whether or
+ * not the read's own `if` / loop block runs (v5, BTCUSDT 1h: `if k == 0` + `r := b.c[1]` is the
+ * previous bar's field, not the block's previous execution; a read placed before `b.c := close` is
+ * `close[2]`). So the record is hoisted ahead of that statement when the instance lives at the
+ * function's (or script's) top level.
+ */
+function udtFieldHistory(chain: any, baseName: string, baseRef: any, index: any, scopeManager: ScopeManager): any {
+    let cursor: any = chain;
+    while (cursor.object && cursor.object.type === 'MemberExpression') cursor = cursor.object;
+    const isParam = scopeManager.isLocalSeriesVar(baseName);
+    const [scopedName, kind] = scopeManager.getVariable(baseName);
+    if (!isParam && kind !== 'var' && kind !== 'varip') {
+        cursor.object = ASTFactory.createGetCall(baseRef, index);
+        return chain;
+    }
+    cursor.object = ASTFactory.createGetCall(baseRef, 0);
+    const paramId = scopeManager.generateParamId();
+    const paramCall = {
+        type: 'CallExpression',
+        callee: ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('param')),
+        arguments: [chain, UNDEFINED_ARG, makeParamNameArg(scopeManager, paramId)],
+        _transformed: true,
+        _isParamCall: true,
+    };
+    const record = ASTFactory.createVariableDeclaration(paramId, paramCall);
+    const atScopeRoot = isParam || /^(glb|fn)\d+_/.test(scopedName);
+    let series: any = paramCall;
+    if (atScopeRoot ? scopeManager.addScopeRootHoistedStatement(record) : scopeManager.addEagerHoistedStatement(record)) {
+        series = ASTFactory.createIdentifier(paramId);
+        series._skipTransformation = true;
+        series._arrayAccessed = true;
+    }
+    return ASTFactory.createGetCall(series, index);
+}
+
 export function addArrayAccess(node: any, scopeManager: ScopeManager): void {
     const memberExpr = ASTFactory.createGetCall(ASTFactory.createIdentifier(node.name), 0);
     // Preserve location info if available
@@ -710,9 +763,8 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
     // Subscript on a UDT-field chain: `bar.low[N]` where `bar` is a user
     // variable known to hold a UDT instance.
     //
-    // Pine semantics: `bar.low[N]` reads bar's `.low` from N bars ago.
-    // Since `bar = BAR.new()` runs every bar, `$.let.glb1_bar` is a Series
-    // of PineTypeObject instances → `$.get(glb1_bar, N).low` is correct.
+    // Pine semantics: `bar.low[N]` reads bar's `.low` from N bars ago (see
+    // udtFieldHistory for how per-bar and `var` instances differ).
     //
     // The rewrite is gated by `scopeManager.isUdtInstance(leafBaseName)` so it
     // does NOT fire for JS-style array indexing (e.g. `pl.points[0]` where
@@ -740,13 +792,9 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
                       return id;
                   })()
                 : createScopedVariableReference(baseName, scopeManager);
-            // Replace leaf `bar` with `$.get(<base-ref>, lookback)` and drop
-            // the outer `[N]` — the chain (`.low`) now reads from the previous
-            // bar's UDT instance.
-            cursor.object = ASTFactory.createGetCall(baseRef, memberNode.property);
-            // Re-anchor memberNode to the (now-rewritten) inner MemberExpression.
-            const inner = memberNode.object;
-            Object.assign(memberNode, inner);
+            const index = memberNode._indexTransformed ? memberNode.property : transformIndexExpression(memberNode.property, scopeManager);
+            // The outer `[N]` is dropped: the lookback moves into the rewritten chain.
+            Object.assign(memberNode, udtFieldHistory(memberNode.object, baseName, baseRef, index, scopeManager));
             delete memberNode.computed;
             return;
         }
@@ -1282,10 +1330,7 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
 
     if (isArrayAccess) {
         // UDT field subscript: `bar.field[N]` (and chained `bar.outer.inner[N]`)
-        // where the leaf base is a registered UDT instance. Pine semantics:
-        // `bar = BAR.new()` runs every bar, so `$.let.glb1_bar` is a Series of
-        // PineTypeObject instances; `$.get(<scoped-bar>, N).field` returns the
-        // field value at N bars ago.
+        // where the leaf base is a registered UDT instance (see udtFieldHistory).
         //
         // The default `$.param(scalar, N, name)` wrapping is WRONG for this
         // pattern when the call site is inside a conditional block — the
@@ -1312,13 +1357,13 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                           return id;
                       })()
                     : createScopedVariableReference(baseName, scopeManager);
-                cursor.object = ASTFactory.createGetCall(baseRef, arg.property);
-                // `arg.object` is now the rewritten `$.get(<base>, N).field…`
-                // chain; it replaces the whole `arg` expression. The outer
-                // `$.param(...)` wrapper that the rest of this branch would
-                // have applied is intentionally skipped — the lookback is
-                // already baked into `$.get(...)`.
-                return arg.object;
+                if (!arg._udtIndexTransformed) {
+                    arg.property = transformIndexExpression(arg.property, scopeManager, namespace);
+                    arg._udtIndexTransformed = true;
+                }
+                // The rewritten chain replaces the whole `arg` expression; the generic `$.param(...)`
+                // wrapping below is skipped since the lookback is already in it.
+                return udtFieldHistory(arg.object, baseName, baseRef, arg.property, scopeManager);
             }
         }
 

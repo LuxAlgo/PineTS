@@ -1353,40 +1353,50 @@ export class Parser {
      * the final iteration. Handles if/else chains by adding a return to each branch.
      */
     private _addImplicitReturn(statements: any[]): void {
-        const last = statements[statements.length - 1];
-        if (last.type === 'ForStatement' || last.type === 'WhileStatement') {
-            this._addImplicitReturnToLoop(statements);
-        } else {
-            this._emitLastValue(statements, (value) => new ReturnStatement(value));
-        }
+        this._emitLastValue(statements, (value) => new ReturnStatement(value));
     }
 
     /**
      * Give a trailing loop a value: Pine yields whatever the loop body's last statement
      * produced on its final iteration, or na when the body never ran (or the final
-     * iteration skipped it). Captures that into a temp reset at the top of each iteration.
+     * iteration skipped it). Captures that into a temp reset at the top of each iteration
+     * and returns the temp's name, or null when the loop body has no value.
      */
-    private _addImplicitReturnToLoop(statements: any[]): void {
+    private _captureLoopValue(statements: any[]): string | null {
         const loop = statements[statements.length - 1];
-        if (loop.body?.type !== 'BlockStatement' || loop.body.body.length === 0) return;
+        if (loop.body?.type !== 'BlockStatement' || loop.body.body.length === 0) return null;
 
         const tmp = `__loopValue_${this.loopValueCounter++}`;
         const na = () => new Identifier('na');
         const assignTmp = (value: any) => new ExpressionStatement(new AssignmentExpression('=', new Identifier(tmp), value));
 
-        if (!this._emitLastValue(loop.body.body, assignTmp)) return;
+        if (!this._emitLastValue(loop.body.body, assignTmp)) return null;
         loop.body.body.unshift(assignTmp(na()));
         statements.splice(statements.length - 1, 0, new VariableDeclaration([new VariableDeclarator(new Identifier(tmp), na())], VariableDeclarationKind.LET));
-        statements.push(new ReturnStatement(new Identifier(tmp)));
+        return tmp;
+    }
+
+    /** A block used as a value (switch arm, if-expression branch) that ends in a loop takes the loop's value. */
+    private _valueOfTrailingLoop(statements: any[]): void {
+        const last = statements[statements.length - 1];
+        if (last?.type === 'ForStatement' || last?.type === 'WhileStatement') {
+            this._emitLastValue(statements, (value) => new ExpressionStatement(value));
+        }
     }
 
     /**
      * Rewrite the last statement of `statements` so its value flows into `emit`
-     * (a `return`, or an assignment to a temp). Recurses into if/else branches.
-     * Returns false when the last statement has no usable value (`break`, a loop, …).
+     * (a `return`, or an assignment to a temp). Recurses into if/else branches and
+     * trailing loops. Returns false when the last statement has no usable value (`break`, …).
      */
     private _emitLastValue(statements: any[], emit: (value: any) => any): boolean {
         const last = statements[statements.length - 1];
+        if (last.type === 'ForStatement' || last.type === 'WhileStatement') {
+            const tmp = this._captureLoopValue(statements);
+            if (!tmp) return false;
+            statements.push(emit(new Identifier(tmp)));
+            return true;
+        }
         if (last.type === 'ExpressionStatement') {
             const expr = last.expression;
             if (expr?.type === 'Identifier' && (expr.name === 'break' || expr.name === 'continue')) return false;
@@ -2282,6 +2292,7 @@ export class Parser {
             if (stmt) consequentStmts.push(stmt);
         }
         this.advance(); // DEDENT
+        this._valueOfTrailingLoop(consequentStmts);
 
         let alternateStmts = [];
         if (this.match(TokenType.KEYWORD, 'else')) {
@@ -2314,6 +2325,7 @@ export class Parser {
                     if (stmt) alternateStmts.push(stmt);
                 }
                 this.advance(); // DEDENT
+                this._valueOfTrailingLoop(alternateStmts);
             }
         }
 
@@ -2394,6 +2406,7 @@ export class Parser {
                 const stmt = this.parseStatement();
                 if (stmt) consequentStmts.push(stmt);
             }
+            this._valueOfTrailingLoop(consequentStmts);
 
             // Extract the value expression from statements (for backwards compatibility)
             const consequent = this.getBlockValue(consequentStmts);
