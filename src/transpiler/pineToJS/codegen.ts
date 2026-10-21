@@ -5,6 +5,7 @@
 // Transforms ESTree-compatible AST into JavaScript code
 
 import { CONTEXT_PINE_VARS, NAMESPACE_COLLISION_NAMES, JS_RESERVED_WORDS } from '../settings';
+import { BUILTIN_PARAMS } from './builtinParams';
 
 // Set of names that conflict with Pine context variables/namespaces.
 // Function parameters with these names must be renamed to avoid Phase 2
@@ -27,6 +28,8 @@ export class CodeGenerator {
     // Maps user-defined function names to their ordered parameter names.
     // Used to resolve named arguments to correct positional slots.
     private functionParams: Map<string, string[]>;
+    // User method name -> parameter lists of its overloads, without the receiver.
+    private methodParams: Map<string, string[][]>;
     // Collision names (NAMESPACE_COLLISION_NAMES) that the user declared as a
     // FUNCTION. A bare call `name(...)` to one of these can only be the user
     // function (a constants namespace is not callable), so its callees must
@@ -54,6 +57,7 @@ export class CodeGenerator {
         this.includeSourceComments = options.includeSourceComments || false; // default false
         this.paramRenameCounter = 0;
         this.functionParams = new Map();
+        this.methodParams = new Map();
         this.userFunctionCollisions = new Set();
         this.userFunctionRenames = new Map();
         this.renamedTypeNames = new Set();
@@ -93,6 +97,7 @@ export class CodeGenerator {
         this.indent = 0;
         this.lastCommentedLine = -1;
         this.functionParams = new Map();
+        this.methodParams = new Map();
         this.userFunctionCollisions = new Set();
         this.userFunctionRenames = new Map();
 
@@ -475,6 +480,12 @@ export class CodeGenerator {
                 else if (p.type === 'AssignmentPattern' && p.left?.name) paramNames.push(p.left.name);
             }
             this.functionParams.set(node.id.name, paramNames);
+            // `obj.m(…)` passes the receiver itself: the call's arguments start at the second parameter.
+            if (node.id.isMethod) {
+                const overloads = this.methodParams.get(node.id.name) ?? [];
+                overloads.push(paramNames.slice(1));
+                this.methodParams.set(node.id.name, overloads);
+            }
         }
         // Recurse into body
         if (Array.isArray(node.body)) {
@@ -1640,13 +1651,15 @@ export class CodeGenerator {
 
         this.write('(');
 
-        // Check if this is a call to a user-defined function with named arguments.
         // Named args are collected into an ObjectExpression as the last argument by the parser.
-        // For user-defined functions, we need to expand them into the correct positional slots.
+        // For user-defined functions, and for the built-ins listed in BUILTIN_PARAMS, they are
+        // expanded into the correct positional slots.
         const calleeName = node.callee?.type === 'Identifier' ? node.callee.name : null;
-        const paramList = calleeName ? this.functionParams.get(calleeName) : null;
         const lastArg = node.arguments.length > 0 ? node.arguments[node.arguments.length - 1] : null;
-        const hasNamedArgs = lastArg?.type === 'ObjectExpression' && paramList;
+        const isNamedCall = lastArg?.type === 'ObjectExpression';
+        const userParams = calleeName ? this.functionParams.get(calleeName) : null;
+        const paramList = isNamedCall ? userParams || this.namedParamsFor(node.callee, node.arguments.length - 1, lastArg) : null;
+        const hasNamedArgs = isNamedCall && paramList;
 
         if (hasNamedArgs) {
             // Positional args (everything except the last ObjectExpression)
@@ -1708,6 +1721,45 @@ export class CodeGenerator {
         }
 
         this.write(')');
+    }
+
+    // Dotted name of a callee (`ta.sma`, `chart.point.new`, `nz`), or null for any other callee.
+    calleePath(callee) {
+        if (callee?.type === 'Identifier') return callee.name;
+        if (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier') {
+            const object = this.calleePath(callee.object);
+            return object ? `${object}.${callee.property.name}` : null;
+        }
+        return null;
+    }
+
+    // Parameter list a named call to a built-in (BUILTIN_PARAMS) or to a user method (`obj.m(…)`)
+    // resolves to, or null when the callee is neither or no overload takes these names.
+    namedParamsFor(callee, positionalCount, namedArgs) {
+        const name = this.calleePath(callee);
+        const generic = name && /^(array|matrix)\.new(_\w+)?$/.test(name) ? BUILTIN_PARAMS[`${name.split('.')[0]}.new<type>`] : undefined;
+        const builtin = name ? BUILTIN_PARAMS[name] ?? generic : undefined;
+        if (builtin) return this.pickOverload(builtin, positionalCount, namedArgs);
+        const method = callee?.type === 'MemberExpression' && !callee.computed ? this.methodParams.get(callee.property?.name) : undefined;
+        return method ? this.pickOverload(method, positionalCount, namedArgs) : null;
+    }
+
+    // The overload a named call resolves to: every named argument must come after the positional
+    // ones, and the overload needing the fewest skipped parameters wins.
+    pickOverload(overloads, positionalCount, namedArgs) {
+        const keys = namedArgs.properties.map((p) => p.key?.name ?? p.key?.value);
+        let best = null;
+        let bestGaps = Infinity;
+        for (const params of overloads) {
+            if (positionalCount > params.length || !keys.every((k) => params.indexOf(k) >= positionalCount)) continue;
+            const last = Math.max(positionalCount - 1, ...keys.map((k) => params.indexOf(k)));
+            const gaps = last + 1 - positionalCount - keys.length;
+            if (gaps < bestGaps) {
+                best = params;
+                bestGaps = gaps;
+            }
+        }
+        return best;
     }
 
     // Generate MemberExpression

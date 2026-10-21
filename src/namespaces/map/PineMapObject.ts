@@ -12,6 +12,8 @@ import { put_all as put_all_factory } from './methods/put_all';
 import { remove as remove_factory } from './methods/remove';
 import { size as size_factory } from './methods/size';
 import { values as values_factory } from './methods/values';
+import { spreadNamedArgs } from '../namedArgs';
+import { MAP_PARAMS } from '../collectionParams';
 
 export class PineMapObject {
     public map: Map<any, any>;
@@ -47,42 +49,42 @@ export class PineMapObject {
     }
 
     clear(...args: any[]) {
-        return this._clear(this, ...args);
+        return this._clear(this, ...spreadNamedArgs(args, MAP_PARAMS.clear, 1));
     }
 
     contains(...args: any[]) {
-        return this._contains(this, ...args);
+        return this._contains(this, ...spreadNamedArgs(args, MAP_PARAMS.contains, 1));
     }
 
     copy(...args: any[]) {
-        return this._copy(this, ...args);
+        return this._copy(this, ...spreadNamedArgs(args, MAP_PARAMS.copy, 1));
     }
 
     get(...args: any[]) {
-        return this._get(this, ...args);
+        return this._get(this, ...spreadNamedArgs(args, MAP_PARAMS.get, 1));
     }
 
     keys(...args: any[]) {
-        return this._keys(this, ...args);
+        return this._keys(this, ...spreadNamedArgs(args, MAP_PARAMS.keys, 1));
     }
 
     put(...args: any[]) {
-        return this._put(this, ...args);
+        return this._put(this, ...spreadNamedArgs(args, MAP_PARAMS.put, 1));
     }
 
     put_all(...args: any[]) {
-        return this._put_all(this, ...args);
+        return this._put_all(this, ...spreadNamedArgs(args, MAP_PARAMS.put_all, 1));
     }
 
     remove(...args: any[]) {
-        return this._remove(this, ...args);
+        return this._remove(this, ...spreadNamedArgs(args, MAP_PARAMS.remove, 1));
     }
 
     size(...args: any[]) {
-        return this._size(this, ...args);
+        return this._size(this, ...spreadNamedArgs(args, MAP_PARAMS.size, 1));
     }
 
     values(...args: any[]) {
-        return this._values(this, ...args);
+        return this._values(this, ...spreadNamedArgs(args, MAP_PARAMS.values, 1));
     }
 }

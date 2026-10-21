@@ -40,7 +40,8 @@ import { BUILTIN_METHOD_NAMES } from './transpiler/settings';
 import { PineRuntimeError } from './errors/PineRuntimeError';
 import type { IndicatorOptions } from './types/PineTypes';
 import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
-import { DRAWING_PARAMS, withNamedArgs } from './namespaces/drawingParams';
+import { DRAWING_PARAMS } from './namespaces/drawingParams';
+import { withNamedArgs } from './namespaces/namedArgs';
 
 // Stand-in for an na drawing in getter / setter calls: getters return na (`get_text` and
 // `get_tooltip` the na string), setters and anything else do nothing.

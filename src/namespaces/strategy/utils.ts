@@ -3,51 +3,35 @@
 
 import { Order, StrategyState, Trade } from './types';
 import { Series } from '../../Series';
+import { isNamedArgsBag } from '../utils';
+
+// strategy() parameters in the TradingView reference order.
+//prettier-ignore
+const STRATEGY_PARAMS = [
+    'title', 'shorttitle', 'overlay', 'format', 'precision', 'scale', 'pyramiding', 'calc_on_order_fills',
+    'calc_on_every_tick', 'max_bars_back', 'backtest_fill_limits_assumption', 'default_qty_type',
+    'default_qty_value', 'initial_capital', 'currency', 'slippage', 'commission_type', 'commission_value',
+    'process_orders_on_close', 'close_entries_rule', 'margin_long', 'margin_short', 'explicit_plot_zorder',
+    'max_lines_count', 'max_labels_count', 'max_boxes_count', 'calc_bars_count', 'risk_free_rate',
+    'use_bar_magnifier', 'fill_orders_on_standard_ohlc', 'max_polylines_count', 'dynamic_requests',
+    'behind_chart', 'calc_on_every_history_tick',
+];
 
 /**
- * Parse strategy() function arguments
+ * Parse strategy() function arguments: positional arguments by their place in the signature,
+ * then the transpiler's trailing named-arguments object (`strategy("t", overlay = true)` →
+ * `strategy("t", {overlay: true})`).
  */
 export function parseStrategyOptions(args: any[]): any {
-    // Pine v5/v6 strategy() signature:
-    //   strategy(title, shorttitle, overlay, format, precision, scale,
-    //            pyramiding, calc_on_order_fills, ...)
-    // The transpiler emits leading POSITIONAL strings (title, optionally
-    // shorttitle) followed by a trailing object with all named args.
-    // Three input shapes show up in practice:
-    //   1. strategy("title")                       — title only
-    //   2. strategy("title", { opts })             — title + named args
-    //   3. strategy("title", "shorttitle", {opts}) — Pine v6 with shorttitle
-    // The original implementation handled #1 and #2 but DROPPED the
-    // trailing options object in #3 (returning only { title }), which
-    // silently lost commission_type, commission_value, overlay, and every
-    // other named arg.
-    if (args.length === 0) return {};
-
-    // If first arg is itself an object, treat it as the whole options bag.
-    if (typeof args[0] === 'object' && args[0] !== null) {
-        return args[0];
-    }
-
+    const value = (v: any) => (v instanceof Series ? v.get(0) : v);
     const options: any = {};
-    if (typeof args[0] === 'string') options.title = args[0];
-
-    // Walk remaining args. Strings are positional (so far only shorttitle
-    // is observed in this position). The LAST object encountered is the
-    // named-args bundle — its keys win over positional fields if there's
-    // overlap (matching Pine's behavior of named args overriding positional).
-    let trailingOptions: any = null;
-    for (let i = 1; i < args.length; i++) {
-        const a = args[i];
-        if (typeof a === 'string') {
-            // Currently only shorttitle slots in as a positional string.
-            // If future Pine versions add more positional strings, extend
-            // here.
-            if (options.shorttitle === undefined) options.shorttitle = a;
-        } else if (typeof a === 'object' && a !== null) {
-            trailingOptions = a;
+    args.forEach((a, i) => {
+        if (isNamedArgsBag(a)) {
+            for (const key of Object.keys(a)) options[key] = value(a[key]);
+        } else if (i < STRATEGY_PARAMS.length && a !== undefined) {
+            options[STRATEGY_PARAMS[i]] = value(a);
         }
-    }
-    if (trailingOptions) Object.assign(options, trailingOptions);
+    });
     return options;
 }
 

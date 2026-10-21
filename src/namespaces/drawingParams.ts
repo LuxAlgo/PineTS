@@ -8,13 +8,9 @@
  * `line.set_extend({id: l, extend: extend.none})`, but these helpers take positional
  * parameters only, so a named call used to hand the whole bag to `id` and change
  * nothing. Each table lists a function's parameters by their Pine names (the
- * TradingView reference), in positional order; `withNamedArgs` maps a trailing bag
- * onto those positions before the call. A positional argument goes through the
- * namespace's `param()` (a variable's Series → its current value); a value in the bag
- * doesn't, so it is read at the current bar here.
+ * TradingView reference), in positional order; `withNamedArgs` (namedArgs.ts) maps a
+ * trailing bag onto those positions before the call.
  */
-
-import { Series } from '../Series';
 
 const ID = ['id'];
 const one = (name: string) => ['id', name];
@@ -138,21 +134,3 @@ export const DRAWING_PARAMS: Record<string, Record<string, string[]>> = {
     polyline: POLYLINE,
     table: TABLE,
 };
-
-// The transpiler's bag is an object literal; drawing objects, Series and chart
-// points are class instances, so a positional `id` is never mistaken for it.
-const isBag = (a: any) => a !== null && typeof a === 'object' && Object.getPrototypeOf(a) === Object.prototype;
-
-/** `fn` with a trailing named-arguments bag spread onto `params` positions. */
-export function withNamedArgs(fn: (...args: any[]) => any, params: string[]): (...args: any[]) => any {
-    return (...args: any[]) => {
-        if (!args.length || !isBag(args[args.length - 1])) return fn(...args);
-        const bag = args[args.length - 1];
-        const out = args.slice(0, -1);
-        for (const key of Object.keys(bag)) {
-            const i = params.indexOf(key);
-            if (i >= 0) out[i] = bag[key] instanceof Series ? bag[key].get(0) : bag[key];
-        }
-        return fn(...out);
-    };
-}

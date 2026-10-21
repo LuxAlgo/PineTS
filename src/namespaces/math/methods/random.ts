@@ -25,9 +25,10 @@ function nextDouble(state: bigint): [number, bigint] {
 export function random(context: any) {
     return (...args: any[]) => {
         const _callId: string | undefined = typeof args[args.length - 1] === 'string' ? args.pop() : undefined;
-        const min = args.length > 0 ? Series.from(args[0]).get(0) : 0;
-        const max = args.length > 1 ? Series.from(args[1]).get(0) : 1;
-        const seed = args.length > 2 ? Series.from(args[2]).get(0) : NaN;
+        // `undefined`: a parameter skipped by named arguments (`math.random(max = 10)`)
+        const min = args[0] !== undefined ? Series.from(args[0]).get(0) : 0;
+        const max = args[1] !== undefined ? Series.from(args[1]).get(0) : 1;
+        const seed = args[2] !== undefined ? Series.from(args[2]).get(0) : NaN;
 
         let u: number;
         if (!seed || Number.isNaN(seed)) {
