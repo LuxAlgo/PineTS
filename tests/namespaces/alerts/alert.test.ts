@@ -448,4 +448,74 @@ plot(close)
             }
         });
     });
+
+    // -- named arguments (Pine Script source) --
+    // Signatures per the Pine reference: alertcondition(condition, title, message), alert(message, freq).
+
+    describe('named arguments', () => {
+        const run = async (body: string) => {
+            const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
+            pineTS.setAlertMode('all');
+            const ctx: any = await pineTS.run(`//@version=5\nindicator("named args")\ncond = close > open\n${body}\n`);
+            const upBars = ctx.marketData.map((b: any, i: number) => (b.close > b.open ? i : -1)).filter((i: number) => i >= 0);
+            return { alerts: ctx.alerts, upBars };
+        };
+
+        it('alertcondition with named title and message', async () => {
+            const { alerts, upBars } = await run(`alertcondition(cond, title = "Up bar", message = "msg")`);
+            expect(upBars.length).toBeGreaterThan(0);
+            expect(alerts.map((a: any) => a.bar_index)).toEqual(upBars);
+            expect(alerts.every((a: any) => a.title === 'Up bar' && a.message === 'msg')).toBe(true);
+        });
+
+        it('alertcondition with every argument named', async () => {
+            const { alerts, upBars } = await run(`alertcondition(condition = cond, title = "Up bar", message = "msg")`);
+            expect(alerts.map((a: any) => a.bar_index)).toEqual(upBars);
+            expect(alerts.every((a: any) => a.title === 'Up bar' && a.message === 'msg')).toBe(true);
+        });
+
+        it('alertcondition with named arguments out of order and title skipped', async () => {
+            const { alerts, upBars } = await run(`alertcondition(message = "msg", condition = cond)`);
+            expect(alerts.map((a: any) => a.bar_index)).toEqual(upBars);
+            expect(alerts.every((a: any) => a.title === '' && a.message === 'msg')).toBe(true);
+        });
+
+        it('alertcondition with a named false condition never fires', async () => {
+            const { alerts } = await run(`alertcondition(condition = false, title = "Never")`);
+            expect(alerts.length).toBe(0);
+        });
+
+        it('alert with named message and freq', async () => {
+            const { alerts, upBars } = await run(`if cond\n    alert(message = "msg", freq = alert.freq_once_per_bar_close)`);
+            expect(alerts.map((a: any) => a.bar_index)).toEqual(upBars);
+            expect(alerts.every((a: any) => a.message === 'msg' && a.freq === 'once_per_bar_close' && a.id === 'alert_0')).toBe(true);
+        });
+
+        it('alert with named arguments out of order', async () => {
+            const { alerts, upBars } = await run(`if cond\n    alert(freq = alert.freq_all, message = "msg")`);
+            expect(alerts.map((a: any) => a.bar_index)).toEqual(upBars);
+            expect(alerts.every((a: any) => a.message === 'msg' && a.freq === 'all')).toBe(true);
+        });
+
+        it('alert with positional message and named freq', async () => {
+            const { alerts, upBars } = await run(`if cond\n    alert("msg", freq = alert.freq_all)`);
+            expect(alerts.map((a: any) => a.bar_index)).toEqual(upBars);
+            expect(alerts.every((a: any) => a.message === 'msg' && a.freq === 'all')).toBe(true);
+        });
+
+        it('alert with only a message defaults to freq_once_per_bar and keeps its callsite id', async () => {
+            const { alerts, upBars } = await run(`if cond\n    alert("msg")\nif cond\n    alert(message = "other")`);
+            expect(alerts.length).toBe(upBars.length * 2);
+            expect(alerts.every((a: any) => a.freq === 'once_per_bar')).toBe(true);
+            expect(alerts.filter((a: any) => a.id === 'alert_0').every((a: any) => a.message === 'msg')).toBe(true);
+            expect(alerts.filter((a: any) => a.id === 'alert_1').every((a: any) => a.message === 'other')).toBe(true);
+        });
+
+        it('alert with a dynamic named message', async () => {
+            const { alerts } = await run(`if barstate.islast\n    alert(message = "close=" + str.tostring(close), freq = alert.freq_all)`);
+            expect(alerts.length).toBe(1);
+            expect(alerts[0].message).toMatch(/^close=\d/);
+            expect(alerts[0].freq).toBe('all');
+        });
+    });
 });
