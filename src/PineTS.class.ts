@@ -6,6 +6,7 @@ import { splitTickerModifier, withTickerModifier } from './tickerModifier';
 import { createSyminfo } from './namespaces/Syminfo';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
+import { captureLiveState, restoreLiveState } from './liveRollback';
 import { processBarOrders, barPath, beginStrategyBar, riskStartBar, riskAtBarClose, processOrdersOnClose, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState, snapToTick } from './namespaces/strategy/utils';
 
 import { parseTimeframe, timeframeSeconds } from './timeframe';
@@ -1025,6 +1026,11 @@ export class PineTS {
         // bar. Null for indicator contexts.
         snapshot.strategy = snapshotStrategyState(context.strategy);
 
+        // Everything else a re-run of the bar must start from: the contents of arrays,
+        // maps, UDTs and drawings (a Series only holds their reference), which variables
+        // and local scopes exist, plot point counts. See liveRollback.ts.
+        snapshot.live = captureLiveState(context);
+
         // Also snapshot result and data array lengths
         snapshot.resultLength = this._getResultLength(context.result);
         snapshot.dataLength = context.data.close?.data?.length ?? 0;
@@ -1075,6 +1081,9 @@ export class PineTS {
         // indicators). Mutates context.strategy in place — its identity is
         // public API.
         restoreStrategyState(context.strategy, snapshot.strategy);
+
+        // Collections, objects, drawings, plots and scopes as they were before the bar.
+        restoreLiveState(context, snapshot.live);
     }
 
     /**
