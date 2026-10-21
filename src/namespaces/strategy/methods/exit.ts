@@ -160,6 +160,7 @@ export function exit(context: any) {
             from_entry: fromEntryId,
             profit, loss, limit, stop,
             trail_price: trailPrice,
+            _trailPriceRaw: trailPriceRaw,
             trail_points: trailPoints,
             trail_offset: trailOffset,
             oca_name: extractValue(parsed.oca_name),
@@ -183,13 +184,14 @@ export function exit(context: any) {
         };
 
         // Trail state carry-over: each trade's armed flag and running peak are
-        // engine-accumulated state, not user parameters. When the user calls
-        // strategy.exit every bar (the canonical "persistent" pattern), naive
-        // replacement would reset them every bar, preventing the trail from
-        // ever accumulating beyond a single bar's range. TV's trail state
-        // persists across re-calls — only the user-tunable parameters
-        // (trail_points, trail_offset, limit, stop, etc.) are refreshed.
-        const trails = replaced.find((o) => o._trailByTrade);
+        // engine-accumulated state, not user parameters. A re-call with the same
+        // activation (trail_price as passed, trail_points) keeps them, whatever else
+        // changes (offset, loss, ...). A re-call that moves the activation is a new
+        // trailing order that starts over (TV, BTCUSDT 1h: `trail_price = close`
+        // re-called every bar exits a long at the previous close minus the offset,
+        // 78,979.99, not at the previous high minus the offset, 79,020.61). The
+        // passed value is compared: its tick rounding follows the close.
+        const trails = replaced.find((o) => o._trailByTrade && o._trailPriceRaw === trailPriceRaw && o.trail_points === trailPoints);
         if (trails) order._trailByTrade = { ...trails._trailByTrade };
         // A trail whose activation level the close has already reached is active from that close,
         // with the close as its peak (TV, ES: a short's trail activating at 2,013 placed on a 1,994.5
