@@ -5,6 +5,7 @@ import { IProvider, ISymbolInfo } from './marketData/IProvider';
 import { PineArray } from './namespaces/array/array.index';
 import { PineMap } from './namespaces/map/map.index';
 import { PineMatrix } from './namespaces/matrix/matrix.index';
+import { PineMatrixObject } from './namespaces/matrix/PineMatrixObject';
 import { Barstate } from './namespaces/Barstate';
 import { Session } from './namespaces/Session';
 import { Core, NAHelper, AlertHelper } from './namespaces/Core';
@@ -39,6 +40,7 @@ import { BUILTIN_METHOD_NAMES } from './transpiler/settings';
 import { PineRuntimeError } from './errors/PineRuntimeError';
 import type { IndicatorOptions } from './types/PineTypes';
 import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
+import { DRAWING_PARAMS, withNamedArgs } from './namespaces/drawingParams';
 
 // Stand-in for an na drawing in getter / setter calls: getters return na (`get_text` and
 // `get_tooltip` the na string), setters and anything else do nothing.
@@ -161,6 +163,9 @@ export class Context {
     public viewportRight: number | undefined = undefined;
 
     public pineTSCode: Function | String;
+    /** The transpiled function this context runs (what request.security
+     *  secondaries run when their call site has no slice). */
+    public transpiledFn: Function | null = null;
 
     public inputs: Record<string, any> = {};
 
@@ -639,8 +644,13 @@ export class Context {
         if (root && !this.pine[root]) this.pine[root] = {};
 
         const target = root ? this.pine[root] : this.pine;
+        const named = DRAWING_PARAMS[root];
         for (const entry of entries) {
             if (typeof instance[entry] === 'function') {
+                // Drawing helpers take named arguments too. Wrapped on the helper itself, so the
+                // objects' method syntax (`l.set_extend(extend = …)` → `helper.set_extend(l, {…})`)
+                // gets them as well.
+                if (named && named[entry]) instance[entry] = withNamedArgs(instance[entry].bind(instance), named[entry]);
                 target[entry] = instance[entry].bind(instance);
             } else {
                 target[entry] = instance[entry];
@@ -904,7 +914,13 @@ export class Context {
         // PineMapObject wraps a JS Map as `.map` — iterating yields [key, value]
         // pairs (Pine's `for v in map` semantics).
         if (source.map instanceof Map) return source.map;
+        if (source instanceof PineMatrixObject) return this._matrixRows(source);
         return source;
+    }
+
+    /** A matrix iterates its rows, each a copy as returned by `matrix.row()`. */
+    private _matrixRows(m: PineMatrixObject): PineArrayObject[] {
+        return m.matrix.map((_, i) => m.row(i));
     }
 
     /**
@@ -918,6 +934,7 @@ export class Context {
         if (source == null) return [].entries();
         if (Array.isArray(source.array)) return source.array.entries();
         if (source.map instanceof Map) return source.map.entries();
+        if (source instanceof PineMatrixObject) return this._matrixRows(source).entries();
         if (Array.isArray(source)) return source.entries();
         // Map / Set / other iterables that already yield tuples
         if (typeof source.entries === 'function') return source.entries();
