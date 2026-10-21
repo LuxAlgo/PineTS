@@ -1414,7 +1414,10 @@ export class Parser {
         if (last.type === 'VariableDeclaration') {
             const declarator = last.declarations[last.declarations.length - 1];
             if (declarator?.id?.type !== 'Identifier') return false;
-            statements.push(emit(new Identifier(declarator.id.name)));
+            // `_` is a discard that Pine cannot read back, so the block's value is na. Codegen
+            // renames every `_` declaration, so reading `_` here would be an undeclared identifier.
+            const name = declarator.id.name === '_' ? 'na' : declarator.id.name;
+            statements.push(emit(new Identifier(name)));
             return true;
         }
         if (last.type === 'IfStatement') {
