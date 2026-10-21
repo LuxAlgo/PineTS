@@ -12,6 +12,27 @@ import { buildPropProxy } from './propProxy';
 import type { IPineInput, IPineProp, PreparedScript } from './types';
 
 /**
+ * Transpiled Pine sources, shared by every Indicator built from the same text. The transpiled
+ * function keeps no run state (request.security already runs one function in several
+ * contexts at once), and a host builds a new Indicator per session, per input change and
+ * per timeframe switch — each would otherwise pay the full transpile again.
+ */
+const TRANSPILED = new Map<string, Function>();
+const TRANSPILED_MAX = 16;
+
+function transpileCached(source: Function | string, opts: { debug: boolean; ln?: boolean }): Function {
+    if (typeof source !== 'string') return transpile(source, opts);
+    const key = `${opts.debug ? 1 : 0}${opts.ln ? 1 : 0}${source}`;
+    let fn = TRANSPILED.get(key);
+    if (!fn) {
+        fn = transpile(source, opts);
+        TRANSPILED.set(key, fn);
+        if (TRANSPILED.size > TRANSPILED_MAX) TRANSPILED.delete(TRANSPILED.keys().next().value!);
+    }
+    return fn;
+}
+
+/**
  * The single owner of every per-script artifact. Holds the source, lazily
  * transpiles + scans inputs on first `prepare()`, and caches the result so
  * the same Indicator instance can be passed to multiple `pine.run()` calls
@@ -109,7 +130,7 @@ export class Indicator {
     public prepare(opts: { debug?: boolean; ln?: boolean } = {}): PreparedScript {
         if (this._prepared) return this._prepared;
 
-        const fn = transpile(this.source, { debug: !!opts.debug, ln: opts.ln });
+        const fn = transpileCached(this.source, { debug: !!opts.debug, ln: opts.ln });
 
         const usesVisibleRange = detectViewportUsage(fn);
         const ltfSlices = (fn as any)._ltfSlices;
