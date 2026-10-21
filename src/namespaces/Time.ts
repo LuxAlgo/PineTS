@@ -4,7 +4,8 @@ import { Series } from '../Series';
 import { parseArgsForPineParams } from './utils';
 import { parseSessionSpec, isInSessionSpec } from './sessionSpec';
 import { PineRuntimeError } from '../errors/PineRuntimeError';
-import { canonicalTimeframe, parseTimeframe, timeframeBarStart } from '../timeframe';
+import { canonicalTimeframe, parseTimeframe } from '../timeframe';
+import { tradingPeriodStart } from './tradingPeriod';
 
 // Current values of the arguments; named arguments arrive as a trailing plain object
 // whose values may be series too (`time(tf, session = sessionInput)`).
@@ -196,7 +197,8 @@ export class TimeHelper {
             const tf = parseTimeframe(timeframe);
             if (!tf) throw new PineRuntimeError(`Cannot parse resolution '${timeframe}'. - Invalid format`, 'time');
             // Open time of the bar of `timeframe` that contains this bar
-            htfBarTime = timeframeBarStart(currentTime, tf);
+            const syminfo = this.context.pine?.syminfo;
+            htfBarTime = tradingPeriodStart(currentTime, tf, syminfo?.timezone || 'UTC', syminfo?.session);
         }
 
         // Session filtering
