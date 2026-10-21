@@ -1,5 +1,36 @@
 # Change Log
 
+## [0.12.1] - 2026-10-22 - Named Arguments & Transpiler Fixes
+
+This release fixes named arguments in alerts, gradient fills and drawing setters, and a set of transpiler and runtime parity bugs.
+
+### Changed
+
+- **`request.security` / `request.security_lower_tf` secondaries receive the parent's inputs** (#357), so input overrides apply inside the requested expression; they previously always used the inputs' defaults.
+- **Untitled `bgcolor` / `barcolor` / `plotchar` / `plotshape` / `plotarrow` / `plotbar` / `plotcandle` calls are keyed by call site** (`"#N"`, like untitled `plot()`) instead of all sharing `"plot"` (#360). Titled calls keep their title as the key.
+
+### Fixed
+
+#### Named arguments
+
+- **`alertcondition()` and `alert()`** (#461): `alertcondition(cond, title = …, message = …)` packed both values into the title; naming the condition made it fire on every bar; `alert(message = …, freq = …)` packed both into the message and lost the frequency. `alert(msg)` without a frequency also lost its `freq_once_per_bar` gating and its call-site id.
+- **Gradient `fill()`** (#363): `title`, `display`, `fillgaps`, `editable` and `show_last` given by name are read, and a gradient with named `top_color` / `bottom_color` is recognised as one.
+- **Drawing setters and getters** (#449): `line.set_extend(id = l, extend = …)` and the other line / box / label / linefill / polyline / table setters, getters, `copy` and `delete` take named arguments, also in method syntax.
+
+#### Language and runtime
+
+- **`var` UDT field history** (#460): `b.c[N]` read inside a conditional block, a loop, a switch arm or a function returns the field's history as on TradingView.
+- **A switch arm or `if` branch ending in a loop** returns the loop's last value instead of na (#460).
+- **`for … in` over a matrix** iterates its rows, and `const` declarations with a generic type parse (#457).
+- **An expression history offset on a series parameter** (`src[n + 1]` in a function) returns the value instead of na (#402).
+- **A `for i = a to b` loop** keeps the direction it had at loop entry when its body changes the bounds (#403).
+- **A shadowing declaration's initializer** (`x = x + 1` in an inner block) reads the outer variable instead of na (#404).
+- **`request.security` without a transpile-time slice** runs the parent's transpiled function instead of re-transpiling the source, which crashed after `runPretranspiled()` (#357).
+
+#### Strategy
+
+- **A re-called `strategy.exit` that moves its trailing activation** (`trail_price` or `trail_points`) restarts the trail; one that keeps it keeps the running peak (#460).
+
 ## [0.12.0] - 2026-10-19 - Strategy Broker Emulator Parity
 
 This release rebuilds the strategy broker emulator on TradingView's intrabar path (open → nearer extreme → farther extreme → close) and aligns orders, fills, margin, risk rules, excursions and the reporting getters with TradingView. Every rule was measured on TradingView strategy runs (BINANCE:BTCUSDT 1h / 1D, BATS:AAPL / NVDA / TSLA 1D, CME ES1! 1D, FX:EURUSD 1h, back-adjusted NYMEX CL1! 1D) and is pinned by tests whose expected values come from those runs.
