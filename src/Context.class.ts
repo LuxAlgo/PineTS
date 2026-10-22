@@ -38,9 +38,11 @@ import { isScalarHelper } from './namespaces/utils';
 import { receiverMatchesMethod } from './namespaces/methodDispatch';
 import { BUILTIN_METHOD_NAMES } from './transpiler/settings';
 import { PineRuntimeError } from './errors/PineRuntimeError';
+import type { IImportResolver } from './imports/IImportResolver';
 import type { IndicatorOptions } from './types/PineTypes';
 import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
-import { DRAWING_PARAMS, withNamedArgs } from './namespaces/drawingParams';
+import { DRAWING_PARAMS } from './namespaces/drawingParams';
+import { withNamedArgs } from './namespaces/namedArgs';
 
 // Stand-in for an na drawing in getter / setter calls: getters return na (`get_text` and
 // `get_tooltip` the na string), setters and anything else do nothing.
@@ -85,6 +87,9 @@ export class Context {
 
     /** The strategy broker trades on the tick grid (see PineTS.setFillsOnTickGrid). */
     public _fillsOnTickGrid: boolean = false;
+
+    /** Resolver of `import`ed libraries (see PineTS.setImportResolver), inherited by request.* secondary contexts. */
+    public importResolver: IImportResolver | null = null;
     /** The current bar's raw prices while the broker works on its tick-grid copy. */
     public _rawBar?: { open: number; high: number; low: number; close: number };
 
@@ -209,6 +214,7 @@ export class Context {
 
             nz: core.nz.bind(core),
             indicator: core.indicator.bind(core),
+            library: core.library.bind(core),
             fixnan: core.fixnan.bind(core),
             alertcondition: core.alertcondition.bind(core),
             alert: new AlertHelper(this),

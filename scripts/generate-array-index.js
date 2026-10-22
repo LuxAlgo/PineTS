@@ -47,7 +47,7 @@ async function generateIndex() {
         const objectMethodDefs = objectMethods
             .map((m) => {
                 return `    ${m.classProp}(...args: any[]) {
-        return this._${m.classProp}(this, ...args);
+        return this._${m.classProp}(this, ...spreadNamedArgs(args, ARRAY_PARAMS.${m.classProp}, 1));
     }`;
             })
             .join('\n\n');
@@ -72,6 +72,8 @@ async function generateIndex() {
 
 ${objectImports}
 import { tostringElements } from './format';
+import { spreadNamedArgs } from '../namedArgs';
+import { ARRAY_PARAMS } from '../collectionParams';
 
 ${pineArrayTypeEnum}
 
@@ -107,7 +109,7 @@ ${objectMethodDefs}
         const getterImports = getters.length > 0 ? getters.map((name) => `import { ${name} } from './getters/${name}';`).join('\n') : '';
 
         // Imports for index file
-        let indexImports = `export { PineArrayObject } from './PineArrayObject';\n\nimport { PineArrayObject } from './PineArrayObject';`;
+        let indexImports = `export { PineArrayObject } from './PineArrayObject';\n\nimport { PineArrayObject } from './PineArrayObject';\nimport { withNamedArgs } from '../namedArgs';\nimport { ARRAY_PARAMS } from '../collectionParams';`;
 
         // Import static method factories
         const staticMethodImports = methods
@@ -138,7 +140,7 @@ ${getters.map((g) => `      ${g}: ${g}`).join(',\n')}
                 if (staticMethods.includes(m.classProp)) {
                     return `    this.${m.classProp} = ${m.export}(context);`;
                 }
-                return `    this.${m.classProp} = (id: PineArrayObject, ...args: any[]) => id.${m.classProp}(...args);`;
+                return `    this.${m.classProp} = withNamedArgs((id: PineArrayObject, ...args: any[]) => id.${m.classProp}(...args), ARRAY_PARAMS.${m.classProp});`;
             })
             .join('\n');
 

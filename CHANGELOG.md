@@ -1,5 +1,28 @@
 # Change Log
 
+## [0.13.0] - 2026-10-22 - Libraries & Named Arguments for Every Built-in
+
+This release adds Pine Script libraries (`import` / `export`) with pluggable import resolvers, and makes named arguments work for every built-in function and method.
+
+### Added
+
+- **Libraries: `import` and `export`** (#458) (`Unexpected token KEYWORD 'import'`). `import <user>/<library>/<version> [as <alias>]` links the library's exported functions, methods, types and enums into the script: `alias.f()`, `alias.Type.new()`, `alias.Type` annotations, `alias.Enum.field`, `obj.method()` / `alias.method(obj)`. Each call site keeps its own `var` and `ta.*` state, library names never collide with the script's, non-exported methods stay private, and only the declarations the script reaches are linked. Libraries may import libraries. An alias named like a built-in namespace (`import TradingView/ta/7` used as `ta.*`) keeps reaching the built-ins the library does not export. A library script (`library()`, `export`) also runs on its own. Tests: `tests/imports/`, `tests/transpiler/import-export-parsing.test.ts`.
+- **Import resolvers**, set with `PineTS.setImportResolver(resolver)`: where library sources come from. Built like the data providers: an `IImportResolver` interface, a `BaseImportResolver` with the caching (each library fetched once per resolver, across runs, instances sharing the resolver and `request.security` contexts; optional `cacheDuration`), one class per source — `GitHubImportResolver` (public, or private with a token), `FileImportResolver` (Node.js), `UrlImportResolver`, `MapImportResolver`, `ChainImportResolver` — and an `ImportResolver` registry of ready instances (`ImportResolver.GitHub.configure({ url, token })`). A plain function `(path, info) => source` also works. `resolveImports(source, resolver)` collects a script's libraries ahead of a run. See [Libraries](docs/libraries.md).
+
+### Fixed
+
+#### Named arguments
+
+- **Named arguments for every built-in function and method** (#464). Outside the functions that read their own named-arguments object, the whole object landed in the first parameter: `ta.sma(source = close, length = 5)` was na on every bar, and the same held for `math`, `str`, `color`, `ticker`, `timeframe`, `chart.point`, `syminfo`, the type conversions, `array.new_*`, the strategy getters and risk rules, and array / matrix / map functions and methods. A named call now compiles to its positional form, with the overload picked by the argument names; a skipped parameter takes its default. Test: `tests/transpiler/named-arguments.test.ts`.
+- **Named arguments of a user method called with method syntax** (`obj.m(a = 1)`) bound to the wrong parameters: the named arguments reached the method as one positional value. Overloads are told apart by their parameter names.
+- **A parameter skipped by a named-argument call** (`f(10, z = 7)` with a defaulted `y`) read as `na` instead of its default value, in functions and methods. Test: `tests/transpiler/method-named-args.test.ts`.
+- **Collection methods and drawing helpers** read a trailing named-arguments object: array / matrix / map methods, `table.new` / `cell` / `clear` / `merge_cells`, `linefill.set_color` and `footprint.get_row_by_price` (#464).
+- **A positional number or bool before a series argument** no longer drops every argument after it in `plot`, `plotchar`, `barcolor`, `bgcolor`, ... (#464).
+
+#### Positional arguments
+
+- Found by the same sweep (#464): `plot()` `linestyle`, `fill()` between hlines (which has no `show_last`), `strategy()` positional settings, `label.new` / `box.new` sizes in points, and the `matrix.sort` order constants.
+
 ## [0.12.1] - 2026-10-22 - Named Arguments & Transpiler Fixes
 
 This release fixes named arguments in alerts, gradient fills and drawing setters, and a set of transpiler and runtime parity bugs.

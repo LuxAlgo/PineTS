@@ -2,7 +2,8 @@
 
 import { Series } from '../Series';
 import { PineTypeObject } from './PineTypeObject';
-import { extractCallsiteId, isNamedArgsBag, parseArgsForPineParams } from './utils';
+import { extractCallsiteId, parseArgsForPineParams } from './utils';
+import { spreadNamedArgs } from './namedArgs';
 import type { IndicatorOptions, PlotCharOptions } from '../types/PineTypes';
 import { silentInSecondary } from './silentInSecondary';
 
@@ -67,6 +68,9 @@ export function parseIndicatorOptions(args: any[]): Partial<IndicatorOptions> {
     return parseArgsForPineParams<Partial<IndicatorOptions>>(args, INDICATOR_SIGNATURE, INDICATOR_ARGS_TYPES);
 }
 
+const LIBRARY_SIGNATURE = ['title', 'overlay', 'dynamic_requests'];
+const LIBRARY_ARGS_TYPES = { title: 'string', overlay: 'boolean', dynamic_requests: 'boolean' };
+
 /**
  * NAHelper implements the dual-use `na` identifier.
  * - Bare `na` → `na.__value` → NaN
@@ -113,17 +117,6 @@ export const ALERT_FREQ = {
 
 const ALERT_PARAMS = ['message', 'freq'];
 const ALERTCONDITION_PARAMS = ['condition', 'title', 'message'];
-
-/** Positional arguments with the trailing named-arguments bag (`f(a, title="x")` → `f(a, {title: "x"})`) moved into its parameter slots. */
-function spreadNamedArgs(args: any[], names: string[]): any[] {
-    const last = args[args.length - 1];
-    if (!isNamedArgsBag(last) || !Object.keys(last).some((k) => names.includes(k))) return args;
-    const out = args.slice(0, -1);
-    names.forEach((name, i) => {
-        if (name in last) out[i] = last[name];
-    });
-    return out;
-}
 
 /**
  * AlertHelper implements the dual-use `alert` identifier.
@@ -254,6 +247,12 @@ export class Core {
         // Layer order: spec defaults ← source call args ← user .prop overrides (latest wins).
         this.context.indicator = { ...defaults, ...options, ...(this.context._propOverrides ?? {}) };
         return this.context.indicator;
+    }
+
+    // A library run on its own executes its global code, as an indicator would.
+    library(...args) {
+        const unwrapped = args.map((a) => (a instanceof Series ? a.get(0) : a));
+        return this.indicator(parseArgsForPineParams<Partial<IndicatorOptions>>(unwrapped, LIBRARY_SIGNATURE, LIBRARY_ARGS_TYPES));
     }
 
     get bar_index() {

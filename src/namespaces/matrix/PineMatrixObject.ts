@@ -50,6 +50,8 @@ import { swap_columns as swap_columns_factory } from './methods/swap_columns';
 import { swap_rows as swap_rows_factory } from './methods/swap_rows';
 import { trace as trace_factory } from './methods/trace';
 import { transpose as transpose_factory } from './methods/transpose';
+import { spreadNamedArgs } from '../namedArgs';
+import { MATRIX_PARAMS } from '../collectionParams';
 
 export class PineMatrixObject {
     public matrix: any[][];
@@ -174,194 +176,194 @@ export class PineMatrixObject {
     }
 
     add_col(...args: any[]) {
-        return this._add_col(this, ...args);
+        return this._add_col(this, ...spreadNamedArgs(args, MATRIX_PARAMS.add_col, 1));
     }
 
     add_row(...args: any[]) {
-        return this._add_row(this, ...args);
+        return this._add_row(this, ...spreadNamedArgs(args, MATRIX_PARAMS.add_row, 1));
     }
 
     avg(...args: any[]) {
-        return this._avg(this, ...args);
+        return this._avg(this, ...spreadNamedArgs(args, MATRIX_PARAMS.avg, 1));
     }
 
     col(...args: any[]) {
-        return this._col(this, ...args);
+        return this._col(this, ...spreadNamedArgs(args, MATRIX_PARAMS.col, 1));
     }
 
     columns(...args: any[]) {
-        return this._columns(this, ...args);
+        return this._columns(this, ...spreadNamedArgs(args, MATRIX_PARAMS.columns, 1));
     }
 
     concat(...args: any[]) {
-        return this._concat(this, ...args);
+        return this._concat(this, ...spreadNamedArgs(args, MATRIX_PARAMS.concat, 1));
     }
 
     copy(...args: any[]) {
-        return this._copy(this, ...args);
+        return this._copy(this, ...spreadNamedArgs(args, MATRIX_PARAMS.copy, 1));
     }
 
     det(...args: any[]) {
-        return this._det(this, ...args);
+        return this._det(this, ...spreadNamedArgs(args, MATRIX_PARAMS.det, 1));
     }
 
     diff(...args: any[]) {
-        return this._diff(this, ...args);
+        return this._diff(this, ...spreadNamedArgs(args, MATRIX_PARAMS.diff, 1));
     }
 
     eigenvalues(...args: any[]) {
-        return this._eigenvalues(this, ...args);
+        return this._eigenvalues(this, ...spreadNamedArgs(args, MATRIX_PARAMS.eigenvalues, 1));
     }
 
     eigenvectors(...args: any[]) {
-        return this._eigenvectors(this, ...args);
+        return this._eigenvectors(this, ...spreadNamedArgs(args, MATRIX_PARAMS.eigenvectors, 1));
     }
 
     elements_count(...args: any[]) {
-        return this._elements_count(this, ...args);
+        return this._elements_count(this, ...spreadNamedArgs(args, MATRIX_PARAMS.elements_count, 1));
     }
 
     fill(...args: any[]) {
-        return this._fill(this, ...args);
+        return this._fill(this, ...spreadNamedArgs(args, MATRIX_PARAMS.fill, 1));
     }
 
     get(...args: any[]) {
-        return this._get(this, ...args);
+        return this._get(this, ...spreadNamedArgs(args, MATRIX_PARAMS.get, 1));
     }
 
     inv(...args: any[]) {
-        return this._inv(this, ...args);
+        return this._inv(this, ...spreadNamedArgs(args, MATRIX_PARAMS.inv, 1));
     }
 
     is_antidiagonal(...args: any[]) {
-        return this._is_antidiagonal(this, ...args);
+        return this._is_antidiagonal(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_antidiagonal, 1));
     }
 
     is_antisymmetric(...args: any[]) {
-        return this._is_antisymmetric(this, ...args);
+        return this._is_antisymmetric(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_antisymmetric, 1));
     }
 
     is_binary(...args: any[]) {
-        return this._is_binary(this, ...args);
+        return this._is_binary(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_binary, 1));
     }
 
     is_diagonal(...args: any[]) {
-        return this._is_diagonal(this, ...args);
+        return this._is_diagonal(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_diagonal, 1));
     }
 
     is_identity(...args: any[]) {
-        return this._is_identity(this, ...args);
+        return this._is_identity(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_identity, 1));
     }
 
     is_square(...args: any[]) {
-        return this._is_square(this, ...args);
+        return this._is_square(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_square, 1));
     }
 
     is_stochastic(...args: any[]) {
-        return this._is_stochastic(this, ...args);
+        return this._is_stochastic(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_stochastic, 1));
     }
 
     is_symmetric(...args: any[]) {
-        return this._is_symmetric(this, ...args);
+        return this._is_symmetric(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_symmetric, 1));
     }
 
     is_triangular(...args: any[]) {
-        return this._is_triangular(this, ...args);
+        return this._is_triangular(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_triangular, 1));
     }
 
     is_zero(...args: any[]) {
-        return this._is_zero(this, ...args);
+        return this._is_zero(this, ...spreadNamedArgs(args, MATRIX_PARAMS.is_zero, 1));
     }
 
     kron(...args: any[]) {
-        return this._kron(this, ...args);
+        return this._kron(this, ...spreadNamedArgs(args, MATRIX_PARAMS.kron, 1));
     }
 
     max(...args: any[]) {
-        return this._max(this, ...args);
+        return this._max(this, ...spreadNamedArgs(args, MATRIX_PARAMS.max, 1));
     }
 
     median(...args: any[]) {
-        return this._median(this, ...args);
+        return this._median(this, ...spreadNamedArgs(args, MATRIX_PARAMS.median, 1));
     }
 
     min(...args: any[]) {
-        return this._min(this, ...args);
+        return this._min(this, ...spreadNamedArgs(args, MATRIX_PARAMS.min, 1));
     }
 
     mode(...args: any[]) {
-        return this._mode(this, ...args);
+        return this._mode(this, ...spreadNamedArgs(args, MATRIX_PARAMS.mode, 1));
     }
 
     mult(...args: any[]) {
-        return this._mult(this, ...args);
+        return this._mult(this, ...spreadNamedArgs(args, MATRIX_PARAMS.mult, 1));
     }
 
     pinv(...args: any[]) {
-        return this._pinv(this, ...args);
+        return this._pinv(this, ...spreadNamedArgs(args, MATRIX_PARAMS.pinv, 1));
     }
 
     pow(...args: any[]) {
-        return this._pow(this, ...args);
+        return this._pow(this, ...spreadNamedArgs(args, MATRIX_PARAMS.pow, 1));
     }
 
     rank(...args: any[]) {
-        return this._rank(this, ...args);
+        return this._rank(this, ...spreadNamedArgs(args, MATRIX_PARAMS.rank, 1));
     }
 
     remove_col(...args: any[]) {
-        return this._remove_col(this, ...args);
+        return this._remove_col(this, ...spreadNamedArgs(args, MATRIX_PARAMS.remove_col, 1));
     }
 
     remove_row(...args: any[]) {
-        return this._remove_row(this, ...args);
+        return this._remove_row(this, ...spreadNamedArgs(args, MATRIX_PARAMS.remove_row, 1));
     }
 
     reshape(...args: any[]) {
-        return this._reshape(this, ...args);
+        return this._reshape(this, ...spreadNamedArgs(args, MATRIX_PARAMS.reshape, 1));
     }
 
     reverse(...args: any[]) {
-        return this._reverse(this, ...args);
+        return this._reverse(this, ...spreadNamedArgs(args, MATRIX_PARAMS.reverse, 1));
     }
 
     row(...args: any[]) {
-        return this._row(this, ...args);
+        return this._row(this, ...spreadNamedArgs(args, MATRIX_PARAMS.row, 1));
     }
 
     rows(...args: any[]) {
-        return this._rows(this, ...args);
+        return this._rows(this, ...spreadNamedArgs(args, MATRIX_PARAMS.rows, 1));
     }
 
     set(...args: any[]) {
-        return this._set(this, ...args);
+        return this._set(this, ...spreadNamedArgs(args, MATRIX_PARAMS.set, 1));
     }
 
     sort(...args: any[]) {
-        return this._sort(this, ...args);
+        return this._sort(this, ...spreadNamedArgs(args, MATRIX_PARAMS.sort, 1));
     }
 
     submatrix(...args: any[]) {
-        return this._submatrix(this, ...args);
+        return this._submatrix(this, ...spreadNamedArgs(args, MATRIX_PARAMS.submatrix, 1));
     }
 
     sum(...args: any[]) {
-        return this._sum(this, ...args);
+        return this._sum(this, ...spreadNamedArgs(args, MATRIX_PARAMS.sum, 1));
     }
 
     swap_columns(...args: any[]) {
-        return this._swap_columns(this, ...args);
+        return this._swap_columns(this, ...spreadNamedArgs(args, MATRIX_PARAMS.swap_columns, 1));
     }
 
     swap_rows(...args: any[]) {
-        return this._swap_rows(this, ...args);
+        return this._swap_rows(this, ...spreadNamedArgs(args, MATRIX_PARAMS.swap_rows, 1));
     }
 
     trace(...args: any[]) {
-        return this._trace(this, ...args);
+        return this._trace(this, ...spreadNamedArgs(args, MATRIX_PARAMS.trace, 1));
     }
 
     transpose(...args: any[]) {
-        return this._transpose(this, ...args);
+        return this._transpose(this, ...spreadNamedArgs(args, MATRIX_PARAMS.transpose, 1));
     }
 }

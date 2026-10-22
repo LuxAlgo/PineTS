@@ -16,6 +16,8 @@ const TYPE_CHECK = {
     // Using 'color' instead of 'string' prevents NaN from invalidating the signature.
     color: (arg) => typeof arg === 'string' || arg === null || (typeof arg === 'number' && isNaN(arg)) || arg instanceof Series,
     number: (arg) => typeof arg === 'number',
+    // Pine v6 text sizes: a size.* constant or a font size in points.
+    size: (arg) => typeof arg === 'string' || typeof arg === 'number',
     boolean: (arg) => typeof arg === 'boolean',
     array: (arg) => Array.isArray(arg),
     object: (arg) => typeof arg === 'object',
@@ -52,6 +54,8 @@ export type PineTypeMap<T> = {
         : never;
 };
 
+const SCALAR_TYPES = new Set(['number', 'string', 'boolean', 'size']);
+
 /** True for the trailing named-arguments object the transpiler emits (`f(a, title="x")` → `f(a, {title: "x"})`). */
 export function isNamedArgsBag(arg: any): boolean {
     return TYPE_CHECK.remaining_options(arg);
@@ -86,12 +90,25 @@ export function parseArgsForPineParams<T>(args: any[], signatures: any[], types:
 
     let options_arg: Partial<T> = {};
 
+    // A variable can arrive as its Series: positional arguments are wrapped by `param()`, and
+    // named values aren't unwrapped at all. Read it at the current bar unless the parameter takes
+    // a series. Without this a positional number / string / bool failed its type check and dropped
+    // every argument after it, and a named plot handle or title was stored as a Series.
+    const isSeriesValue = (value: any) => value instanceof Series || isScalarHelper(value);
+    const readScalar = (value: any, type: string) => (SCALAR_TYPES.has(type) && isSeriesValue(value) ? Series.from(value).get(0) : value);
+    const readNamed = (value: any, type: string) =>
+        type !== undefined && type !== 'series' && type !== 'any' && isSeriesValue(value) ? Series.from(value).get(0) : value;
+
     const valid = new Array(signatures.length).fill(true);
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
 
+        // A parameter skipped by named arguments (`f(a, c = 1)` compiles to `f(a, undefined, 1)`)
+        if (arg === undefined) continue;
+
         if (TYPE_CHECK.remaining_options(arg)) {
-            options_arg = arg;
+            options_arg = {};
+            for (const key of Object.keys(arg)) options_arg[key] = readNamed(arg[key], types[key]);
             break;
         }
 
@@ -113,8 +130,9 @@ export function parseArgsForPineParams<T>(args: any[], signatures: any[], types:
                 options[optionName] = arg;
             } else {
                 const typeChecker = TYPE_CHECK[types[optionName]];
-                if (typeof typeChecker === 'function' && typeChecker(arg)) {
-                    options[optionName] = arg;
+                const value = typeof typeChecker === 'function' && !typeChecker(arg) ? readScalar(arg, expectedType) : arg;
+                if (typeof typeChecker === 'function' && typeChecker(value)) {
+                    options[optionName] = value;
                 } else {
                     valid[o] = false;
                 }

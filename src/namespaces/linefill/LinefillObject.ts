@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { LineObject } from '../line/LineObject';
+import { spreadNamedArgs } from '../namedArgs';
 
 let _linefillIdCounter = 0;
 
@@ -36,7 +37,8 @@ export class LinefillObject {
         return this.line2;
     }
 
-    set_color(color: any): void {
+    set_color(...args: any[]): void {
+        let [color] = spreadNamedArgs(args, ['color']);
         if (!this._deleted) {
             // Resolve Series/thunks — instance methods receive raw transpiler
             // values that may still be wrapped (unlike LinefillHelper.set_color

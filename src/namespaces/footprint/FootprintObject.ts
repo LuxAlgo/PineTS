@@ -5,6 +5,7 @@ import type { FootprintLevel } from '../../marketData/types';
 import { PineArrayObject, PineArrayType } from '../array/PineArrayObject';
 import { VolumeRowObject } from './VolumeRowObject';
 import { resolveArg } from './resolve';
+import { spreadNamedArgs } from '../namedArgs';
 
 /** Parameters of the `request.footprint()` call a footprint was built for. */
 export interface FootprintParams {
@@ -283,8 +284,8 @@ export class FootprintObject {
     }
 
     /** The row whose `[down_price, up_price)` range contains `price`; `na` outside the footprint. */
-    get_row_by_price(priceArg: any): VolumeRowObject | number {
-        const price = resolveArg(priceArg);
+    get_row_by_price(...args: any[]): VolumeRowObject | number {
+        const price = resolveArg(spreadNamedArgs(args, ['price'])[0]);
         if (typeof price !== 'number' || !Number.isFinite(price)) return NaN;
         const index = floorTolerant(price / this._rowSize) - this._firstRowIndex;
         if (index < 0 || index >= this.rowList.length) return NaN;
