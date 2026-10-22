@@ -1249,6 +1249,8 @@ function scopeMemberChainBase(member: any, scopeManager: ScopeManager): void {
     }
 }
 
+const isUndefinedArg = (arg: any) => arg?.type === 'Identifier' && arg.name === 'undefined';
+
 export function transformFunctionArgument(arg: any, namespace: string, scopeManager: ScopeManager): any {
     // Handle binary expressions (arithmetic operations)
 
@@ -1827,8 +1829,9 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
         // Transform arguments using the namespace's param
         const newArgs: any[] = [];
         node.arguments.forEach((arg: any) => {
-            // If argument is already a param call, don't wrap it again
-            if (arg._isParamCall) {
+            // If argument is already a param call, don't wrap it again. A skipped parameter
+            // (`undefined`, from named arguments) stays bare so the function's default applies.
+            if (arg._isParamCall || isUndefinedArg(arg)) {
                 newArgs.push(arg);
                 return;
             }
@@ -1979,7 +1982,7 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
         // Transform arguments using $.param
         node.arguments = node.arguments.map((arg: any) => {
             // If argument is already a param call, don't wrap it again
-            if (arg._isParamCall) {
+            if (arg._isParamCall || isUndefinedArg(arg)) {
                 return arg;
             }
             return transformFunctionArgument(arg, CONTEXT_NAME, scopeManager);
@@ -2160,7 +2163,7 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
             
             // 3. Transform arguments
             const transformedArgs = node.arguments.map((arg: any) => {
-                if (arg._isParamCall) return arg;
+                if (arg._isParamCall || isUndefinedArg(arg)) return arg;
                 return transformFunctionArgument(arg, CONTEXT_NAME, scopeManager);
             });
 

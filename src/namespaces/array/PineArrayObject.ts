@@ -46,6 +46,8 @@ import { sum as sum_factory } from './methods/sum';
 import { unshift as unshift_factory } from './methods/unshift';
 import { variance as variance_factory } from './methods/variance';
 import { tostringElements } from './format';
+import { spreadNamedArgs } from '../namedArgs';
+import { ARRAY_PARAMS } from '../collectionParams';
 
 export enum PineArrayType {
     any = '',
@@ -166,174 +168,174 @@ export class PineArrayObject {
     }
 
     abs(...args: any[]) {
-        return this._abs(this, ...args);
+        return this._abs(this, ...spreadNamedArgs(args, ARRAY_PARAMS.abs, 1));
     }
 
     avg(...args: any[]) {
-        return this._avg(this, ...args);
+        return this._avg(this, ...spreadNamedArgs(args, ARRAY_PARAMS.avg, 1));
     }
 
     binary_search(...args: any[]) {
-        return this._binary_search(this, ...args);
+        return this._binary_search(this, ...spreadNamedArgs(args, ARRAY_PARAMS.binary_search, 1));
     }
 
     binary_search_leftmost(...args: any[]) {
-        return this._binary_search_leftmost(this, ...args);
+        return this._binary_search_leftmost(this, ...spreadNamedArgs(args, ARRAY_PARAMS.binary_search_leftmost, 1));
     }
 
     binary_search_rightmost(...args: any[]) {
-        return this._binary_search_rightmost(this, ...args);
+        return this._binary_search_rightmost(this, ...spreadNamedArgs(args, ARRAY_PARAMS.binary_search_rightmost, 1));
     }
 
     clear(...args: any[]) {
-        return this._clear(this, ...args);
+        return this._clear(this, ...spreadNamedArgs(args, ARRAY_PARAMS.clear, 1));
     }
 
     concat(...args: any[]) {
-        return this._concat(this, ...args);
+        return this._concat(this, ...spreadNamedArgs(args, ARRAY_PARAMS.concat, 1));
     }
 
     copy(...args: any[]) {
-        return this._copy(this, ...args);
+        return this._copy(this, ...spreadNamedArgs(args, ARRAY_PARAMS.copy, 1));
     }
 
     covariance(...args: any[]) {
-        return this._covariance(this, ...args);
+        return this._covariance(this, ...spreadNamedArgs(args, ARRAY_PARAMS.covariance, 1));
     }
 
     every(...args: any[]) {
-        return this._every(this, ...args);
+        return this._every(this, ...spreadNamedArgs(args, ARRAY_PARAMS.every, 1));
     }
 
     fill(...args: any[]) {
-        return this._fill(this, ...args);
+        return this._fill(this, ...spreadNamedArgs(args, ARRAY_PARAMS.fill, 1));
     }
 
     first(...args: any[]) {
-        return this._first(this, ...args);
+        return this._first(this, ...spreadNamedArgs(args, ARRAY_PARAMS.first, 1));
     }
 
     get(...args: any[]) {
-        return this._get(this, ...args);
+        return this._get(this, ...spreadNamedArgs(args, ARRAY_PARAMS.get, 1));
     }
 
     includes(...args: any[]) {
-        return this._includes(this, ...args);
+        return this._includes(this, ...spreadNamedArgs(args, ARRAY_PARAMS.includes, 1));
     }
 
     indexof(...args: any[]) {
-        return this._indexof(this, ...args);
+        return this._indexof(this, ...spreadNamedArgs(args, ARRAY_PARAMS.indexof, 1));
     }
 
     insert(...args: any[]) {
-        return this._insert(this, ...args);
+        return this._insert(this, ...spreadNamedArgs(args, ARRAY_PARAMS.insert, 1));
     }
 
     join(...args: any[]) {
-        return this._join(this, ...args);
+        return this._join(this, ...spreadNamedArgs(args, ARRAY_PARAMS.join, 1));
     }
 
     last(...args: any[]) {
-        return this._last(this, ...args);
+        return this._last(this, ...spreadNamedArgs(args, ARRAY_PARAMS.last, 1));
     }
 
     lastindexof(...args: any[]) {
-        return this._lastindexof(this, ...args);
+        return this._lastindexof(this, ...spreadNamedArgs(args, ARRAY_PARAMS.lastindexof, 1));
     }
 
     max(...args: any[]) {
-        return this._max(this, ...args);
+        return this._max(this, ...spreadNamedArgs(args, ARRAY_PARAMS.max, 1));
     }
 
     median(...args: any[]) {
-        return this._median(this, ...args);
+        return this._median(this, ...spreadNamedArgs(args, ARRAY_PARAMS.median, 1));
     }
 
     min(...args: any[]) {
-        return this._min(this, ...args);
+        return this._min(this, ...spreadNamedArgs(args, ARRAY_PARAMS.min, 1));
     }
 
     mode(...args: any[]) {
-        return this._mode(this, ...args);
+        return this._mode(this, ...spreadNamedArgs(args, ARRAY_PARAMS.mode, 1));
     }
 
     percentile_linear_interpolation(...args: any[]) {
-        return this._percentile_linear_interpolation(this, ...args);
+        return this._percentile_linear_interpolation(this, ...spreadNamedArgs(args, ARRAY_PARAMS.percentile_linear_interpolation, 1));
     }
 
     percentile_nearest_rank(...args: any[]) {
-        return this._percentile_nearest_rank(this, ...args);
+        return this._percentile_nearest_rank(this, ...spreadNamedArgs(args, ARRAY_PARAMS.percentile_nearest_rank, 1));
     }
 
     percentrank(...args: any[]) {
-        return this._percentrank(this, ...args);
+        return this._percentrank(this, ...spreadNamedArgs(args, ARRAY_PARAMS.percentrank, 1));
     }
 
     pop(...args: any[]) {
-        return this._pop(this, ...args);
+        return this._pop(this, ...spreadNamedArgs(args, ARRAY_PARAMS.pop, 1));
     }
 
     push(...args: any[]) {
-        return this._push(this, ...args);
+        return this._push(this, ...spreadNamedArgs(args, ARRAY_PARAMS.push, 1));
     }
 
     range(...args: any[]) {
-        return this._range(this, ...args);
+        return this._range(this, ...spreadNamedArgs(args, ARRAY_PARAMS.range, 1));
     }
 
     remove(...args: any[]) {
-        return this._remove(this, ...args);
+        return this._remove(this, ...spreadNamedArgs(args, ARRAY_PARAMS.remove, 1));
     }
 
     reverse(...args: any[]) {
-        return this._reverse(this, ...args);
+        return this._reverse(this, ...spreadNamedArgs(args, ARRAY_PARAMS.reverse, 1));
     }
 
     set(...args: any[]) {
-        return this._set(this, ...args);
+        return this._set(this, ...spreadNamedArgs(args, ARRAY_PARAMS.set, 1));
     }
 
     shift(...args: any[]) {
-        return this._shift(this, ...args);
+        return this._shift(this, ...spreadNamedArgs(args, ARRAY_PARAMS.shift, 1));
     }
 
     size(...args: any[]) {
-        return this._size(this, ...args);
+        return this._size(this, ...spreadNamedArgs(args, ARRAY_PARAMS.size, 1));
     }
 
     slice(...args: any[]) {
-        return this._slice(this, ...args);
+        return this._slice(this, ...spreadNamedArgs(args, ARRAY_PARAMS.slice, 1));
     }
 
     some(...args: any[]) {
-        return this._some(this, ...args);
+        return this._some(this, ...spreadNamedArgs(args, ARRAY_PARAMS.some, 1));
     }
 
     sort(...args: any[]) {
-        return this._sort(this, ...args);
+        return this._sort(this, ...spreadNamedArgs(args, ARRAY_PARAMS.sort, 1));
     }
 
     sort_indices(...args: any[]) {
-        return this._sort_indices(this, ...args);
+        return this._sort_indices(this, ...spreadNamedArgs(args, ARRAY_PARAMS.sort_indices, 1));
     }
 
     standardize(...args: any[]) {
-        return this._standardize(this, ...args);
+        return this._standardize(this, ...spreadNamedArgs(args, ARRAY_PARAMS.standardize, 1));
     }
 
     stdev(...args: any[]) {
-        return this._stdev(this, ...args);
+        return this._stdev(this, ...spreadNamedArgs(args, ARRAY_PARAMS.stdev, 1));
     }
 
     sum(...args: any[]) {
-        return this._sum(this, ...args);
+        return this._sum(this, ...spreadNamedArgs(args, ARRAY_PARAMS.sum, 1));
     }
 
     unshift(...args: any[]) {
-        return this._unshift(this, ...args);
+        return this._unshift(this, ...spreadNamedArgs(args, ARRAY_PARAMS.unshift, 1));
     }
 
     variance(...args: any[]) {
-        return this._variance(this, ...args);
+        return this._variance(this, ...spreadNamedArgs(args, ARRAY_PARAMS.variance, 1));
     }
 }

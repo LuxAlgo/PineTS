@@ -2,7 +2,8 @@
 
 import { Series } from '../Series';
 import { PineTypeObject } from './PineTypeObject';
-import { extractCallsiteId, isNamedArgsBag, parseArgsForPineParams } from './utils';
+import { extractCallsiteId, parseArgsForPineParams } from './utils';
+import { spreadNamedArgs } from './namedArgs';
 import type { IndicatorOptions, PlotCharOptions } from '../types/PineTypes';
 import { silentInSecondary } from './silentInSecondary';
 
@@ -116,17 +117,6 @@ export const ALERT_FREQ = {
 
 const ALERT_PARAMS = ['message', 'freq'];
 const ALERTCONDITION_PARAMS = ['condition', 'title', 'message'];
-
-/** Positional arguments with the trailing named-arguments bag (`f(a, title="x")` → `f(a, {title: "x"})`) moved into its parameter slots. */
-function spreadNamedArgs(args: any[], names: string[]): any[] {
-    const last = args[args.length - 1];
-    if (!isNamedArgsBag(last) || !Object.keys(last).some((k) => names.includes(k))) return args;
-    const out = args.slice(0, -1);
-    names.forEach((name, i) => {
-        if (name in last) out[i] = last[name];
-    });
-    return out;
-}
 
 /**
  * AlertHelper implements the dual-use `alert` identifier.

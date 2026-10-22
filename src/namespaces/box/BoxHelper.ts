@@ -20,7 +20,7 @@ const BOX_NEW_ARGS_TYPES: Record<string, string> = {
     top_left: 'point', bottom_right: 'point',
     border_color: 'color', border_width: 'number', border_style: 'string',
     extend: 'string', xloc: 'string', bgcolor: 'color',
-    text: 'string', text_size: 'string', text_color: 'color',
+    text: 'string', text_size: 'size', text_color: 'color',
     text_halign: 'string', text_valign: 'string', text_wrap: 'string',
     text_font_family: 'string', force_overlay: 'boolean',
 };

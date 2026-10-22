@@ -3,12 +3,10 @@
 import { Series } from '../../Series';
 import { TableObject, truncCoord } from './TableObject';
 import { silentInSecondary } from '../silentInSecondary';
+import { spreadNamedArgs } from '../namedArgs';
 
-// Complete named-parameter lists for named-args detection. These MUST cover
-// every parameter of the corresponding Pine function: if a key is missing, a
-// call naming ONLY missing keys (e.g. `table.new(..., force_overlay=true)`)
-// falls through to positional handling — the options object lands in the next
-// positional slot and its values are silently dropped.
+// Parameters of each function in TradingView reference order, for spreading named arguments.
+// They MUST cover every parameter: a named argument missing here is silently dropped.
 //prettier-ignore
 const TABLE_NEW_PARAMS = [
     'position', 'columns', 'rows', 'bgcolor', 'frame_color', 'frame_width',
@@ -16,21 +14,10 @@ const TABLE_NEW_PARAMS = [
 ];
 //prettier-ignore
 const TABLE_CELL_PARAMS = [
-    'column', 'row', 'text', 'width', 'height', 'text_color', 'text_halign',
+    'table_id', 'column', 'row', 'text', 'width', 'height', 'text_color', 'text_halign',
     'text_valign', 'text_size', 'bgcolor', 'tooltip', 'text_font_family', 'text_formatting',
 ];
-const TABLE_RANGE_PARAMS = ['start_column', 'start_row', 'end_column', 'end_row'];
-
-// Detect the transpiler's trailing named-args object: a plain {key: val} bag
-// carrying at least one known parameter name. TableObject is excluded because
-// it shares property names with table.new params (bgcolor, position, ...) and
-// can legitimately appear as a trailing positional arg (e.g. `table.clear(t)`).
-function isNamedArgs(arg: any, params: string[]): boolean {
-    return !!arg && typeof arg === 'object' && !Array.isArray(arg)
-        && !(arg instanceof TableObject)
-        && params.some((p) => p in arg);
-}
-
+const TABLE_RANGE_PARAMS = ['table_id', 'start_column', 'start_row', 'end_column', 'end_row'];
 export class TableHelper {
     private _tables: TableObject[] = [];
 
@@ -91,37 +78,17 @@ export class TableHelper {
         let border_width: any = 0;
         let force_overlay: any = false;
 
-        // Detect trailing options object from transpiler's named-args pattern
-        // e.g. table.new("top_right", 3, 3, {bgcolor: "#1e293b", frame_color: "#475569", ...})
-        // or   table.new({position: "top_right", columns: 3, rows: 3, bgcolor: "#1e293b", ...})
-        const lastArg = args[args.length - 1];
-        const hasOpts = isNamedArgs(lastArg, TABLE_NEW_PARAMS);
-
-        if (hasOpts) {
-            const opts = lastArg;
-            // Positional args before the opts object
-            const posArgs = args.slice(0, -1);
-            position = posArgs[0] ?? opts.position ?? position;
-            columns = posArgs[1] ?? opts.columns ?? columns;
-            rows = posArgs[2] ?? opts.rows ?? rows;
-            bgcolor = opts.bgcolor ?? bgcolor;
-            frame_color = opts.frame_color ?? frame_color;
-            frame_width = opts.frame_width ?? frame_width;
-            border_color = opts.border_color ?? border_color;
-            border_width = opts.border_width ?? border_width;
-            force_overlay = opts.force_overlay ?? force_overlay;
-        } else {
-            // Positional arguments
-            position = args[0] ?? position;
-            columns = args[1] ?? columns;
-            rows = args[2] ?? rows;
-            bgcolor = args[3] ?? bgcolor;
-            frame_color = args[4] ?? frame_color;
-            frame_width = args[5] ?? frame_width;
-            border_color = args[6] ?? border_color;
-            border_width = args[7] ?? border_width;
-            force_overlay = args[8] ?? force_overlay;
-        }
+        // Named arguments (`table.new(position.top_right, 3, 3, bgcolor = c)` → `table.new(..., {bgcolor: c})`)
+        args = spreadNamedArgs(args, TABLE_NEW_PARAMS);
+        position = args[0] ?? position;
+        columns = args[1] ?? columns;
+        rows = args[2] ?? rows;
+        bgcolor = args[3] ?? bgcolor;
+        frame_color = args[4] ?? frame_color;
+        frame_width = args[5] ?? frame_width;
+        border_color = args[6] ?? border_color;
+        border_width = args[7] ?? border_width;
+        force_overlay = args[8] ?? force_overlay;
 
         const tbl = new TableObject(
             this._resolve(position) || 'top_right',
@@ -181,46 +148,22 @@ export class TableHelper {
         let text_font_family: any = 'default';
         let text_formatting: any = 'none';
 
-        // Detect trailing options object from transpiler's named-args pattern
-        // e.g. table.cell(t1, 0, 0, {text: "X", text_color: "#fff", ...})
-        const lastArg = args[args.length - 1];
-        const hasOpts = isNamedArgs(lastArg, TABLE_CELL_PARAMS);
-
-        if (hasOpts) {
-            const opts = lastArg;
-            // Positional args before the opts object:
-            // args = [table_id, column, row, <text?>, opts]
-            const posArgs = args.slice(0, -1);
-            table_id = posArgs[0];
-            column = posArgs.length > 1 ? posArgs[1] : (opts.column ?? 0);
-            row = posArgs.length > 2 ? posArgs[2] : (opts.row ?? 0);
-            text = posArgs[3] ?? opts.text ?? text;
-            width = posArgs[4] ?? opts.width ?? width;
-            height = posArgs[5] ?? opts.height ?? height;
-            text_color = posArgs[6] ?? opts.text_color ?? text_color;
-            text_halign = posArgs[7] ?? opts.text_halign ?? text_halign;
-            text_valign = posArgs[8] ?? opts.text_valign ?? text_valign;
-            text_size = posArgs[9] ?? opts.text_size ?? text_size;
-            bgcolor = posArgs[10] ?? opts.bgcolor ?? bgcolor;
-            tooltip = posArgs[11] ?? opts.tooltip ?? tooltip;
-            text_font_family = posArgs[12] ?? opts.text_font_family ?? text_font_family;
-            text_formatting = posArgs[13] ?? opts.text_formatting ?? text_formatting;
-        } else {
-            table_id = args[0];
-            column = args[1] ?? 0;
-            row = args[2] ?? 0;
-            text = args[3] ?? text;
-            width = args[4] ?? width;
-            height = args[5] ?? height;
-            text_color = args[6] ?? text_color;
-            text_halign = args[7] ?? text_halign;
-            text_valign = args[8] ?? text_valign;
-            text_size = args[9] ?? text_size;
-            bgcolor = args[10] ?? bgcolor;
-            tooltip = args[11] ?? tooltip;
-            text_font_family = args[12] ?? text_font_family;
-            text_formatting = args[13] ?? text_formatting;
-        }
+        // Named arguments (`table.cell(t1, 0, 0, text = "X")` → `table.cell(t1, 0, 0, {text: "X"})`)
+        args = spreadNamedArgs(args, TABLE_CELL_PARAMS);
+        table_id = args[0];
+        column = args[1] ?? 0;
+        row = args[2] ?? 0;
+        text = args[3] ?? text;
+        width = args[4] ?? width;
+        height = args[5] ?? height;
+        text_color = args[6] ?? text_color;
+        text_halign = args[7] ?? text_halign;
+        text_valign = args[8] ?? text_valign;
+        text_size = args[9] ?? text_size;
+        bgcolor = args[10] ?? bgcolor;
+        tooltip = args[11] ?? tooltip;
+        text_font_family = args[12] ?? text_font_family;
+        text_formatting = args[13] ?? text_formatting;
 
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
@@ -260,23 +203,12 @@ export class TableHelper {
         let end_column: any;
         let end_row: any;
 
-        const lastArg = args[args.length - 1];
-        const hasOpts = isNamedArgs(lastArg, TABLE_RANGE_PARAMS);
-
-        if (hasOpts) {
-            const opts = lastArg;
-            table_id = args[0];
-            start_column = args.length > 2 ? args[1] : (opts.start_column ?? 0);
-            start_row = args.length > 3 ? args[2] : (opts.start_row ?? 0);
-            end_column = opts.end_column ?? (args.length > 4 ? args[3] : start_column);
-            end_row = opts.end_row ?? (args.length > 5 ? args[4] : start_row);
-        } else {
-            table_id = args[0];
-            start_column = args[1] ?? 0;
-            start_row = args[2] ?? 0;
-            end_column = args[3] ?? start_column;
-            end_row = args[4] ?? start_row;
-        }
+        args = spreadNamedArgs(args, TABLE_RANGE_PARAMS);
+        table_id = args[0];
+        start_column = args[1] ?? 0;
+        start_row = args[2] ?? 0;
+        end_column = args[3] ?? start_column;
+        end_row = args[4] ?? start_row;
 
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
@@ -303,23 +235,12 @@ export class TableHelper {
         let end_column: any;
         let end_row: any;
 
-        const lastArg = args[args.length - 1];
-        const hasOpts = isNamedArgs(lastArg, TABLE_RANGE_PARAMS);
-
-        if (hasOpts) {
-            const opts = lastArg;
-            table_id = args[0];
-            start_column = args.length > 2 ? args[1] : (opts.start_column ?? 0);
-            start_row = args.length > 3 ? args[2] : (opts.start_row ?? 0);
-            end_column = opts.end_column ?? (args.length > 4 ? args[3] : 0);
-            end_row = opts.end_row ?? (args.length > 5 ? args[4] : 0);
-        } else {
-            table_id = args[0];
-            start_column = args[1] ?? 0;
-            start_row = args[2] ?? 0;
-            end_column = args[3] ?? 0;
-            end_row = args[4] ?? 0;
-        }
+        args = spreadNamedArgs(args, TABLE_RANGE_PARAMS);
+        table_id = args[0];
+        start_column = args[1] ?? 0;
+        start_row = args[2] ?? 0;
+        end_column = args[3] ?? 0;
+        end_row = args[4] ?? 0;
 
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;

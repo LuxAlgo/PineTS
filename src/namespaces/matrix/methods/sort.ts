@@ -2,20 +2,15 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { order } from '../../Types';
+import { sortedIndices, sortValueReader } from '../../array/utils';
 
 export function sort(context: Context) {
-    return (id: PineMatrixObject, column: number = 0, order: string = 'asc') => {
-        const rows = id.matrix.length;
-        if (rows === 0) return;
-        
-        id.matrix.sort((a, b) => {
-            const valA = a[column];
-            const valB = b[column];
-            
-            if (valA < valB) return order === 'asc' ? -1 : 1;
-            if (valA > valB) return order === 'asc' ? 1 : -1;
-            return 0;
-        });
+    return (id: PineMatrixObject, column: number = 0, _order: order = order.ascending, sort_field?: string | number) => {
+        if (id.matrix.length === 0) return;
+        const keys = id.matrix.map((row) => row[column]);
+        const read = sortValueReader(keys, sort_field);
+        const rows = sortedIndices(read ? keys.map(read) : keys, _order).map((i) => id.matrix[i]);
+        id.matrix.splice(0, rows.length, ...rows);
     };
 }
-

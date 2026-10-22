@@ -47,7 +47,7 @@ async function generateIndex() {
         const objectMethodDefs = objectMethods
             .map((m) => {
                 return `    ${m.classProp}(...args: any[]) {
-        return this._${m.classProp}(this, ...args);
+        return this._${m.classProp}(this, ...spreadNamedArgs(args, MATRIX_PARAMS.${m.classProp}, 1));
     }`;
             })
             .join('\n\n');
@@ -57,6 +57,8 @@ async function generateIndex() {
 // Run: npm run generate:matrix-index
 
 ${objectImports}
+import { spreadNamedArgs } from '../namedArgs';
+import { MATRIX_PARAMS } from '../collectionParams';
 
 export class PineMatrixObject {
     public matrix: any[][];
@@ -98,7 +100,7 @@ ${objectMethodDefs}
         const getterImports = getters.length > 0 ? getters.map((name) => `import { ${name} } from './getters/${name}';`).join('\n') : '';
 
         // Imports for index file
-        let indexImports = `export { PineMatrixObject } from './PineMatrixObject';\n\nimport { PineMatrixObject } from './PineMatrixObject';`;
+        let indexImports = `export { PineMatrixObject } from './PineMatrixObject';\n\nimport { PineMatrixObject } from './PineMatrixObject';\nimport { withNamedArgs } from '../namedArgs';\nimport { MATRIX_PARAMS } from '../collectionParams';`;
 
         // Import static method factories
         const staticMethodImports = methods
@@ -129,7 +131,7 @@ ${getters.map((g) => `      ${g}: ${g}`).join(',\n')}
                 if (staticMethods.includes(m.classProp)) {
                     return `    this.${m.classProp} = ${m.export}(context);`;
                 }
-                return `    this.${m.classProp} = (id: PineMatrixObject, ...args: any[]) => id.${m.classProp}(...args);`;
+                return `    this.${m.classProp} = withNamedArgs((id: PineMatrixObject, ...args: any[]) => id.${m.classProp}(...args), MATRIX_PARAMS.${m.classProp});`;
             })
             .join('\n');
 

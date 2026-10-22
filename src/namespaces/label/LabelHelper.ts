@@ -19,7 +19,7 @@ const LABEL_NEW_SIGNATURES = [
 //prettier-ignore
 const LABEL_NEW_ARGS_TYPES = {
     x: 'number', y: 'number', text: 'string', xloc: 'string', yloc: 'string',
-    color: 'color', style: 'string', textcolor: 'color', size: 'string',
+    color: 'color', style: 'string', textcolor: 'color', size: 'size',
     textalign: 'string', tooltip: 'string', text_font_family: 'string',
     force_overlay: 'boolean', point: 'point', text_formatting: 'string',
 };
