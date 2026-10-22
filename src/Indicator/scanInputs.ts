@@ -48,11 +48,12 @@ const SOURCE_OPTIONS = ['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'hlcc4', 
 
 /**
  * Public entry point. Returns `[]` for invalid Pine or for non-string source.
+ * `libraries` (import path → source) lets `input.enum()` read imported enums.
  */
-export function scanInputs(source: unknown): IPineInput[] {
+export function scanInputs(source: unknown, libraries?: Record<string, string>): IPineInput[] {
     if (typeof source !== 'string') return [];
 
-    const parsed: any = pineToJS(source);
+    const parsed: any = pineToJS(source, { libraries });
     if (!parsed.success || !parsed.inputs) return [];
 
     const inputs: IPineInput[] = [];

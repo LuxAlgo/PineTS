@@ -35,8 +35,10 @@ import {
     SwitchExpression,
     SwitchCase,
     VariableDeclarationKind,
+    ImportDeclaration,
 } from './ast';
 import { NAMESPACE_COLLISION_NAMES } from '../settings';
+import { readImportStatement } from './imports';
 
 const TYPE_QUALIFIERS = ['const', 'simple', 'series'];
 
@@ -350,13 +352,49 @@ export class Parser {
 
             if (this.match(TokenType.EOF)) break;
 
-            const stmt = this.parseStatement();
+            const stmt = this.parseTopLevelStatement();
             if (stmt) body.push(stmt);
 
             this.skipNewlines();
         }
 
         return new Program(body);
+    }
+
+    // `import` and `export` only exist in the global scope. Used as names
+    // (`import = 1`, `export(x) => x`) they fall through to parseStatement's
+    // reserved-name error.
+    private parseTopLevelStatement() {
+        if (this.isImportStatement()) {
+            const line = this.peek().line;
+            const { spec, next } = readImportStatement(this.tokens, this.pos);
+            this.pos = next;
+            const node: any = new ImportDeclaration(spec.path, spec.user, spec.name, spec.version, spec.alias);
+            node._line = line;
+            return node;
+        }
+        if (this.isExportStatement()) {
+            const exportToken = this.advance();
+            const stmt = this.parseStatement(false);
+            if (stmt?.type !== 'FunctionDeclaration' && stmt?.type !== 'TypeDefinition' && !stmt?._enum) {
+                throw new Error(`Only functions, methods, types and enums can be exported at ${this.startOf(exportToken)}`);
+            }
+            stmt.exported = true;
+            return stmt;
+        }
+        return this.parseStatement();
+    }
+
+    // `import user/...`: the path starts with a word (or a digit-led user name).
+    private isImportStatement(): boolean {
+        const next = this.peek(1).type;
+        return this.match(TokenType.KEYWORD, 'import') && (next === TokenType.IDENTIFIER || next === TokenType.NUMBER);
+    }
+
+    // `export f(...)`, `export float f(...)`, `export type / method / enum ...`
+    private isExportStatement(): boolean {
+        const next = this.peek(1).type;
+        return this.match(TokenType.KEYWORD, 'export') && (next === TokenType.IDENTIFIER || next === TokenType.KEYWORD);
     }
 
     // Pine keeps functions and variables in separate namespaces, so a variable may
@@ -370,13 +408,14 @@ export class Parser {
             if (t.type === TokenType.INDENT) depth++;
             else if (t.type === TokenType.DEDENT) depth--;
             const atLineStart = i === 0 || this.tokens[i - 1].type === TokenType.NEWLINE || this.tokens[i - 1].type === TokenType.DEDENT;
+            const prev = this.tokens[i - 1];
+            const afterExport = prev?.type === TokenType.KEYWORD && prev.value === 'export';
             if (depth === 0 && t.type === TokenType.KEYWORD && t.value === 'type' && i + 1 < this.tokens.length) {
-                const prev = this.tokens[i - 1];
-                if (atLineStart || (prev?.type === TokenType.KEYWORD && prev.value === 'export')) {
+                if (atLineStart || afterExport) {
                     this.typeNames.add(this.tokens[i + 1].value);
                 }
             }
-            if (depth !== 0 || !atLineStart || t.type !== TokenType.IDENTIFIER) continue;
+            if (depth !== 0 || !(atLineStart || afterExport) || t.type !== TokenType.IDENTIFIER) continue;
             this.pos = i;
             if (!this.isFunctionDeclaration()) continue;
             const hasReturnType = this.peek(1).type !== TokenType.LPAREN;
@@ -506,6 +545,10 @@ export class Parser {
         // While loop
         else if (this.match(TokenType.KEYWORD, 'while')) {
             stmt = this.parseWhileStatement();
+        }
+        else if (this.isImportStatement() || this.isExportStatement()) {
+            const token = this.peek();
+            throw new Error(`"${token.value}" is only allowed in the global scope at ${this.startOf(token)}`);
         }
         // Break/continue statements
         else if (this.match(TokenType.KEYWORD, 'break') || this.match(TokenType.KEYWORD, 'continue')) {
@@ -725,10 +768,9 @@ export class Parser {
             new Property(new Identifier(m.name), new Literal(m.title !== null ? m.title : m.name)),
         );
         const objExpr = new ObjectExpression(props);
-        return new VariableDeclaration(
-            [new VariableDeclarator(new Identifier(name), objExpr)],
-            VariableDeclarationKind.CONST
-        );
+        const decl: any = new VariableDeclaration([new VariableDeclarator(new Identifier(name), objExpr)], VariableDeclarationKind.CONST);
+        decl._enum = true;
+        return decl;
     }
 
     parseTypeDefinition() {

@@ -327,7 +327,7 @@ export function security(context: any) {
         const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate);
 
         // Mark as secondary context to prevent infinite recursion
-        pineTS.markAsSecondary();
+        pineTS.markAsSecondary(context);
 
         let secContext: any;
         try {

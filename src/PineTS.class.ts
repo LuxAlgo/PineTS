@@ -6,6 +6,8 @@ import { splitTickerModifier, withTickerModifier } from './tickerModifier';
 import { createSyminfo } from './namespaces/Syminfo';
 import { Series } from './Series';
 import { Indicator } from './Indicator';
+import { toImportResolver } from './imports/Function/FunctionImportResolver.class';
+import type { IImportResolver, ImportResolverFn } from './imports/IImportResolver';
 import { processBarOrders, barPath, beginStrategyBar, riskStartBar, riskAtBarClose, processOrdersOnClose, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState, snapToTick } from './namespaces/strategy/utils';
 
 import { parseTimeframe, timeframeSeconds } from './timeframe';
@@ -66,8 +68,13 @@ export class PineTS {
     private _currentIndicator: Indicator | null = null;
 
     private _isSecondaryContext: boolean = false;
-    public markAsSecondary() {
+    /**
+     * Mark this instance as the secondary context of a `request.*` call.
+     * It inherits what its parent runs with: the import resolver.
+     */
+    public markAsSecondary(parent?: Context) {
         this._isSecondaryContext = true;
+        if (parent) this._importResolver = parent.importResolver;
     }
 
     private _syminfo: ISymbolInfo;
@@ -122,6 +129,21 @@ export class PineTS {
      */
     public setAlertMode(mode: 'realtime' | 'all') {
         this._alertMode = mode;
+    }
+
+    private _importResolver: IImportResolver | null = null;
+
+    /**
+     * Set where the libraries of `import <user>/<library>/<version> [as alias]`
+     * statements come from: an import resolver (`ImportResolver.GitHub`,
+     * `new FileImportResolver({ dir })`, ...), or a plain function
+     * `(path, info) => source | null`, which is wrapped in a `FunctionImportResolver`.
+     * Resolvers cache what they resolve, so a library is fetched once per
+     * resolver, across runs and `request.security` contexts.
+     * @param resolver An import resolver or function; `null` removes it
+     */
+    public setImportResolver(resolver: IImportResolver | ImportResolverFn | null) {
+        this._importResolver = resolver == null ? null : toImportResolver(resolver);
     }
 
     // ── Visible-range / host environment ────────────────────────────────
@@ -491,6 +513,7 @@ export class PineTS {
         await this.ready();
         if (!periods) periods = this.data.length;
 
+        await ind.resolveImports(this._importResolver);
         const prepared = ind.prepare(this._debugSettings);
         this._usesVisibleRange = prepared.usesVisibleRange;
 
@@ -538,6 +561,7 @@ export class PineTS {
         await this.ready();
         if (!periods) periods = this.data.length;
 
+        await ind.resolveImports(this._importResolver);
         const prepared = ind.prepare(this._debugSettings);
         this._usesVisibleRange = prepared.usesVisibleRange;
 
@@ -1124,6 +1148,7 @@ export class PineTS {
         context.__maxLoops = this._maxLoops;
         context._alertMode = this._alertMode;
         context._fillsOnTickGrid = this._fillsOnTickGrid;
+        context.importResolver = this._importResolver;
 
         // User-explicit prop overrides flow from the Indicator to the runtime.
         // Read by Core.indicator() and initializeStrategy/strategy.any() to

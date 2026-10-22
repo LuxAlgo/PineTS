@@ -4,7 +4,7 @@
 // JavaScript Code Generator for PineScript AST
 // Transforms ESTree-compatible AST into JavaScript code
 
-import { CONTEXT_PINE_VARS, NAMESPACE_COLLISION_NAMES, JS_RESERVED_WORDS } from '../settings';
+import { CONTEXT_PINE_VARS, NAMESPACE_COLLISION_NAMES, JS_RESERVED_WORDS, BUILTIN_METHOD_NAMES } from '../settings';
 import { BUILTIN_PARAMS } from './builtinParams';
 
 // Set of names that conflict with Pine context variables/namespaces.
@@ -16,6 +16,13 @@ const CONFLICTING_NAMES = new Set(CONTEXT_PINE_VARS);
 const isStringType = (varType: any) => typeof varType === 'string' && /(^|\s)string$/.test(varType);
 const isNaIdentifier = (node: any) => node?.type === 'Identifier' && node.name === 'na';
 
+// A user function's parameters: names, and default values (null when none).
+// Defaults are literals or built-in variables, so they can be evaluated at a call site.
+interface ParamList {
+    names: string[];
+    defaults: any[];
+}
+
 export class CodeGenerator {
     private indent: number;
     private indentStr: string;
@@ -25,11 +32,11 @@ export class CodeGenerator {
     private lastCommentedLine: number;
     private includeSourceComments: boolean;
     private paramRenameCounter: number;
-    // Maps user-defined function names to their ordered parameter names.
+    // Maps user-defined function names to their ordered parameters.
     // Used to resolve named arguments to correct positional slots.
-    private functionParams: Map<string, string[]>;
+    private functionParams: Map<string, ParamList>;
     // User method name -> parameter lists of its overloads, without the receiver.
-    private methodParams: Map<string, string[][]>;
+    private methodParams: Map<string, ParamList[]>;
     // Collision names (NAMESPACE_COLLISION_NAMES) that the user declared as a
     // FUNCTION. A bare call `name(...)` to one of these can only be the user
     // function (a constants namespace is not callable), so its callees must
@@ -474,16 +481,23 @@ export class CodeGenerator {
     private collectFunctionParams(node: any) {
         if (!node || typeof node !== 'object') return;
         if (node.type === 'FunctionDeclaration' && node.id?.name) {
-            const paramNames: string[] = [];
+            const params: ParamList = { names: [], defaults: [] };
             for (const p of node.params) {
-                if (p.type === 'Identifier') paramNames.push(p.name);
-                else if (p.type === 'AssignmentPattern' && p.left?.name) paramNames.push(p.left.name);
+                if (p.type === 'Identifier') {
+                    params.names.push(p.name);
+                    params.defaults.push(null);
+                } else if (p.type === 'AssignmentPattern' && p.left?.name) {
+                    params.names.push(p.left.name);
+                    // the na string is the empty string (see generateFunctionDeclaration)
+                    const naString = isStringType(p.left.varType) && isNaIdentifier(p.right);
+                    params.defaults.push(naString ? { type: 'Literal', value: '', raw: '""' } : p.right);
+                }
             }
-            this.functionParams.set(node.id.name, paramNames);
+            this.functionParams.set(node.id.name, params);
             // `obj.m(…)` passes the receiver itself: the call's arguments start at the second parameter.
             if (node.id.isMethod) {
                 const overloads = this.methodParams.get(node.id.name) ?? [];
-                overloads.push(paramNames.slice(1));
+                overloads.push({ names: params.names.slice(1), defaults: params.defaults.slice(1) });
                 this.methodParams.set(node.id.name, overloads);
             }
         }
@@ -595,6 +609,10 @@ export class CodeGenerator {
                 return this.generateBlockStatement(node);
             case 'TypeDefinition':
                 return this.generateTypeDefinition(node);
+            case 'ImportDeclaration':
+                // Linked away when the library source is available (see linker.ts); an
+                // unresolved import is reported by the caller, not emitted.
+                return;
             default:
                 throw new Error(`Unknown statement type: ${node.type}`);
         }
@@ -1638,6 +1656,20 @@ export class CodeGenerator {
         }
     }
 
+    /**
+     * Overloads (parameters after the receiver) of the user method `obj.name(...)`,
+     * or null. A name a built-in method also has, or a namespace receiver
+     * (`label.new(...)`), may be a built-in call taking its named arguments as
+     * an object, so those are left alone.
+     */
+    private userMethodParams(callee: any): ParamList[] | null {
+        if (callee?.type !== 'MemberExpression' || callee.computed || callee.property?.type !== 'Identifier') return null;
+        const name = callee.property.name;
+        if (BUILTIN_METHOD_NAMES.has(name)) return null;
+        if (callee.object?.type === 'Identifier' && CONFLICTING_NAMES.has(callee.object.name)) return null;
+        return this.methodParams.get(name) ?? null;
+    }
+
     // Generate CallExpression
     generateCallExpression(node) {
         const calleePrecedence = this.getPrecedence(node.callee);
@@ -1673,18 +1705,20 @@ export class CodeGenerator {
 
             // Build the full argument list matching the function's parameter order.
             // Start with positional args, then fill in named args at their correct
-            // parameter positions, using undefined for gaps.
+            // parameter positions. A gap before the last argument gets the parameter's
+            // default: an explicit `undefined` would reach the function wrapped as a
+            // series, bypassing the default.
             const fullArgs: any[] = [];
             let lastFilledIdx = -1;
-            for (let i = 0; i < paramList.length; i++) {
+            for (let i = 0; i < paramList.names.length; i++) {
                 if (i < positionalArgs.length) {
                     fullArgs.push(positionalArgs[i]);
                     lastFilledIdx = i;
-                } else if (namedArgMap.has(paramList[i])) {
-                    fullArgs.push(namedArgMap.get(paramList[i]));
+                } else if (namedArgMap.has(paramList.names[i])) {
+                    fullArgs.push(namedArgMap.get(paramList.names[i]));
                     lastFilledIdx = i;
                 } else {
-                    fullArgs.push(null); // gap — will emit undefined
+                    fullArgs.push(paramList.defaults[i]); // null: no default, emits undefined
                 }
             }
 
@@ -1735,27 +1769,32 @@ export class CodeGenerator {
 
     // Parameter list a named call to a built-in (BUILTIN_PARAMS) or to a user method (`obj.m(…)`)
     // resolves to, or null when the callee is neither or no overload takes these names.
-    namedParamsFor(callee, positionalCount, namedArgs) {
+    namedParamsFor(callee, positionalCount, namedArgs): ParamList | null {
         const name = this.calleePath(callee);
         const generic = name && /^(array|matrix)\.new(_\w+)?$/.test(name) ? BUILTIN_PARAMS[`${name.split('.')[0]}.new<type>`] : undefined;
         const builtin = name ? BUILTIN_PARAMS[name] ?? generic : undefined;
-        if (builtin) return this.pickOverload(builtin, positionalCount, namedArgs);
-        const method = callee?.type === 'MemberExpression' && !callee.computed ? this.methodParams.get(callee.property?.name) : undefined;
+        // A skipped built-in parameter is passed as a bare undefined, so the runtime default applies.
+        if (builtin) {
+            const overloads = builtin.map((names) => ({ names, defaults: names.map(() => null) }));
+            return this.pickOverload(overloads, positionalCount, namedArgs);
+        }
+        const method = this.userMethodParams(callee);
         return method ? this.pickOverload(method, positionalCount, namedArgs) : null;
     }
 
     // The overload a named call resolves to: every named argument must come after the positional
     // ones, and the overload needing the fewest skipped parameters wins.
-    pickOverload(overloads, positionalCount, namedArgs) {
+    pickOverload(overloads: ParamList[], positionalCount, namedArgs): ParamList | null {
         const keys = namedArgs.properties.map((p) => p.key?.name ?? p.key?.value);
         let best = null;
         let bestGaps = Infinity;
-        for (const params of overloads) {
+        for (const overload of overloads) {
+            const params = overload.names;
             if (positionalCount > params.length || !keys.every((k) => params.indexOf(k) >= positionalCount)) continue;
             const last = Math.max(positionalCount - 1, ...keys.map((k) => params.indexOf(k)));
             const gaps = last + 1 - positionalCount - keys.length;
             if (gaps < bestGaps) {
-                best = params;
+                best = overload;
                 bestGaps = gaps;
             }
         }

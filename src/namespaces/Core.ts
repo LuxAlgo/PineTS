@@ -68,6 +68,9 @@ export function parseIndicatorOptions(args: any[]): Partial<IndicatorOptions> {
     return parseArgsForPineParams<Partial<IndicatorOptions>>(args, INDICATOR_SIGNATURE, INDICATOR_ARGS_TYPES);
 }
 
+const LIBRARY_SIGNATURE = ['title', 'overlay', 'dynamic_requests'];
+const LIBRARY_ARGS_TYPES = { title: 'string', overlay: 'boolean', dynamic_requests: 'boolean' };
+
 /**
  * NAHelper implements the dual-use `na` identifier.
  * - Bare `na` → `na.__value` → NaN
@@ -244,6 +247,12 @@ export class Core {
         // Layer order: spec defaults ← source call args ← user .prop overrides (latest wins).
         this.context.indicator = { ...defaults, ...options, ...(this.context._propOverrides ?? {}) };
         return this.context.indicator;
+    }
+
+    // A library run on its own executes its global code, as an indicator would.
+    library(...args) {
+        const unwrapped = args.map((a) => (a instanceof Series ? a.get(0) : a));
+        return this.indicator(parseArgsForPineParams<Partial<IndicatorOptions>>(unwrapped, LIBRARY_SIGNATURE, LIBRARY_ARGS_TYPES));
     }
 
     get bar_index() {

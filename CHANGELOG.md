@@ -1,5 +1,17 @@
 # Change Log
 
+## [Unreleased]
+
+### Added
+
+- **Libraries: `import` and `export`** (`Unexpected token KEYWORD 'import'`). `import <user>/<library>/<version> [as <alias>]` links the library's exported functions, methods, types and enums into the script: `alias.f()`, `alias.Type.new()`, `alias.Type` annotations, `alias.Enum.field`, `obj.method()` / `alias.method(obj)`. Each call site keeps its own `var` and `ta.*` state, library names never collide with the script's, non-exported methods stay private, and only the declarations the script reaches are linked. Libraries may import libraries. An alias named like a built-in namespace (`import TradingView/ta/7` used as `ta.*`) keeps reaching the built-ins the library does not export. A library script (`library()`, `export`) also runs on its own. Tests: `tests/imports/`, `tests/transpiler/import-export-parsing.test.ts`.
+- **Import resolvers**, set with `PineTS.setImportResolver(resolver)`: where library sources come from. Built like the data providers: an `IImportResolver` interface, a `BaseImportResolver` with the caching (each library fetched once per resolver, across runs, instances sharing the resolver and `request.security` contexts; optional `cacheDuration`), one class per source — `GitHubImportResolver` (public, or private with a token), `FileImportResolver` (Node.js), `UrlImportResolver`, `MapImportResolver`, `ChainImportResolver` — and an `ImportResolver` registry of ready instances (`ImportResolver.GitHub.configure({ url, token })`). A plain function `(path, info) => source` also works. `resolveImports(source, resolver)` collects a script's libraries ahead of a run. See [Libraries](docs/libraries.md).
+
+### Fixed
+
+- **Named arguments of a user method called with method syntax** (`obj.m(a = 1)`) bound to the wrong parameters: the named arguments reached the method as one positional value.
+- **A parameter skipped by a named-argument call** (`f(10, z = 7)` with a defaulted `y`) read as `na` instead of its default value, in functions and methods. Test: `tests/transpiler/method-named-args.test.ts`.
+
 ## [0.12.1] - 2026-10-22 - Named Arguments & Transpiler Fixes
 
 This release fixes named arguments in alerts, gradient fills and drawing setters, and a set of transpiler and runtime parity bugs.
