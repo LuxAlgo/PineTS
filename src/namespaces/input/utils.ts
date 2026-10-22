@@ -90,3 +90,23 @@ export function resolveInput(context: any, options: Partial<InputOptions>) {
     }
     return options.defval;
 }
+
+/**
+ * `parseInputOptions` for inputs whose arguments are const by Pine's rules (every kind but
+ * `input.source` / `input()`, whose defval is a series). The options of a call site never
+ * change, so they are parsed on its first bar and reused: a script with many inputs would
+ * otherwise re-parse every one of them on every bar.
+ */
+export function parseInputOptionsCached(context: any, args: any[]): Partial<InputOptions> {
+    // The `{ __inputId }` sentinel may sit before a trailing `{ __varId }` one.
+    let id: any;
+    for (let i = args.length - 1; i >= 0 && isSentinel(args[i]); i--) id ??= args[i].__inputId;
+    if (id === undefined) return parseInputOptions(args);
+    const cache: Map<any, Partial<InputOptions>> = (context._inputOptionsCache ??= new Map());
+    let options = cache.get(id);
+    if (!options) {
+        options = parseInputOptions(args);
+        cache.set(id, options);
+    }
+    return options;
+}

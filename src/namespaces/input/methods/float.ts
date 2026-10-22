@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { InputOptions } from '../types';
-import { parseInputOptions, resolveInput } from '../utils';
+import { parseInputOptionsCached, resolveInput } from '../utils';
 
 export function float(context: any) {
     return (...args: any[]) => {
-        const options = parseInputOptions(args);
+        const options = parseInputOptionsCached(context, args);
         return resolveInput(context, options);
     };
 }
