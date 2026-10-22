@@ -76,7 +76,7 @@ describe('Matrix Namespace', () => {
             };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.val1)).toBe(10);
@@ -154,7 +154,7 @@ describe('Matrix Namespace', () => {
             };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.t_rows)).toBe(3);

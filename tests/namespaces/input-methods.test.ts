@@ -22,7 +22,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(match, 'match');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['match'].data[0].value).toBe(1);
         });
 
@@ -40,7 +40,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(isSlow, 'isSlow');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isFast'].data[0].value).toBe(1);
             expect(plots['isSlow'].data[0].value).toBe(0);
         });
@@ -57,7 +57,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(result, 'result');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['result'].data[0].value).toBe(100);
         });
     });
@@ -74,7 +74,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(priceLevel, 'priceLevel');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['priceLevel'].data[0].value).toBe(100);
         });
 
@@ -93,7 +93,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(diff, 'diff');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['stopLoss'].data[0].value).toBe(99.5);
             expect(plots['takeProfit'].data[0].value).toBe(105.25);
             expect(plots['diff'].data[0].value).toBeCloseTo(5.75);
@@ -112,7 +112,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(adjusted, 'adjusted');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['adjusted'].data[0].value).toBe(1500);
         });
     });
@@ -130,7 +130,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(match, 'match');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['match'].data[0].value).toBe(1);
         });
 
@@ -147,7 +147,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(isUS, 'isUS');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isUS'].data[0].value).toBe(1);
         });
 
@@ -163,7 +163,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(is24h, 'is24h');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['is24h'].data[0].value).toBe(1);
         });
     });
@@ -181,7 +181,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(match, 'match');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['match'].data[0].value).toBe(1);
         });
 
@@ -200,7 +200,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(match2, 'match2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['match1'].data[0].value).toBe(1);
             expect(plots['match2'].data[0].value).toBe(1);
         });
@@ -217,7 +217,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(hasColon, 'hasColon');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['hasColon'].data[0].value).toBe(1);
         });
     });
@@ -235,7 +235,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(match, 'match');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['match'].data[0].value).toBe(1);
         });
 
@@ -251,7 +251,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(hasNewline, 'hasNewline');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['hasNewline'].data[0].value).toBe(1);
         });
 
@@ -267,7 +267,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(isEmpty, 'isEmpty');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isEmpty'].data[0].value).toBe(1);
         });
     });
@@ -285,7 +285,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(match, 'match');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['match'].data[0].value).toBe(1);
         });
 
@@ -302,7 +302,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(duration, 'duration');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['duration'].data[0].value).toBe(86400000); // 1 day in ms
         });
 
@@ -319,7 +319,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(isAfter, 'isAfter');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isAfter'].data[0].value).toBe(1);
         });
     });
@@ -342,7 +342,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(allCorrect, 'allCorrect');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['allCorrect'].data[0].value).toBe(1);
         });
 
@@ -361,7 +361,7 @@ describe('Input Methods - Extended Coverage', () => {
                 plotchar(result, 'result');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['result'].data[0].value).toBe(160); // (100 * 1.5) + 10
         });
     });

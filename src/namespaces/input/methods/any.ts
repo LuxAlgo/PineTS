@@ -5,7 +5,7 @@ import { parseInputOptions, resolveInput, resolveSourceName } from '../utils';
 export function any(context: any) {
     return (...args: any[]) => {
         const options = parseInputOptions(args);
-        const resolved = resolveInput(context, options);
+        const resolved = resolveInput(context, options, 'any');
         // Auto-typed `input(close, …)`: at runtime the declared default is the
         // current-bar SCALAR (the transpiler wraps the series arg in
         // `input.param`), so a STRING override on a NUMERIC default can only be

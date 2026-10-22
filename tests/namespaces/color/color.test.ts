@@ -39,7 +39,7 @@ describe('Color Namespace', () => {
             };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.aqua)).toBe('#00BCD4');
         expect(last(result.black)).toBe('#363A45');
@@ -80,7 +80,7 @@ describe('Color Namespace', () => {
             return { no_alpha, zero_alpha, half_alpha, full_alpha };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.no_alpha)).toBe('#FF0000');
         expect(last(result.zero_alpha)).toBe('#FF0000FF');
@@ -100,7 +100,7 @@ describe('Color Namespace', () => {
             return { red_50, white_100 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // color.red = #F23645, 50% transparency -> alpha = 128 = 0x80
         expect(last(result.red_50)).toBe('#F2364580');
@@ -120,7 +120,7 @@ describe('Color Namespace', () => {
             return { na_color };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.na_color)).toBeNaN();
     });
@@ -141,7 +141,7 @@ describe('Color Namespace', () => {
             return { rgb_input, with_alpha, with_zero, no_alpha };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.rgb_input)).toBe('rgb(207, 23, 23)');
         // 85% transparency → alpha = (100-85)/100*255 = 38.25 → 0x26
@@ -170,7 +170,7 @@ describe('Color Namespace', () => {
             return { first_pass, second_pass, red_opaque, red_semi };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.first_pass)).toBe('#00ff00FF');
         expect(last(result.second_pass)).toBe('#00ff0026');  // replaced alpha, not appended
@@ -192,7 +192,7 @@ describe('Color Namespace', () => {
             return { rgba_input, with_alpha };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.rgba_input)).toBe('rgba(100, 200, 50, 0.7)');
         // 50% transparency → alpha = 128 → 0x80
@@ -213,7 +213,7 @@ describe('Color Namespace', () => {
             return { no_alpha, with_alpha };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.no_alpha)).toBe('rgb(255, 128, 0)');
         expect(last(result.with_alpha)).toBe('rgba(255, 128, 0, 0.5)');
@@ -241,7 +241,7 @@ describe('Color Namespace', () => {
             return { at_bottom, at_top, at_mid, below, above };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.at_bottom)).toBe('#000000');
         expect(last(result.at_top)).toBe('#FFFFFF');
@@ -266,7 +266,7 @@ describe('Color Namespace', () => {
             return { r_hex, r_rgba, r_na };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.r_hex)).toBe(255);
         expect(last(result.r_rgba)).toBe(100);
@@ -286,7 +286,7 @@ describe('Color Namespace', () => {
             return { g_hex, g_rgb };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.g_hex)).toBe(128);
         expect(last(result.g_rgb)).toBe(200);
@@ -304,7 +304,7 @@ describe('Color Namespace', () => {
             return { b_hex, b_rgb };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.b_hex)).toBe(64);
         expect(last(result.b_rgb)).toBe(50);
@@ -330,7 +330,7 @@ describe('Color Namespace', () => {
             return { t_opaque, t_hex_ff, t_hex_00, t_rgba, t_na };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.t_opaque)).toBe(0);
         expect(last(result.t_hex_ff)).toBe(0);
@@ -353,7 +353,7 @@ describe('Color Namespace', () => {
             return { cast_na, cast_hex };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // color(na) returns null (Pine Script na for colors, not NaN)
         expect(last(result.cast_na)).toBeNull();
@@ -377,7 +377,7 @@ describe('Color Namespace', () => {
             return { r, g, b, t };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(last(result.r)).toBe(100);
         expect(last(result.g)).toBe(150);
@@ -400,7 +400,7 @@ describe('Color Namespace', () => {
             return { r, g, b };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Midpoint between red(255,0,0) and blue(0,0,255): 127.5 truncated = (127,0,127)
         expect(last(result.r)).toBe(127);

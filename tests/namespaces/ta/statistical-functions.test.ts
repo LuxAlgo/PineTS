@@ -37,7 +37,7 @@ describe('Technical Analysis - Statistical Functions', () => {
             return { ta_lowest, _low, _open };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata = plots['result'].data;
 
@@ -130,7 +130,7 @@ describe('Technical Analysis - Statistical Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -186,7 +186,7 @@ describe('Technical Analysis - Statistical Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -242,7 +242,7 @@ describe('Technical Analysis - Statistical Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -298,7 +298,7 @@ describe('Technical Analysis - Statistical Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -354,7 +354,7 @@ describe('Technical Analysis - Statistical Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -410,7 +410,7 @@ describe('Technical Analysis - Statistical Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -466,7 +466,7 @@ describe('Technical Analysis - Statistical Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();

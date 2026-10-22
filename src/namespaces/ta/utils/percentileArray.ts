@@ -3,6 +3,8 @@
 import { Series } from '../../../Series';
 import { CarryHistory } from './history';
 import { lowerBound, upperBound } from './windows';
+import { assertTaLength } from './assertTaLength';
+import type { ExecutionBudget } from '../../../security/ExecutionBudget';
 
 const isNa = (v: number) => Number.isNaN(v);
 
@@ -26,11 +28,16 @@ export class PercentileArray {
     // values held, oldest at `head`
     private held: number[] = [];
     private head = 0;
-    private carry = new CarryHistory();
+    private carry: CarryHistory;
+    private reservedLength = 0;
     // undo of the current bar's changes, for a bar computed again (live bar)
     private undoLog: (() => void)[] = [];
 
     private lastTick: unknown = undefined;
+
+    constructor(private readonly budget?: ExecutionBudget) {
+        this.carry = new CarryHistory(0, undefined, true, budget);
+    }
 
     /**
      * The array after the call on bar `idx`; undefined while fewer than `length` values are held. `tick`
@@ -38,8 +45,18 @@ export class PercentileArray {
      * TradingView, while a new execution of the same bar (live bar) starts from the previous bars.
      */
     step(idx: number, x: any, length: number, series: Series, tick?: unknown): number[] | undefined {
+        assertTaLength(length, 'ta.percentile');
+        // A late first call or growing series length may fill by unshift/splice, each shifting O(n)
+        // values. Charge the full possible fill before any of the arrays are mutated.
+        const held = this.held.length - this.head;
+        const fill = Math.max(0, Math.min(length, idx + 1) - Math.min(length, held));
+        this.budget?.chargeWork(length * (fill + 1), 'ta.percentile');
+        if (length > this.reservedLength) {
+            this.budget?.chargeMemory(32 * (length - this.reservedLength), 'ta.percentile');
+            this.reservedLength = length;
+        }
         const v = x == null ? NaN : Number(x);
-        this.carry.push(idx, v, length, series);
+        this.carry.push(idx, v, length, series, this.budget);
         if (this.carry.newBar) this.commit();
         else if (tick === undefined || tick !== this.lastTick) this.rollback();
         this.lastTick = tick;

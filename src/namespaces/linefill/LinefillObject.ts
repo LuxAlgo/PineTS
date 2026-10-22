@@ -14,6 +14,7 @@ export class LinefillObject {
     public line2: LineObject;
     public color: string;
     public _deleted: boolean;
+    public _helper: any = null;
     /** Bar index at which this object was created (for streaming rollback) */
     public _createdAtBar: number = -1;
 
@@ -50,7 +51,8 @@ export class LinefillObject {
     }
 
     delete(): void {
-        this._deleted = true;
+        if (this._helper) this._helper.delete(this);
+        else this._deleted = true;
     }
 
     toPlotData(): any {

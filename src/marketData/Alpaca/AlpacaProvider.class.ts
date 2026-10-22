@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { ISymbolInfo, ApiKeyProviderConfig } from '@pinets/marketData/IProvider';
+import { ISymbolInfo, ApiKeyProviderConfig, ProviderRequestOptions } from '@pinets/marketData/IProvider';
 import { BaseProvider } from '@pinets/marketData/BaseProvider';
 import { stripTickerModifier } from '../../tickerModifier';
 import { Kline, PeriodType, computeNextPeriodStart, localTimeToUTC } from '@pinets/marketData/types';
+import { readBudgetedJson, readBudgetedText } from '../readBudgetedJson';
+import { requestProviderPage } from '../requestProviderPage';
+import { PineRuntimeError } from '../../errors/PineRuntimeError';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -223,6 +226,7 @@ export class AlpacaProvider extends BaseProvider<AlpacaProviderConfig> {
         limit?: number,
         sDate?: number,
         eDate?: number,
+        options?: ProviderRequestOptions,
     ): Promise<Kline[]> {
         this.ensureConfigured();
 
@@ -234,7 +238,7 @@ export class AlpacaProvider extends BaseProvider<AlpacaProviderConfig> {
             }
 
             const isCrypto = this._isCrypto(tickerId);
-            const allBars = await this._fetchAllBars(tickerId, alpacaTf, isCrypto, sDate, eDate, limit);
+            const allBars = await this._fetchAllBars(tickerId, alpacaTf, isCrypto, sDate, eDate, limit, options);
 
             if (allBars.length === 0) return [];
 
@@ -250,10 +254,11 @@ export class AlpacaProvider extends BaseProvider<AlpacaProviderConfig> {
             const lastBarDate = allBars[allBars.length - 1].t.slice(0, 10);
             // Fetch a bit beyond the last bar for weekly/monthly close lookups
             const paddedEnd = this._addDaysToDate(lastBarDate, 40);
-            await this._ensureCalendar(firstBarDate, paddedEnd);
+            await this._ensureCalendar(firstBarDate, paddedEnd, options);
 
             return this._convertBarsStock(allBars, periodType, multiplier);
         } catch (error) {
+            if (error instanceof PineRuntimeError) throw error;
             console.error('Error in AlpacaProvider.getMarketData:', error);
             return [];
         }
@@ -269,30 +274,39 @@ export class AlpacaProvider extends BaseProvider<AlpacaProviderConfig> {
         sDate?: number,
         eDate?: number,
         limit?: number,
+        options?: ProviderRequestOptions,
     ): Promise<AlpacaBar[]> {
         const allBars: AlpacaBar[] = [];
         let pageToken: string | null = null;
-        const maxBars = limit || Infinity;
-        // Use the max page size to minimise round-trips
-        const pageLimit = Math.min(limit || MAX_PAGE_LIMIT, MAX_PAGE_LIMIT);
-
+        const maxBars = Math.min(limit || 100_000, options?.budget?.maxProviderRawBars ?? 100_000);
+        const seenTokens = new Set<string>();
         do {
+            // Ask only for the remaining allowance; a full final page must
+            // never create more bars than this fetch may retain.
+            const pageLimit = Math.min(maxBars - allBars.length, MAX_PAGE_LIMIT);
             const url = this._buildBarsUrl(tickerId, alpacaTf, isCrypto, sDate, eDate, pageLimit, pageToken);
-            const response = await fetch(url, { headers: this._headers() });
-
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(`Alpaca HTTP ${response.status}: ${text}`);
-            }
-
-            const data: AlpacaBarsResponse = await response.json();
+            const data = await requestProviderPage(url, { headers: this._headers() }, options, async (response) => {
+                if (!response.ok) {
+                    const text = await readBudgetedText(response, options?.budget);
+                    throw new Error(`Alpaca HTTP ${response.status}: ${text}`);
+                }
+                return readBudgetedJson<AlpacaBarsResponse>(response, options?.budget);
+            });
 
             // Alpaca wraps bars in { bars: { SYMBOL: [...] } }
             const symbolKey = Object.keys(data.bars || {})[0];
             if (!symbolKey || !data.bars[symbolKey]) break;
 
+            options?.recordRawBars?.(data.bars[symbolKey].length);
+            if (data.bars[symbolKey].length > maxBars - allBars.length) {
+                throw new PineRuntimeError('Provider raw bar budget exceeded.', 'request.provider', 'RESOURCE_LIMIT');
+            }
             allBars.push(...data.bars[symbolKey]);
             pageToken = data.next_page_token;
+            if (pageToken && seenTokens.has(pageToken)) {
+                throw new PineRuntimeError('Provider pagination token repeated.', 'request.provider', 'PROVIDER_FAILURE');
+            }
+            if (pageToken) seenTokens.add(pageToken);
 
             // Stop if we have enough bars
             if (allBars.length >= maxBars) {
@@ -340,12 +354,12 @@ export class AlpacaProvider extends BaseProvider<AlpacaProviderConfig> {
 
     // ── Symbol Info ──────────────────────────────────────────────────────
 
-    async getSymbolInfo(tickerId: string): Promise<ISymbolInfo> {
+    async getSymbolInfo(tickerId: string, options?: ProviderRequestOptions): Promise<ISymbolInfo> {
         this.ensureConfigured();
         tickerId = stripTickerModifier(tickerId); // chart-type modifiers never reach the venue API
 
         try {
-            const asset = await this._fetchAsset(tickerId);
+            const asset = await this._fetchAsset(tickerId, options);
             if (!asset) {
                 console.error(`Alpaca: Symbol ${tickerId} not found`);
                 return null;
@@ -434,6 +448,7 @@ export class AlpacaProvider extends BaseProvider<AlpacaProviderConfig> {
 
             return symbolInfo;
         } catch (error) {
+            if (error instanceof PineRuntimeError) throw error;
             console.error('Error in AlpacaProvider.getSymbolInfo:', error);
             return null;
         }
@@ -568,20 +583,20 @@ export class AlpacaProvider extends BaseProvider<AlpacaProviderConfig> {
      * Fetches from Alpaca's `GET /v2/calendar` endpoint, which returns
      * per-day trading hours including early closes (data from 1970-2029).
      */
-    private async _ensureCalendar(startDate: string, endDate: string): Promise<void> {
+    private async _ensureCalendar(startDate: string, endDate: string, options?: ProviderRequestOptions): Promise<void> {
         // Check if we already have data for this range
         if (this._calendarCache.has(startDate) && this._calendarCache.has(endDate)) {
             return; // Likely already fetched
         }
 
         const url = `${this._tradingUrl}/calendar?start=${startDate}&end=${endDate}`;
-        const response = await fetch(url, { headers: this._headers() });
-        if (!response.ok) {
-            console.warn(`Alpaca calendar API returned ${response.status}, falling back to defaults`);
-            return;
-        }
-
-        const days: AlpacaCalendarDay[] = await response.json();
+        const days = await requestProviderPage(url, { headers: this._headers() }, options, async (response) => {
+            if (!response.ok) {
+                console.warn(`Alpaca calendar API returned ${response.status}, falling back to defaults`);
+                return [] as AlpacaCalendarDay[];
+            }
+            return readBudgetedJson<AlpacaCalendarDay[]>(response, options?.budget);
+        });
         for (const day of days) {
             this._calendarCache.set(day.date, day);
         }
@@ -589,17 +604,18 @@ export class AlpacaProvider extends BaseProvider<AlpacaProviderConfig> {
 
     // ── Private helpers ──────────────────────────────────────────────────
 
-    private async _fetchAsset(tickerId: string): Promise<AlpacaAsset | null> {
+    private async _fetchAsset(tickerId: string, options?: ProviderRequestOptions): Promise<AlpacaAsset | null> {
         if (this._assetCache.has(tickerId)) {
             return this._assetCache.get(tickerId)!;
         }
 
         const encodedSymbol = encodeURIComponent(tickerId);
         const url = `${this._tradingUrl}/assets/${encodedSymbol}`;
-        const response = await fetch(url, { headers: this._headers() });
-        if (!response.ok) return null;
-
-        const asset: AlpacaAsset = await response.json();
+        const asset = await requestProviderPage(url, { headers: this._headers() }, options, async (response) => {
+            if (!response.ok) return null;
+            return readBudgetedJson<AlpacaAsset>(response, options?.budget);
+        });
+        if (!asset) return null;
         this._assetCache.set(tickerId, asset);
         return asset;
     }

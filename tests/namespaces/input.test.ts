@@ -21,7 +21,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(sma_val, 'sma');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['period']).toBeDefined();
             expect(plots['period'].data[0].value).toBe(20);
             expect(plots['sma']).toBeDefined();
@@ -41,7 +41,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(result, 'result');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['mult'].data[0].value).toBe(2.5);
             expect(plots['result'].data[0].value).toBe(25);
         });
@@ -58,7 +58,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(value, 'conditional');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['conditional'].data[0].value).toBe(100);
         });
 
@@ -74,7 +74,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(is_test ? 1 : 0, 'is_test');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['is_test'].data[0].value).toBe(1);
         });
     });
@@ -95,7 +95,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(enabled ? 1 : 0, 'enabled');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['period'].data[0].value).toBe(14);
             expect(plots['mult'].data[0].value).toBe(2.0);
             expect(plots['enabled'].data[0].value).toBe(1);
@@ -116,7 +116,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(sma_val, 'sma');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['sma']).toBeDefined();
             expect(Array.isArray(plots['sma'].data)).toBe(true);
         });
@@ -141,7 +141,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(avg3, 'avg_high');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['avg_close']).toBeDefined();
             expect(plots['avg_hlc3']).toBeDefined();
             expect(plots['avg_high']).toBeDefined();
@@ -161,7 +161,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(is_4h ? 1 : 0, 'is_4h');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['is_4h'].data[0].value).toBe(1);
         });
     });
@@ -183,7 +183,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(is_bear_red ? 1 : 0, 'bear');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['bull'].data[0].value).toBe(1);
             expect(plots['bear'].data[0].value).toBe(1);
         });
@@ -207,7 +207,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(val_bool ? 1 : 0, 'bool_val');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['int_val'].data[0].value).toBe(42);
             expect(plots['float_val'].data[0].value).toBe(3.14);
             expect(plots['bool_val'].data[0].value).toBe(1);
@@ -236,7 +236,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(lower, 'lower');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['middle']).toBeDefined();
             expect(plots['upper']).toBeDefined();
             expect(plots['lower']).toBeDefined();
@@ -264,7 +264,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(is_oversold ? 1 : 0, 'oversold');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rsi']).toBeDefined();
             expect(plots['overbought']).toBeDefined();
             expect(plots['oversold']).toBeDefined();
@@ -288,7 +288,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(val3 ? 1 : 0, 'bool');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['int'].data[0].value).toBe(10);
             expect(plots['float'].data[0].value).toBe(3.14);
             expect(plots['bool'].data[0].value).toBe(0);
@@ -311,7 +311,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(neg_float, 'neg_float');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['zero_int'].data[0].value).toBe(0);
             expect(plots['neg_int'].data[0].value).toBe(-10);
             expect(plots['zero_float'].data[0].value).toBe(0);
@@ -330,7 +330,7 @@ describe('Input Namespace Tests', () => {
                 plotchar(is_empty ? 1 : 0, 'is_empty');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['is_empty'].data[0].value).toBe(1);
         });
     });

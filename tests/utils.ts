@@ -65,6 +65,6 @@ export async function runNSFunctionWithArgs(klines: any[], ns: string, fn: strin
 
      }`;
 
-    const { result } = await pineTS.run(sourceCode);
+    const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
     return result;
 }

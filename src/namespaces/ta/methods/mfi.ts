@@ -50,7 +50,7 @@ export function mfi(context: any) {
         const volume = Series.from(context.data.volume);
         const currentSrc = series.get(0);
         const previousSrc = prev.ring.size ? prev.ring.at(0) : series.get(1);
-        prev.push(context.idx, currentSrc, 1);
+        prev.push(context.idx, currentSrc, 1, undefined, context.executionBudget);
         const change = currentSrc - previousSrc;
 
         // upper: volume * src when the source rose (or its change is na), lower: when it fell. An na

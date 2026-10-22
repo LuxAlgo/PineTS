@@ -24,7 +24,7 @@ describe('Pagination', () => {
         const accumulatedSma: number[] = [];
 
         // Collect all pages and accumulate results
-        const iterator = pineTS.run(sourceCode, periods, pageSize) as AsyncGenerator<any>;
+        const iterator = pineTS.run(sourceCode, periods, pageSize, { sourceMode: 'trustedJavaScript' }) as AsyncGenerator<any>;
         let pageNumber = 0;
         for await (const pageContext of iterator) {
             pageNumber++;
@@ -48,7 +48,7 @@ describe('Pagination', () => {
         expect(accumulatedSma.length).toBe(100);
 
         // Run non-paginated version for comparison
-        const completeContext = (await pineTS.run(sourceCode, periods)) as any;
+        const completeContext = (await pineTS.run(sourceCode, periods, undefined, { sourceMode: 'trustedJavaScript' })) as any;
         const completeSma = completeContext.result.sma;
 
         // Verify the complete result has the same length
@@ -92,7 +92,7 @@ describe('Pagination', () => {
         const pageSizes: number[] = [];
 
         // Collect all pages and accumulate results
-        const iterator = pineTS.run(sourceCode, periods, pageSize) as AsyncGenerator<any>;
+        const iterator = pineTS.run(sourceCode, periods, pageSize, { sourceMode: 'trustedJavaScript' }) as AsyncGenerator<any>;
         let pageNumber = 0;
         for await (const pageContext of iterator) {
             pageNumber++;
@@ -118,7 +118,7 @@ describe('Pagination', () => {
         expect(accumulatedSma.length).toBe(100);
 
         // Run non-paginated version for comparison
-        const completeContext = (await pineTS.run(sourceCode, periods)) as any;
+        const completeContext = (await pineTS.run(sourceCode, periods, undefined, { sourceMode: 'trustedJavaScript' })) as any;
         const completeSma = completeContext.result.sma;
 
         // Verify the complete result has the same length
@@ -187,7 +187,7 @@ describe('Pagination', () => {
         let pageCount = 0;
 
         // Use live streaming mode
-        const iterator = pineTS.run(sourceCode, periods, pageSize) as AsyncGenerator<any>;
+        const iterator = pineTS.run(sourceCode, periods, pageSize, { sourceMode: 'trustedJavaScript' }) as AsyncGenerator<any>;
 
         // Process historical pages (should get 2 pages)
         for await (const pageContext of iterator) {
@@ -243,7 +243,7 @@ describe('Pagination', () => {
         const pageSize = 10;
         const accumulatedSma: number[] = [];
 
-        const iterator = pineTS.run(sourceCode, periods, pageSize) as AsyncGenerator<any>;
+        const iterator = pineTS.run(sourceCode, periods, pageSize, { sourceMode: 'trustedJavaScript' }) as AsyncGenerator<any>;
 
         // Process all historical pages (should be 3 pages of 10 each)
         console.log('--- Processing Historical Pages ---');

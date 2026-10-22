@@ -57,9 +57,11 @@ async function generateIndex() {
 // Run: npm run generate:matrix-index
 
 ${objectImports}
+import { assertMatrixDimensions, chargeCollectionAllocation } from '../collectionCapacity';
+import { guardMatrix } from './capacity';
 
 export class PineMatrixObject {
-    public matrix: any[][];
+    private _matrix: any[][];
 ${objectPrivateProps}
 
     constructor(
@@ -68,14 +70,20 @@ ${objectPrivateProps}
         initialValue: any = NaN,
         public context: any
     ) {
-        this.matrix = [];
+        const size = assertMatrixDimensions(rows, cols, 'matrix.new');
+        chargeCollectionAllocation(context, size, 'matrix.new');
+        const matrix: any[][] = [];
         if (rows > 0 && cols > 0) {
             for (let i = 0; i < rows; i++) {
-                this.matrix.push(Array(cols).fill(initialValue));
+                matrix.push(Array(cols).fill(initialValue));
             }
         }
+        this._matrix = guardMatrix(matrix, context, false);
 ${objectInitProps}
     }
+
+    get matrix(): any[][] { return this._matrix; }
+    set matrix(value: any[][]) { this._matrix = guardMatrix(value, this.context, true); }
 
     toString(): string {
         let result = '';

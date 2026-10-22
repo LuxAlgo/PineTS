@@ -5,6 +5,6 @@ import { parseInputOptions, resolveInput } from '../utils';
 export function enum_fn(context: any) {
     return (...args: any[]) => {
         const options = parseInputOptions(args);
-        return resolveInput(context, options);
+        return resolveInput(context, options, 'enum');
     };
 }

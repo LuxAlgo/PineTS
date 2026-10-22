@@ -128,7 +128,7 @@ describe('Pine v6: int division NEVER truncates (no __idiv, ever)', () => {
 
 describe('bare PineTS syntax: JS float-division semantics (no __idiv)', () => {
     it('int literal / int literal stays native /', () => {
-        const js = transpile(`($) => {\n    const { plot } = $.pine;\n    plot(11 / 2, 'y');\n}`).toString();
+        const js = transpile(`($) => {\n    const { plot } = $.pine;\n    plot(11 / 2, 'y');\n}`, { debug: false, sourceMode: 'trustedJavaScript' }).toString();
         expect(js).not.toContain(IDIV);
     });
 });
@@ -147,7 +147,7 @@ describe('float-literal preservation (pine2js codegen)', () => {
 describe('integer division runtime values', () => {
     async function runPine(script: string): Promise<Record<string, any>> {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
-        const { plots } = await pineTS.run(script);
+        const { plots } = await pineTS.run(script, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const out: Record<string, any> = {};
         for (const [name, plot] of Object.entries(plots) as any) {
             if (!name.startsWith('__')) out[name] = plot.data.at(-1).value;
@@ -204,7 +204,7 @@ describe('integer division runtime values', () => {
         const { plots } = await pineTS.run(($: any) => {
             const { plotchar } = $.pine;
             plotchar(11 / 2, 'a');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['a'].data[0].value).toBe(5.5);
     });
 });

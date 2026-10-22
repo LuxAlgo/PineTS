@@ -2,6 +2,8 @@ import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
 import { Series } from '../../../Series';
 import { PineArrayObject } from '../../array/PineArrayObject';
+import { assertMatrixIndex } from '../indexValidation';
+import { assertMatrixDimensions, preflightCollectionGrowth } from '../../collectionCapacity';
 
 export function add_row(context: Context) {
     return (id: PineMatrixObject, row_index?: number, values?: any) => {
@@ -31,6 +33,10 @@ export function add_row(context: Context) {
 
         const cols = rows > 0 ? id.matrix[0].length : rowValues.length;
         const index = row_index !== undefined ? row_index : rows;
+        assertMatrixIndex(index, rows, 'row', 'matrix.add_row', true);
+        const currentSize = assertMatrixDimensions(rows, cols, 'matrix.add_row');
+        const nextSize = assertMatrixDimensions(rows + 1, cols, 'matrix.add_row');
+        preflightCollectionGrowth(context, currentSize, nextSize, 'matrix.add_row');
 
         const newRow = [];
         for (let i = 0; i < cols; i++) {

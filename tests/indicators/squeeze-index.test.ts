@@ -31,7 +31,7 @@ describe('Technical Analysis - Volatility', () => {
             plotchar(psi > 80, '_squeezed');
         };
 
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const psiData = plots['_psi']?.data;
         const squeezedData = plots['_squeezed']?.data;

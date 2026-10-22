@@ -35,7 +35,7 @@ describe('request.security_lower_tf window bounding', () => {
             const { plotchar, request } = context.pine;
             const res = await request.security_lower_tf('BTCUSDC', 'D', close);
             plotchar(res, '_p');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // The secondary context is cached on the main context. Find it.
         const cacheKeys = Object.keys((context as any).cache || {});

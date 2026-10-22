@@ -79,6 +79,46 @@ export function createLoopGuardNodes(guardName: string): { counterDecl: any; gua
     return { counterDecl, guardCheck };
 }
 
+/**
+ * Charge every emitted loop after statement lowering. In particular, native
+ * for/while expressions live inside initializer IIFEs, whose expression walker
+ * does not dispatch to the normal loop visitors. One final traversal avoids
+ * depending on each expression walker knowing every loop shape.
+ */
+export function instrumentLoopBudget(ast: any): void {
+    const loopTypes = ['ForStatement', 'WhileStatement', 'ForOfStatement', 'ForInStatement', 'DoWhileStatement'] as const;
+    const baseVisitor = { ...walk.base, LineComment: () => {} };
+    const isCharge = (statement: any): boolean =>
+        statement?.type === 'ExpressionStatement' &&
+        statement.expression?.type === 'CallExpression' &&
+        statement.expression.callee?.type === 'MemberExpression' &&
+        statement.expression.callee.object?.name === '$' &&
+        statement.expression.callee.property?.name === 'chargeLoopIteration';
+    const instrument = (node: any): void => {
+        if (!node.body) throw new Error(`Cannot instrument ${node.type} without a body`);
+        if (node.body.type !== 'BlockStatement') node.body = { type: 'BlockStatement', body: [node.body] };
+        if (!isCharge(node.body.body[0])) {
+            node.body.body.unshift({
+                type: 'ExpressionStatement',
+                expression: ASTFactory.createCallExpression(
+                    ASTFactory.createMemberExpression(ASTFactory.createIdentifier('$'), ASTFactory.createIdentifier('chargeLoopIteration'), false),
+                    []
+                ),
+            });
+        }
+    };
+
+    const visitors = Object.fromEntries(loopTypes.map((type) => [type, instrument]));
+    walk.simple(ast, visitors, baseVisitor);
+    // Fail compilation if a future AST shape or visitor change leaves a loop
+    // without the shared charge at its first executable statement.
+    walk.simple(ast, Object.fromEntries(loopTypes.map((type) => [type, (node: any) => {
+        if (node.body?.type !== 'BlockStatement' || !isCharge(node.body.body[0])) {
+            throw new Error(`Unbudgeted ${type} in transformed Pine program`);
+        }
+    }])), baseVisitor);
+}
+
 export function transformAssignmentExpression(node: any, scopeManager: ScopeManager): void {
     let targetVarRef = null;
     // Transform assignment expressions to use the context object

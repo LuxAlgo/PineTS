@@ -7,6 +7,7 @@ import { ChartPointObject } from '../chart/ChartPointObject';
 import { resolvePoint } from '../chart/resolvePoint';
 import { NAHelper } from '../Core';
 import { silentInSecondary } from '../silentInSecondary';
+import { consumeDrawingCreation, DrawingStore, validateDrawingMaximum } from '../drawingPolicy';
 
 //prettier-ignore
 const BOX_NEW_SIGNATURES = [
@@ -26,7 +27,7 @@ const BOX_NEW_ARGS_TYPES: Record<string, string> = {
 };
 
 export class BoxHelper {
-    private _boxes: BoxObject[] = [];
+    private _boxes = new DrawingStore<BoxObject>();
 
     constructor(private context: any) {}
 
@@ -47,10 +48,7 @@ export class BoxHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
-        // Compact out deleted boxes — bounded array (RC3), transparent output;
-        // rollbackFromBar filters by _createdAtBar, orthogonal to _deleted.
-        this._boxes = this._boxes.filter(bx => !bx._deleted);
-        const allPlotData = this._boxes.map(bx => bx.toPlotData());
+        const allPlotData = this._boxes.values().map(bx => bx.toPlotData());
 
         // Split force_overlay objects into a separate overlay plot (renders on main chart pane)
         const regular = allPlotData.filter((b: any) => !b.force_overlay);
@@ -115,6 +113,8 @@ export class BoxHelper {
         text_font_family: string = 'default', text_formatting: string = 'format_none',
         force_overlay: boolean = false,
     ): BoxObject {
+        const maximum = this._maximum();
+        consumeDrawingCreation(this.context, 'box.new');
         const b = new BoxObject(
             left, top, right, bottom, xloc,
             this._resolve(extend),
@@ -134,29 +134,12 @@ export class BoxHelper {
         );
         b._helper = this;
         b._createdAtBar = this.context.idx;
-        this._boxes.push(b);
-        this._enforceMaxCount();
+        this._boxes.add(b, maximum);
         return b;
     }
 
-    /**
-     * Enforce max_boxes_count: auto-delete the oldest non-deleted boxes
-     * when the active count exceeds the limit (FIFO eviction).
-     */
-    private _enforceMaxCount(): void {
-        const maxCount = this.context.indicator?.max_boxes_count ?? 50;
-        const active = this._boxes.filter(b => !b._deleted);
-        if (active.length > maxCount) {
-            const toRemove = active.length - maxCount;
-            let removed = 0;
-            for (const b of this._boxes) {
-                if (removed >= toRemove) break;
-                if (!b._deleted) {
-                    b._deleted = true;
-                    removed++;
-                }
-            }
-        }
+    private _maximum(): number {
+        return validateDrawingMaximum('max_boxes_count', this.context.indicator?.max_boxes_count ?? this.context.strategy?.config?.max_boxes_count ?? 50);
     }
 
     // box.new() — supports both chart.point and legacy signatures
@@ -382,21 +365,22 @@ export class BoxHelper {
     @silentInSecondary
     copy(id: BoxObject): BoxObject | undefined {
         if (!id) return undefined;
+        const maximum = this._maximum();
+        consumeDrawingCreation(this.context, 'box.copy');
         const b = id._clone();
         b._helper = this;
         b._createdAtBar = this.context.idx;
-        this._boxes.push(b);
-        this._enforceMaxCount();
+        this._boxes.add(b, maximum);
         return b;
     }
 
     @silentInSecondary
     delete(id: BoxObject): void {
-        if (id) id._deleted = true;
+        if (id) this._boxes.delete(id);
     }
 
     get all(): BoxObject[] {
-        return this._boxes.filter((b) => !b._deleted);
+        return this._boxes.values();
     }
 
     /**
@@ -405,7 +389,7 @@ export class BoxHelper {
      * Called during streaming rollback to prevent accumulation.
      */
     rollbackFromBar(barIdx: number): void {
-        this._boxes = this._boxes.filter((b) => b._createdAtBar < barIdx);
+        this._boxes.rollbackFromBar(barIdx);
         this.syncToPlot();
     }
 }

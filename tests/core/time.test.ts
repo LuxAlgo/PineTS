@@ -12,7 +12,7 @@ describe('time (dual-use identifier)', () => {
             const { time } = $.pine;
             let t = time;
             return { t };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // First bar openTime
         expect(result.t[0]).toBe(1546819200000);
@@ -24,7 +24,7 @@ describe('time (dual-use identifier)', () => {
             let t = time;
             let t_prev = time[1];
             return { t, t_prev };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Last bar (index 3): t = bar3 openTime, t_prev = bar2 openTime
         const lastIdx = result.t.length - 1;
@@ -36,7 +36,7 @@ describe('time (dual-use identifier)', () => {
             const { time } = $.pine;
             let t = time('W');
             return { t };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // time('W') should return the current bar's open time
         expect(result.t[0]).toBe(1546819200000);
@@ -47,7 +47,7 @@ describe('time (dual-use identifier)', () => {
             const { time } = $.pine;
             let t = time;
             return { t };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Should have 4 bars of data
         expect(result.t.length).toBe(4);
@@ -63,7 +63,7 @@ describe('time (dual-use identifier)', () => {
             let t0 = time('W', 0);
             let t1 = time('W', 1);
             return { t0, t1 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // On last bar, t1 should equal t0 of the previous bar
         const lastIdx = result.t0.length - 1;
@@ -75,7 +75,7 @@ describe('time (dual-use identifier)', () => {
             const { time } = $.pine;
             let t = time('W', '0000-2359', 0);
             return { t };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // "0000-2359" covers the full day, so time should be returned (not NaN)
         expect(result.t[0]).toBe(1546819200000);
@@ -86,7 +86,7 @@ describe('time (dual-use identifier)', () => {
             const { time } = $.pine;
             let t = time('W', '0000-2359', 0, 1);
             return { t };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // bars_back=0, timeframe_bars_back=1 → totalOffset=1 → previous bar time
         const lastIdx = result.t.length - 1;
@@ -101,7 +101,7 @@ describe('time (dual-use identifier)', () => {
             const { time } = $.pine;
             let t = time('W', '0000-2359', 'UTC', 0, 0);
             return { t };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Full signature with UTC timezone and no offset → current bar time
         expect(result.t[0]).toBe(1546819200000);
@@ -114,7 +114,7 @@ indicator("Time Test")
 t = time
 plot(t, "time")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['time']).toBeDefined();
         expect(plots['time'].data[0].value).toBe(1546819200000);
     });

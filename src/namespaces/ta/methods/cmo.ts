@@ -49,7 +49,7 @@ export function cmo(context: any) {
         // the source of the previous call; before the first call, of the previous bar
         const currentValue = series.get(0);
         const previousValue = prev.ring.size ? prev.ring.at(0) : series.get(1);
-        prev.push(context.idx, currentValue, 1);
+        prev.push(context.idx, currentValue, 1, undefined, context.executionBudget);
 
         const mom = currentValue - previousValue;
         const gains = nonNaWindow(context, `${stateKey}_up`, state.up, length, false, mom >= 0 ? mom : 0);

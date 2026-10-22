@@ -18,7 +18,7 @@ describe('BOX Namespace', () => {
             var b_border_style = b.border_style;
             var b_border_width = b.border_width;
             return { b_left, b_top, b_right, b_bottom, b_xloc, b_extend, b_border_style, b_border_width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.b_left[0]).toBe(0);
         expect(result.b_top[0]).toBe(60000);
@@ -55,7 +55,7 @@ describe('BOX Namespace', () => {
             var b_text_size = b.text_size;
             var b_extend = b.extend;
             return { b_border_color, b_border_style, b_border_width, b_bgcolor, b_text, b_text_color, b_text_size, b_extend };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.b_border_color[0]).toBe('#ff0000');
         expect(result.b_border_style[0]).toBe('style_dashed');
@@ -80,7 +80,7 @@ describe('BOX Namespace', () => {
             var b_bottom = b.bottom;
             var b_xloc = b.xloc;
             return { b_left, b_top, b_right, b_bottom, b_xloc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.b_left[0]).toBe(5);
         expect(result.b_top[0]).toBe(60000);
@@ -103,7 +103,7 @@ describe('BOX Namespace', () => {
             var top = b.top;
             var bottom = b.bottom;
             return { left, right, top, bottom };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.left[0]).toBe(100);
         expect(result.right[0]).toBe(200);
@@ -123,7 +123,7 @@ describe('BOX Namespace', () => {
             var right = b.right;
             var bottom = b.bottom;
             return { left, top, right, bottom };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.left[0]).toBe(42);
         expect(result.top[0]).toBe(75000);
@@ -145,7 +145,7 @@ describe('BOX Namespace', () => {
             var right = b.right;
             var bottom = b.bottom;
             return { left, top, right, bottom };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.left[0]).toBe(42);
         expect(result.top[0]).toBe(75000);
@@ -163,7 +163,7 @@ describe('BOX Namespace', () => {
             var right = b.right;
             var b_xloc = b.xloc;
             return { left, right, b_xloc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.left[0]).toBe(1000000);
         expect(result.right[0]).toBe(2000000);
@@ -180,7 +180,7 @@ describe('BOX Namespace', () => {
             var top = box.get_top(b);
             var bottom = box.get_bottom(b);
             return { left, right, top, bottom };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.left[0]).toBe(5);
         expect(result.right[0]).toBe(15);
@@ -202,7 +202,7 @@ describe('BOX Namespace', () => {
             var border_width = b.border_width;
             var border_style = b.border_style;
             return { bgcolor, border_color, border_width, border_style };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.bgcolor[0]).toBe('#aabbcc');
         expect(result.border_color[0]).toBe('#ddeeff');
@@ -219,7 +219,7 @@ describe('BOX Namespace', () => {
             box.set_extend(b, 'both');
             var afterExtend = b.extend;
             return { beforeExtend, afterExtend };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.beforeExtend[0]).toBe('none');
         expect(result.afterExtend[0]).toBe('both');
@@ -237,7 +237,7 @@ describe('BOX Namespace', () => {
             var text_color = b.text_color;
             var text_size = b.text_size;
             return { text, text_color, text_size };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.text[0]).toBe('Test Box');
         expect(result.text_color[0]).toBe('#ff00ff');
@@ -260,7 +260,7 @@ describe('BOX Namespace', () => {
             var font = b.text_font_family;
             var formatting = b.text_formatting;
             return { halign, valign, wrap, font, formatting };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.halign[0]).toBe('left');
         expect(result.valign[0]).toBe('top');
@@ -284,7 +284,7 @@ describe('BOX Namespace', () => {
             var differentIds = orig.id !== cp.id;
 
             return { origTop, copyTop, origTopAfter, copyTopAfter, differentIds };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.origTop[0]).toBe(60000);
         expect(result.copyTop[0]).toBe(60000);
@@ -303,7 +303,7 @@ describe('BOX Namespace', () => {
             var deletedFlag = b._deleted;
             var countAfter = box.all.length;
             return { deletedFlag, countBefore, countAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.deletedFlag[0]).toBe(true);
         expect(result.countBefore[0]).toBe(1);
@@ -321,7 +321,7 @@ describe('BOX Namespace', () => {
             box.delete(box3);
             var afterDeleteCount = box.all.length;
             return { totalCount, afterDeleteCount };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.totalCount[0]).toBe(3);
         expect(result.afterDeleteCount[0]).toBe(2);
@@ -337,7 +337,7 @@ describe('BOX Namespace', () => {
             var deletedFlag = b._deleted;
             var countAfter = box.all.length;
             return { deletedFlag, countBefore, countAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.deletedFlag[0]).toBe(true);
         expect(result.countBefore[0]).toBe(1);
@@ -358,7 +358,7 @@ describe('BOX Namespace', () => {
             var bottom = b.bottom;
             var border_width = b.border_width;
             return { top, bottom, border_width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.top[0]).toBe(60000);
         expect(result.bottom[0]).toBe(50000);
@@ -371,7 +371,7 @@ describe('BOX Namespace', () => {
         const { plots } = await pineTS.run((context) => {
             box.new(0, 60000, 10, 50000, { border_color: '#ff0000', border_width: 2 });
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__boxes__']).toBeDefined();
         expect(plots['__boxes__'].data.length).toBeGreaterThan(0);
@@ -399,7 +399,7 @@ describe('BOX Namespace', () => {
             box.new(5, 65000, 15, 55000, { border_color: color.blue });
             box.new(10, 70000, 20, 60000, { border_color: color.green });
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // There should be exactly 1 data entry containing all boxes
         expect(plots['__boxes__'].data.length).toBe(1);
@@ -419,7 +419,7 @@ describe('BOX Namespace', () => {
 indicator("probe", overlay = true)
 if barstate.isfirst
     box bx = box.new(0, 100, 5, 50, bgcolor = color(na), border_color = color(na))
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const bx = plots['__boxes__']?.data?.[0]?.value?.[0];
         expect(bx).toBeDefined();
         expect(bx.bgcolor).not.toBe('#2962ff');
@@ -437,7 +437,7 @@ if barstate.isfirst
 indicator("probe", overlay = true)
 if barstate.isfirst
     box bx = box.new(0, 100, 5, 50, bgcolor = na, border_color = na)
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const bx = plots['__boxes__']?.data?.[0]?.value?.[0];
         expect(bx).toBeDefined();
         expect(bx.bgcolor).not.toBe('#2962ff');
@@ -457,7 +457,7 @@ if barstate.isfirst
     chart.point cp1 = chart.point.new(time, na, low)
     chart.point cp2 = chart.point.new(time + 5*24*60*60*1000, na, low * 1.1)
     box.new(cp1, cp2, xloc = xloc.bar_time, bgcolor = color.new(color.green, 80))
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const bx = plots['__boxes__']?.data?.[0]?.value?.[0];
         expect(bx).toBeDefined();
         expect(bx.xloc).toBe('bt');

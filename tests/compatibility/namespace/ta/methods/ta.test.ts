@@ -25,7 +25,7 @@ describe('TA Namespace', () => {
                     atr_native,
                     atr_var,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -85,7 +85,7 @@ describe('TA Namespace', () => {
                     change_var,
                     change_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -146,7 +146,7 @@ describe('TA Namespace', () => {
                     crossover_var,
                     crossover_reverse,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -207,7 +207,7 @@ describe('TA Namespace', () => {
                     crossunder_var,
                     crossunder_reverse,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -267,7 +267,7 @@ describe('TA Namespace', () => {
                     dev_var,
                     dev_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -327,7 +327,7 @@ describe('TA Namespace', () => {
                     ema_var,
                     ema_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -387,7 +387,7 @@ describe('TA Namespace', () => {
                     highest_var,
                     highest_low,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -447,7 +447,7 @@ describe('TA Namespace', () => {
                     hma_var,
                     hma_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -507,7 +507,7 @@ describe('TA Namespace', () => {
                     linreg_var,
                     linreg_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -567,7 +567,7 @@ describe('TA Namespace', () => {
                     lowest_var,
                     lowest_high,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -627,7 +627,7 @@ describe('TA Namespace', () => {
                     median_var,
                     median_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -687,7 +687,7 @@ describe('TA Namespace', () => {
                     mom_var,
                     mom_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -745,7 +745,7 @@ describe('TA Namespace', () => {
                     pivothigh_native,
                     pivothigh_var,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -803,7 +803,7 @@ describe('TA Namespace', () => {
                     pivotlow_native,
                     pivotlow_var,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -863,7 +863,7 @@ describe('TA Namespace', () => {
                     rma_var,
                     rma_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -923,7 +923,7 @@ describe('TA Namespace', () => {
                     roc_var,
                     roc_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -983,7 +983,7 @@ describe('TA Namespace', () => {
                     rsi_var,
                     rsi_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1043,7 +1043,7 @@ describe('TA Namespace', () => {
                     sma_var,
                     sma_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1103,7 +1103,7 @@ describe('TA Namespace', () => {
                     stdev_var,
                     stdev_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1163,7 +1163,7 @@ describe('TA Namespace', () => {
                     variance_var,
                     variance_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1202,65 +1202,14 @@ describe('TA Namespace', () => {
         expect(plot_data_str.trim()).toEqual(expectedData.plot_data);
     });
 
-    it('VWMA regression test', async () => {
+    it('VWMA rejects the invalid legacy volume-as-length call', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-11-20').getTime());
 
-        const { result, plots } = await pineTS.run((context) => {
-            const { close, open, volume } = context.data;
-                const ta = context.ta;
-                const { plot, plotchar } = context.core;
-            
-                const vwma_native = ta.vwma(close, volume, 9);
-                const _close = close;
-                const _volume = volume;
-                const vwma_var = ta.vwma(_close, _volume, 20);
-                const vwma_open = ta.vwma(open, volume, 9);
-            
-                plotchar(vwma_native, '_plotchar');
-                plot(vwma_var, '_plot');
-            
-                return {
-                    vwma_native,
-                    vwma_var,
-                    vwma_open,
-                };
-        });
-
-        // Filter results for the date range 2025-10-01 to 2025-11-20
-        const sDate = new Date('2025-10-01').getTime();
-        const eDate = new Date('2025-11-20').getTime();
-
-        const plotchar_data = plots['_plotchar'].data;
-        const plot_data = plots['_plot'].data;
-
-        // Extract results for the date range (same logic as expect-gen.ts)
-        const filtered_results: any = {};
-        let plotchar_data_str = '';
-        let plot_data_str = '';
-
-        if (plotchar_data.length != plot_data.length) {
-            throw new Error('Plotchar and plot data lengths do not match');
-        }
-
-        for (let i = 0; i < plotchar_data.length; i++) {
-            if (plotchar_data[i].time >= sDate && plotchar_data[i].time <= eDate) {
-                plotchar_data_str += `[${plotchar_data[i].time}]: ${plotchar_data[i].value}\n`;
-                plot_data_str += `[${plot_data[i].time}]: ${plot_data[i].value}\n`;
-                for (let key in result) {
-                    if (!filtered_results[key]) filtered_results[key] = [];
-                    filtered_results[key].push(result[key][i]);
-                }
-            }
-        }
-
-        // Load expected data from JSON file using custom deserializer
-        const expectFilePath = path.join(__dirname, 'data/vwma.expect.json');
-        const expectedData = deserialize(fs.readFileSync(expectFilePath, 'utf-8'));
-
-        // Assert results using custom deep equality (handles NaN correctly)
-        expect(deepEqual(filtered_results, expectedData.results)).toBe(true);
-        expect(plotchar_data_str.trim()).toEqual(expectedData.plotchar_data);
-        expect(plot_data_str.trim()).toEqual(expectedData.plot_data);
+        await expect(pineTS.run((context) => {
+            const { close, volume } = context.data;
+            const ta = context.ta;
+            return { value: ta.vwma(close, volume, 9) };
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(/TA length must be a positive safe integer/);
     });
 
     it('WMA regression test', async () => {
@@ -1284,7 +1233,7 @@ describe('TA Namespace', () => {
                     wma_var,
                     wma_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();

@@ -23,7 +23,7 @@ function series(plots: any, title: string): Map<number, any> {
 }
 
 async function run1h(source: string, sDate = Date.UTC(2024, 11, 20), eDate = Date.UTC(2025, 0, 10)) {
-    return new PineTS(Provider.Mock, 'BTCUSDC', '60', null, sDate, eDate).run(source);
+    return new PineTS(Provider.Mock, 'BTCUSDC', '60', null, sDate, eDate).run(source, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 }
 
 describe('request.security with any valid timeframe (K1, 7a)', () => {
@@ -110,7 +110,7 @@ plot(c4, "c4")`);
         const { plots } = await new PineTS(Provider.Mock, 'BTCUSDC', 'W', null, Date.UTC(2024, 11, 1), Date.UTC(2025, 1, 1)).run(`//@version=6
 indicator("7D")
 plot(request.security(syminfo.tickerid, "7D", time, lookahead = barmerge.lookahead_on), "7D")
-plot(request.security(syminfo.tickerid, "W", time, lookahead = barmerge.lookahead_on), "W")`);
+plot(request.security(syminfo.tickerid, "W", time, lookahead = barmerge.lookahead_on), "W")`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const week = Date.UTC(2025, 0, 6);
         expect(iso(series(plots, 'W').get(week))).toBe('2025-01-06T00:00');
         expect(iso(series(plots, '7D').get(week))).toBe('2025-01-01T00:00');
@@ -187,7 +187,7 @@ describe('timeframe.in_seconds / timeframe.from_seconds (K8, 18)', () => {
             const { timeframe } = $.pine;
             return { ${cases.map(([s], i) => `f${i}: timeframe.from_seconds(${s})`).join(', ')} };
         }`;
-        const { result } = await pineTS.run(source);
+        const { result } = await pineTS.run(source, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         cases.forEach(([s, tf], i) => expect(result[`f${i}`].at(-1), `from_seconds(${s})`).toBe(tf));
     });
 
@@ -228,7 +228,7 @@ plot(time_close, "time_close")`;
     it('builds 2D candles on the yearly day grid', async () => {
         const { plots, marketData } = await new PineTS(Provider.Mock, 'BTCUSDT', '2D', null, Date.UTC(2024, 6, 20), Date.UTC(2026, 0, 5)).run(
             `//@version=6\nindicator("2D")\n` + vars
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const bar = marketData.find((k: Kline) => k.openTime === Date.UTC(2024, 6, 23));
         expect([bar.open, bar.high, bar.low, bar.close]).toEqual([67532, 67750.98, 65111, 65376]);
 
@@ -247,7 +247,7 @@ plot(time_close, "time_close")`;
     it('builds 12M candles stamped with January 1 even when data starts later', async () => {
         const { plots, marketData } = await new PineTS(Provider.Mock, 'BTCUSDT', '12M', null, Date.UTC(2017, 7, 1), Date.UTC(2026, 0, 1)).run(
             `//@version=6\nindicator("12M")\n` + vars
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(iso(marketData[0].openTime)).toBe('2017-01-01T00:00');
         expect(marketData[0].open).toBe(4261.48);
         const y2025 = marketData.find((k: Kline) => k.openTime === Date.UTC(2025, 0, 1));
@@ -266,7 +266,7 @@ plot(time_close, "time_close")`;
 indicator("period")
 plot(timeframe.period == "D" ? 1 : 0, "D")
 plot(timeframe.period == "1D" ? 1 : 0, "1D")`;
-        const run = (version: number) => new PineTS(Provider.Mock, 'BTCUSDT', 'D', null, Date.UTC(2025, 0, 1), Date.UTC(2025, 0, 5)).run(script(version));
+        const run = (version: number) => new PineTS(Provider.Mock, 'BTCUSDT', 'D', null, Date.UTC(2025, 0, 1), Date.UTC(2025, 0, 5)).run(script(version), undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const v6 = await run(6);
         const v5 = await run(5);
         expect([...series(v6.plots, '1D').values()].at(-1)).toBe(1);

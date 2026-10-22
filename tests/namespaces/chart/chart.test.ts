@@ -14,7 +14,7 @@ describe('CHART Namespace', () => {
                 var pt_index = myPoint.index;
                 var pt_price = myPoint.price;
                 return { pt_time, pt_index, pt_price };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(result.pt_time[0]).toBe(1000);
             expect(result.pt_index[0]).toBe(5);
@@ -30,7 +30,7 @@ describe('CHART Namespace', () => {
                 var pt_price = myPoint.price;
                 var hasTime = myPoint.time !== undefined;
                 return { pt_index, pt_price, hasTime };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(result.pt_index[0]).toBe(42);
             expect(result.pt_price[0]).toBe(75000);
@@ -46,7 +46,7 @@ describe('CHART Namespace', () => {
                 var pt_price = myPoint.price;
                 var hasIndex = myPoint.index !== undefined;
                 return { pt_time, pt_price, hasIndex };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(result.pt_time[0]).toBe(1700000000000);
             expect(result.pt_price[0]).toBe(80000);
@@ -63,7 +63,7 @@ describe('CHART Namespace', () => {
                 var hasTime = myPoint.time !== undefined;
                 var matchesBarIndex = myPoint.index === bar_index;
                 return { pt_index, pt_price, hasTime, matchesBarIndex };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(result.pt_price[0]).toBe(65000);
             expect(result.pt_index[0]).toBe(0);
@@ -85,7 +85,7 @@ describe('CHART Namespace', () => {
                 var copyPriceAfter = cp.price;
 
                 return { origPrice, copyPrice, origPriceAfter, copyPriceAfter };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(result.origPrice[0]).toBe(50000);
             expect(result.copyPrice[0]).toBe(50000);
@@ -101,7 +101,7 @@ describe('CHART Namespace', () => {
             const { result } = await pineTS.run((context) => {
                 var bgColor = chart.bg_color;
                 return { bgColor };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(typeof result.bgColor[0]).toBe('string');
             expect(result.bgColor[0].length).toBeGreaterThan(0);
@@ -113,7 +113,7 @@ describe('CHART Namespace', () => {
             const { result } = await pineTS.run((context) => {
                 var fgColor = chart.fg_color;
                 return { fgColor };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(typeof result.fgColor[0]).toBe('string');
             expect(result.fgColor[0].length).toBeGreaterThan(0);
@@ -125,7 +125,7 @@ describe('CHART Namespace', () => {
             const { result } = await pineTS.run((context) => {
                 var isStandard = chart.is_standard;
                 return { isStandard };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(result.isStandard[0]).toBe(true);
         });
@@ -143,7 +143,7 @@ describe('CHART Namespace', () => {
                 var lblY = myLabel.y;
                 var lblXloc = myLabel.xloc;
                 return { lblX, lblY, lblXloc };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(result.lblX[0]).toBe(55);
             expect(result.lblY[0]).toBe(90000);
@@ -160,7 +160,7 @@ describe('CHART Namespace', () => {
                 var lblX = myLabel.x;
                 var lblXloc = myLabel.xloc;
                 return { lblX, lblXloc };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             // TradingView keeps the label's xloc (bar_index): a from_time point has no index, so x is na.
             expect(result.lblX[0]).toBeNaN();

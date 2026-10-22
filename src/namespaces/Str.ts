@@ -3,9 +3,11 @@
 import { Series } from '../Series';
 import { Context } from '..';
 import { PineArrayObject, PineArrayType } from './array/PineArrayObject';
-import { joinElements } from './array/format';
+import { boundedArrayText } from './array/format';
 import { formatFloat, formatNumberPattern, formatVolume } from './numberFormat';
-import { assertElementCount } from './limits';
+import { assertElementCount, assertStringLength, MAX_COLLECTION_ELEMENTS, MAX_STRING_CODE_UNITS } from './limits';
+import { PineRuntimeError } from '../errors/PineRuntimeError';
+import { assertBoundedRegex } from './regexPolicy';
 import { DEFAULT_TIME_FORMAT, formatTime, resolveTimeZone } from './formatTime';
 
 const FORMAT_TIME_PARAMS = ['time', 'format', 'timezone'];
@@ -33,77 +35,126 @@ const text = (v: any): string => (isNa(v) ? '' : String(v));
 
 // A plain decimal number, after trimming whitespace (no exponent, hex, binary or Infinity).
 const DECIMAL_NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)$/;
+const MAX_FORMAT_PATTERN_LENGTH = 4096;
 
 /** Text of a str.format argument without a format type, as Java's MessageFormat prints it. */
-function messageArgument(val: any): string {
+function messageArgument(val: any, maxLength: number, charge: (work: number, bytes: number) => void): string {
     if (typeof val === 'number') return Number.isNaN(val) ? 'NaN' : formatNumberPattern(val, MESSAGE_NUMBER_FORMATS[''], 'halfEven');
-    if (val instanceof PineArrayObject) return '[' + joinElements(val).join(', ') + ']';
+    if (val instanceof PineArrayObject) return boundedArrayText(val, 'join', maxLength, 'str.format', charge);
     return String(val);
 }
 
 export class Str {
     constructor(private context: Context) {}
 
+    private bounded(value: any, method: string): string {
+        const result = value instanceof PineArrayObject
+            ? boundedArrayText(value, 'tostring', MAX_STRING_CODE_UNITS, method, (work, bytes) => this.charge(work, bytes, method))
+            : text(value);
+        assertStringLength(result.length, method);
+        return result;
+    }
+
+    private charge(work: number, bytes: number, method: string): void {
+        this.context.executionBudget?.chargeWork(work, method);
+        this.context.executionBudget?.chargeMemory(bytes, method);
+    }
+
+    private finished(value: any, method: string): string {
+        const result = this.bounded(value, method);
+        this.charge(result.length, result.length * 2, method);
+        return result;
+    }
+
     param(source: any, index: number = 0, name?: string) {
         return Series.from(source).get(index);
     }
     tostring(value: any, formatStr?: string) {
         if (typeof value !== 'number') {
-            return typeof value === 'string' ? value : String(value);
+            return this.finished(value, 'str.tostring');
+        }
+        if (formatStr !== undefined && formatStr.length > MAX_FORMAT_PATTERN_LENGTH) {
+            throw new PineRuntimeError('str.tostring format is too long.', 'str.tostring');
         }
         // Without a format, floats print at most 10 decimals and no exponent below 1e21.
-        if (!formatStr) return formatFloat(value);
+        if (!formatStr) return this.finished(formatFloat(value), 'str.tostring');
 
         // format.mintick: the symbol's tick decimals, rounded half up.
         if (formatStr === 'mintick') {
             const mintick = this.context.pine?.syminfo?.mintick || 0.01;
             const decimals = Math.max(0, -Math.floor(Math.log10(mintick)));
-            return formatNumberPattern(value, decimals ? '0.' + '0'.repeat(decimals) : '0', 'halfUp');
+            return this.finished(formatNumberPattern(value, decimals ? '0.' + '0'.repeat(decimals) : '0', 'halfUp'), 'str.tostring');
         }
 
         // format.percent appends "%" to the value with 2 decimals (no ×100).
         if (formatStr === 'percent') {
-            return formatNumberPattern(value, '0.00', 'halfUp') + '%';
+            return this.finished(formatNumberPattern(value, '0.00', 'halfUp') + '%', 'str.tostring');
         }
 
         // format.volume: 1.235M, 2.5B, 12K, 999.
         if (formatStr === 'volume') {
-            return formatVolume(value);
+            return this.finished(formatVolume(value), 'str.tostring');
         }
 
         // Any other string is a DecimalFormat pattern: "#", "#.##", "0.000", "#,##0.0", "0 bars", …
         // (format.price / format.inherit and other text without digits are a literal prefix.)
-        return formatNumberPattern(value, formatStr, 'halfUp');
+        return this.finished(formatNumberPattern(value, formatStr, 'halfUp'), 'str.tostring');
     }
     tonumber(value: any) {
-        const s = text(value).replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
+        const input = this.bounded(value, 'str.tonumber');
+        this.context.executionBudget?.chargeWork(input.length, 'str.tonumber');
+        const s = input.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
         return DECIMAL_NUMBER.test(s) ? Number(s) : NaN;
     }
     lower(value: string) {
-        return text(value).toLowerCase();
+        const input = this.bounded(value, 'str.lower');
+        this.charge(input.length, input.length * 6, 'str.lower');
+        return this.bounded(input.toLowerCase(), 'str.lower');
     }
     upper(value: string) {
-        return text(value).toUpperCase();
+        const input = this.bounded(value, 'str.upper');
+        this.charge(input.length, input.length * 6, 'str.upper');
+        return this.bounded(input.toUpperCase(), 'str.upper');
     }
     trim(value: string) {
-        return text(value).trim();
+        const input = this.bounded(value, 'str.trim');
+        this.charge(input.length, input.length * 2, 'str.trim');
+        return input.trim();
     }
     repeat(source: string, repeat: number, separator: string = '') {
-        const n = typeof repeat === 'number' && repeat > 0 ? Math.floor(repeat) : 0;
-        assertElementCount(n * (text(source).length + text(separator).length), 'str.repeat');
-        return Array(repeat)
-            .fill(text(source))
-            .join(text(separator));
+        if (!Number.isSafeInteger(repeat) || repeat < 0 || repeat > MAX_COLLECTION_ELEMENTS) {
+            throw new PineRuntimeError(`The repetition count must be an integer from 0 to ${MAX_COLLECTION_ELEMENTS}.`, 'str.repeat');
+        }
+        const src = this.bounded(source, 'str.repeat');
+        const sep = this.bounded(separator, 'str.repeat');
+        const size = repeat === 0 ? 0 : repeat * src.length + (repeat - 1) * sep.length;
+        assertStringLength(size, 'str.repeat');
+        this.charge(size + repeat, size * 2 + repeat * 8, 'str.repeat');
+        if (repeat === 0) return '';
+        // The element count is checked even when both strings are empty.
+        return Array(repeat).fill(src).join(sep);
     }
     replace_all(source: string, target: string, replacement: string) {
-        return text(source).replaceAll(text(target), text(replacement));
+        const src = this.bounded(source, 'str.replace_all');
+        const tgt = this.bounded(target, 'str.replace_all');
+        const repl = this.bounded(replacement, 'str.replace_all');
+        let count = 0;
+        if (tgt === '') {
+            count = src.length + 1;
+        } else {
+            for (let index = 0; (index = src.indexOf(tgt, index)) !== -1; index += tgt.length) count++;
+        }
+        const size = src.length + count * (repl.length - tgt.length);
+        assertStringLength(size, 'str.replace_all');
+        this.charge(src.length + size, size * 2, 'str.replace_all');
+        return src.replaceAll(tgt, repl);
     }
 
     //occurense is the nth occurrence to replace
     replace(source: string, target: string, replacement: string, occurrence: number = 0) {
-        const str = text(source);
-        const tgt = text(target);
-        const repl = text(replacement);
+        const str = this.bounded(source, 'str.replace');
+        const tgt = this.bounded(target, 'str.replace');
+        const repl = this.bounded(replacement, 'str.replace');
         const occ = Math.floor(Number(occurrence)) || 0;
 
         if (tgt === '') return str;
@@ -116,6 +167,9 @@ export class Str {
             if (idx === -1) return str;
 
             if (found === occ) {
+                const size = str.length - tgt.length + repl.length;
+                assertStringLength(size, 'str.replace');
+                this.charge(str.length + size, size * 2, 'str.replace');
                 return str.substring(0, idx) + repl + str.substring(idx + tgt.length);
             }
 
@@ -125,32 +179,55 @@ export class Str {
     }
 
     contains(source: string, target: string) {
-        return text(source).includes(text(target));
+        return this.bounded(source, 'str.contains').includes(this.bounded(target, 'str.contains'));
     }
     endswith(source: string, target: string) {
-        return text(source).endsWith(text(target));
+        return this.bounded(source, 'str.endswith').endsWith(this.bounded(target, 'str.endswith'));
     }
     startswith(source: string, target: string) {
-        return text(source).startsWith(text(target));
+        return this.bounded(source, 'str.startswith').startsWith(this.bounded(target, 'str.startswith'));
     }
     pos(source: string, target: string) {
-        const idx = text(source).indexOf(text(target));
+        const idx = this.bounded(source, 'str.pos').indexOf(this.bounded(target, 'str.pos'));
         return idx === -1 ? NaN : idx;
     }
     length(source: string) {
-        return text(source).length;
+        return this.bounded(source, 'str.length').length;
     }
     match(source: string, pattern: string) {
         // Pine returns the matched substring, or "" when nothing matches.
-        const m = text(source).match(new RegExp(text(pattern)));
+        const src = this.bounded(source, 'str.match');
+        const expression = this.bounded(pattern, 'str.match');
+        assertBoundedRegex(expression, src);
+        // Unanchored matching may retry from each starting position. Charge a
+        // conservative worst-case bound so repeated calls share one quota.
+        this.charge(src.length * src.length + expression.length, src.length * 2, 'str.match');
+        const m = src.match(new RegExp(expression));
         return m ? m[0] : '';
     }
 
     split(source: string, separator: string) {
-        return new PineArrayObject(text(source).split(text(separator)), PineArrayType.string, this.context);
+        const src = this.bounded(source, 'str.split');
+        const sep = this.bounded(separator, 'str.split');
+        let count = 0;
+        if (sep === '') {
+            count = src.length;
+        } else {
+            count = 1;
+            for (let index = 0; (index = src.indexOf(sep, index)) !== -1; index += sep.length) {
+                count++;
+                assertElementCount(count, 'str.split');
+            }
+        }
+        assertElementCount(count, 'str.split');
+        this.charge(src.length + count, src.length * 2 + count * 32, 'str.split');
+        const parts = src.split(sep, MAX_COLLECTION_ELEMENTS);
+        return new PineArrayObject(parts, PineArrayType.string, this.context);
     }
     substring(source: string, begin_pos: number, end_pos: number) {
-        return text(source).substring(begin_pos, end_pos);
+        const input = this.bounded(source, 'str.substring');
+        this.charge(input.length, input.length * 2, 'str.substring');
+        return input.substring(begin_pos, end_pos);
     }
 
     /**
@@ -161,8 +238,9 @@ export class Str {
         const { time, format, timezone } = argsByName(args, FORMAT_TIME_PARAMS);
         // TradingView formats an na time as the epoch and an na format as the empty pattern.
         const ts = isNa(time) ? 0 : Number(time);
-        const pattern = format === undefined ? DEFAULT_TIME_FORMAT : text(format);
-        if (timezone !== undefined) return formatTime(ts, pattern, text(timezone));
+        const pattern = format === undefined ? DEFAULT_TIME_FORMAT : this.bounded(format, 'str.format_time');
+        if (pattern.length > MAX_FORMAT_PATTERN_LENGTH) throw new PineRuntimeError('str.format_time pattern is too long.', 'str.format_time');
+        if (timezone !== undefined) return formatTime(ts, pattern, this.bounded(timezone, 'str.format_time'));
         const symbolTimezone = this.context.pine?.syminfo?.timezone;
         return formatTime(ts, pattern, symbolTimezone && resolveTimeZone(symbolTimezone) ? symbolTimezone : 'UTC');
     }
@@ -174,7 +252,8 @@ export class Str {
      * error with Java's message. Date, time and choice placeholders are left as written.
      */
     format(message: string, ...args: any[]) {
-        const pattern = text(message);
+        const pattern = this.bounded(message, 'str.format');
+        this.charge(pattern.length, pattern.length * 2, 'str.format');
         let out = '';
         let inQuote = false;
         let i = 0;
@@ -182,6 +261,7 @@ export class Str {
             const ch = pattern[i];
             if (ch === "'") {
                 if (pattern[i + 1] === "'") {
+                    assertStringLength(out.length + 1, 'str.format');
                     out += "'";
                     i += 2;
                 } else {
@@ -191,6 +271,7 @@ export class Str {
                 continue;
             }
             if (ch !== '{' || inQuote) {
+                assertStringLength(out.length + 1, 'str.format');
                 out += ch;
                 i++;
                 continue;
@@ -222,13 +303,17 @@ export class Str {
                 }
             }
             if (j >= pattern.length) throw new Error('Unmatched braces in the pattern.');
-            out += this._formatArgument(segments, pattern.slice(i, j + 1), args);
+            const argument = this._formatArgument(segments, pattern.slice(i, j + 1), args, MAX_STRING_CODE_UNITS - out.length);
+            assertStringLength(out.length + argument.length, 'str.format');
+            this.charge(argument.length, argument.length * 2, 'str.format');
+            out += argument;
             i = j + 1;
         }
         return out;
     }
 
-    private _formatArgument([index, type, style]: string[], raw: string, args: any[]): string {
+    private _formatArgument([index, type, style]: string[], raw: string, args: any[], maxLength: number): string {
+        if (style.length > MAX_FORMAT_PATTERN_LENGTH) throw new PineRuntimeError('str.format pattern is too long.', 'str.format');
         if (!/^[+-]?\d+$/.test(index)) throw new Error(`can't parse argument number: ${index}`);
         const n = Number(index);
         if (n < 0) throw new Error(`negative argument number: ${index}`);
@@ -239,7 +324,7 @@ export class Str {
         }
         if (n >= args.length || args[n] === undefined) return `{${n}}`;
         const val = args[n];
-        if (kind === '' || typeof val !== 'number') return messageArgument(val);
+        if (kind === '' || typeof val !== 'number') return messageArgument(val, maxLength, (work, bytes) => this.charge(work, bytes, 'str.format'));
         if (Number.isNaN(val)) return 'NaN';
         return formatNumberPattern(val, MESSAGE_NUMBER_FORMATS[style.trim().toLowerCase()] ?? style, 'halfEven');
     }

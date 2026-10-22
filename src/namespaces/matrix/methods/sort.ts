@@ -2,11 +2,14 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { assertMatrixIndex } from '../indexValidation';
 
 export function sort(context: Context) {
     return (id: PineMatrixObject, column: number = 0, order: string = 'asc') => {
         const rows = id.matrix.length;
-        if (rows === 0) return;
+        const cols = rows > 0 ? id.matrix[0].length : 0;
+        if (cols === 0 && column === 0) return;
+        assertMatrixIndex(column, cols, 'column', 'matrix.sort');
         
         id.matrix.sort((a, b) => {
             const valA = a[column];

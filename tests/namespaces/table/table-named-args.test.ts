@@ -27,7 +27,7 @@ describe('table.new named-arg detection', () => {
             var t_force_overlay = t.force_overlay;
             var t_bgcolor = t.bgcolor;
             return { t_force_overlay, t_bgcolor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.t_force_overlay[0]).toBe(true);
         expect(result.t_bgcolor[0]).toBe('');
@@ -40,7 +40,7 @@ describe('table.new named-arg detection', () => {
             var t_force_overlay = t.force_overlay;
             var t_bgcolor = t.bgcolor;
             return { t_frame_width, t_force_overlay, t_bgcolor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.t_frame_width[0]).toBe(2);
         expect(result.t_force_overlay[0]).toBe(true);
@@ -53,7 +53,7 @@ describe('table.new named-arg detection', () => {
             var t_frame_width = t.frame_width;
             var t_bgcolor = t.bgcolor;
             return { t_frame_width, t_bgcolor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.t_frame_width[0]).toBe(2);
         expect(result.t_bgcolor[0]).toBe('');
@@ -65,7 +65,7 @@ describe('table.new named-arg detection', () => {
             var t_border_width = t.border_width;
             var t_bgcolor = t.bgcolor;
             return { t_border_width, t_bgcolor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.t_border_width[0]).toBe(2);
         expect(result.t_bgcolor[0]).toBe('');
@@ -92,7 +92,7 @@ describe('table.new named-arg detection', () => {
             var b5 = t5.bgcolor;
             var b6 = t6.bgcolor;
             return { v1, v2, v3, v4, v5, v6, b2, b3, b4, b5, b6 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.v1[0]).toBe('#ff0000');
         expect(result.v2[0]).toBe('#00ff00');
@@ -115,7 +115,7 @@ plot(close)
 var table t = table.new(position.bottom_right, 1, 1, force_overlay=true)
 if barstate.islast
     table.cell(t, 0, 0, "X")
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__tables__']).toBeDefined();
         const tables = plots['__tables__'].data[0].value;
@@ -138,7 +138,7 @@ describe('table.clear / table.merge_cells named-arg detection', () => {
             var c1 = t.getCell(0, 1);
             var c2 = t.getCell(0, 2);
             return { c0, c1, c2 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Rows 0 and 1 cleared, row 2 untouched
         expect(result.c0[0]).toBeFalsy();
@@ -154,7 +154,7 @@ describe('table.clear / table.merge_cells named-arg detection', () => {
             table.cell(t, 1, 1, 'M');
             var origin = t.getCell(0, 0);
             return { origin };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.origin[0]).toBeTruthy();
         expect(result.origin[0].text).toBe('M');

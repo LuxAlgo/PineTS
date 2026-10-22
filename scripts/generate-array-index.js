@@ -71,16 +71,23 @@ async function generateIndex() {
 // Run: npm run generate:array-index
 
 ${objectImports}
-import { tostringElements } from './format';
+import { boundedArrayText } from './format';
+import { MAX_STRING_CODE_UNITS } from '../limits';
+import { guardArray } from './capacity';
 
 ${pineArrayTypeEnum}
 
 export class PineArrayObject {
+    private _array: any[];
 ${objectPrivateProps}
 
-    constructor(public array: any, public type: PineArrayType, public context: any) {
+    constructor(array: any[], public type: PineArrayType, public context: any) {
+        this._array = guardArray(array, context);
 ${objectInitProps}
     }
+
+    get array(): any[] { return this._array; }
+    set array(value: any[]) { this._array = guardArray(value, this.context); }
 
     // Element count for JavaScript callers (PineTS syntax: \`line.all.length\`); Pine uses size().
     get length(): number {
@@ -88,7 +95,10 @@ ${objectInitProps}
     }
 
     toString(): string {
-        return '[' + tostringElements(this).join(', ') + ']';
+        return boundedArrayText(this, 'tostring', MAX_STRING_CODE_UNITS, 'array.toString', (work, bytes) => {
+            this.context?.executionBudget?.chargeWork(work, 'array.toString');
+            this.context?.executionBudget?.chargeMemory(bytes, 'array.toString');
+        });
     }
 
     [Symbol.iterator]() {

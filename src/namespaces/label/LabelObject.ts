@@ -85,7 +85,8 @@ export class LabelObject {
     get_text(): string { return this._deleted ? '' : this.text; }
 
     delete(): void {
-        this._deleted = true;
+        if (this._helper) this._helper.delete(this);
+        else this._deleted = true;
     }
 
     // The method form (`x.copy()`) goes through the helper, which registers the copy.

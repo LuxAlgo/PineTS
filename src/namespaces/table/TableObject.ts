@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { assertElementCount } from '../limits';
+import { PineRuntimeError } from '../../errors/PineRuntimeError';
+import type { ExecutionBudget } from '../../security/ExecutionBudget';
+import { assertElementCount, MAX_COLLECTION_ELEMENTS } from '../limits';
 
 let _tableIdCounter = 0;
 
@@ -68,11 +70,32 @@ export class TableObject {
         border_color: string = '',
         border_width: number = 0,
         force_overlay: boolean = false,
+        executionBudget?: ExecutionBudget,
     ) {
+        // Pine's int values may be fractional at runtime; truncate at the point of
+        // use, then validate each canonical dimension before allocating row arrays.
+        const validatedDimension = (value: number): number => {
+            const dimension = truncCoord(value);
+            if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 ||
+                !Number.isSafeInteger(dimension) || dimension > MAX_COLLECTION_ELEMENTS) {
+                throw new PineRuntimeError('Invalid table dimension.', 'table.new');
+            }
+            return dimension;
+        };
+        const validatedColumns = validatedDimension(columns);
+        const validatedRows = validatedDimension(rows);
+        const cells = validatedColumns * validatedRows;
+        // A zero-width table still allocates one container per row.
+        assertElementCount(validatedRows, 'table.new');
+        assertElementCount(cells, 'table.new');
+        executionBudget?.chargeWork(validatedRows + cells, 'table.new');
+        // Conservative host-side estimate: row-array overhead plus cell slots.
+        executionBudget?.chargeMemory(validatedRows * 64 + cells * 32, 'table.new');
+
         this.id = _tableIdCounter++;
         this.position = position;
-        this.columns = truncCoord(columns);
-        this.rows = truncCoord(rows);
+        this.columns = validatedColumns;
+        this.rows = validatedRows;
         this.bgcolor = bgcolor;
         this.frame_color = frame_color;
         this.frame_width = frame_width;
@@ -81,12 +104,6 @@ export class TableObject {
         this.force_overlay = force_overlay;
         this._deleted = false;
         this.merges = [];
-
-        // Guard against an unbounded cell allocation from a single table.new.
-        assertElementCount(
-            (this.rows > 0 ? this.rows : 0) * (this.columns > 0 ? this.columns : 0),
-            'table.new'
-        );
 
         // Initialize cells grid (rows × columns) with nulls
         this.cells = [];

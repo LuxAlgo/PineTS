@@ -37,7 +37,7 @@ describe('Matrix.mult(vector)', () => {
             return { val0, val1, sz };
         };
 
-        const ctx = await pineTS.run(code);
+        const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(ctx.result.val0)).toBe(14);
@@ -66,7 +66,7 @@ describe('Matrix.mult(vector)', () => {
             return { val0, val1, val2 };
         };
 
-        const ctx = await pineTS.run(code);
+        const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(ctx.result.val0)).toBe(5);
@@ -95,7 +95,7 @@ plot(result.get(1), "r1")
 plot(result.size(), "sz")
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['r0'].data[0].value).toBe(11);
         expect(plots['r1'].data[0].value).toBe(24);
         expect(plots['sz'].data[0].value).toBe(2);
@@ -127,7 +127,7 @@ plot(result.size(), "sz")
             return { r00, r01, r10, r11, rows };
         };
 
-        const ctx = await pineTS.run(code);
+        const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(ctx.result.r00)).toBe(19);

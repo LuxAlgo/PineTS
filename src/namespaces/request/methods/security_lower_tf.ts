@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { PineTS } from '../../../PineTS.class';
+import { compiledArtifactKind } from '../../../transpiler/analysis/VerifiedArtifact';
 import { Series } from '../../../Series';
 import { formatTimeframe, parseTimeframe, timeframeSeconds } from '../../../timeframe';
 import { plainTickerId } from '../../../tickerModifier';
@@ -222,7 +223,8 @@ async function buildFastBuiltinSecContext(
     // pagination semantics, syminfo). Wait for `ready()` and read the
     // populated arrays — never call `run()`, so no transpile, no
     // iteration, no shifts, no helpers.
-    const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, effectiveSDate, secEDate);
+    const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, effectiveSDate, secEDate,
+        { executionBudget: context.executionBudget });
     pineTS.markAsSecondary();
     await pineTS.ready();
 
@@ -402,7 +404,8 @@ export function security_lower_tf(context: any) {
                     : 0;
                 const secEDate = lastBarCloseTime || context.eDate || Date.now();
 
-                const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate);
+                const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate,
+                    { executionBudget: context.executionBudget });
                 pineTS.markAsSecondary();
 
                 // Truncated-slice slow path: when the transpiler emitted a
@@ -423,9 +426,10 @@ export function security_lower_tf(context: any) {
                 const slice = (context as any)._ltfTruncatedBodies?.[sliceKey];
                 let secContext: any;
                 if (slice) {
-                    secContext = await pineTS.runPretranspiled(slice);
+                    const sliceMode = compiledArtifactKind(slice) === 'verifiedPine' ? 'nativePine' : context.sourceMode;
+                    secContext = await pineTS.runPretranspiled(slice, {}, undefined, { sourceMode: sliceMode });
                 } else {
-                    secContext = await pineTS.run(context.pineTSCode);
+                    secContext = await pineTS.run(context.pineTSCode, undefined, undefined, { sourceMode: context.sourceMode });
                 }
                 context.cache[cacheKey] = { pineTS, context: secContext, dataVersion: context.dataVersion };
             }

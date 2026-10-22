@@ -9,13 +9,13 @@ describe('Transpiler Error Handling', () => {
     it('should handle syntax errors gracefully', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
 
-        await expect(pineTS.run('let x = ;')).rejects.toThrow();
+        await expect(pineTS.run('let x = ;', undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow();
     });
 
     it('should handle empty code', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
 
-        const { result } = await pineTS.run('');
+        const { result } = await pineTS.run('', undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result).toBeDefined();
     });
 
@@ -31,7 +31,7 @@ describe('Transpiler Error Handling', () => {
             plotchar(${longVarName}, 'test');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['test']).toBeDefined();
         expect(plots['test'].data).toBeDefined();
@@ -41,13 +41,13 @@ describe('Transpiler Error Handling', () => {
     it('should handle malformed function calls', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
 
-        await expect(pineTS.run('ta.sma(')).rejects.toThrow();
+        await expect(pineTS.run('ta.sma(', undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow();
     });
 
     it('should handle invalid destructuring', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1h', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
 
-        await expect(pineTS.run('const { = close;')).rejects.toThrow();
+        await expect(pineTS.run('const { = close;', undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow();
     });
 
     it('should handle code with only comments', async () => {
@@ -58,7 +58,7 @@ describe('Transpiler Error Handling', () => {
             /* Another comment */
         `;
 
-        const { result } = await pineTS.run(code);
+        const { result } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result).toBeDefined();
     });
 
@@ -67,7 +67,7 @@ describe('Transpiler Error Handling', () => {
 
         const code = '   \n\n\t\t   \n  ';
 
-        const { result } = await pineTS.run(code);
+        const { result } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result).toBeDefined();
     });
 
@@ -82,7 +82,7 @@ describe('Transpiler Error Handling', () => {
             return { sma: sma, ema: ema };
         `;
 
-        const { result } = await pineTS.run(code);
+        const { result } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result).toBeDefined();
         expect(result.sma).toBeDefined();
         expect(result.ema).toBeDefined();
@@ -103,7 +103,7 @@ describe('Transpiler Error Handling', () => {
             return { sma, ema };
         `;
 
-        const { result } = await pineTS.run(code);
+        const { result } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result).toBeDefined();
         expect(result.sma).toBeDefined();
         expect(result.ema).toBeDefined();

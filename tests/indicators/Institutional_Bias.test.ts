@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { Provider } from '@pinets/marketData/Provider.class';
 
 describe('Indicators', () => {
+    // An omitted start date asks Binance for the last 100 bars before the end date.
+    // A literal 0 instead requests the first 100 historical bars (from 2017).
     it('Institutional Bias', async () => {
-        const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', '1d', 100, 0, new Date('Dec 25 2024').getTime() - 1);
+        const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', '1d', 100, undefined, new Date('Dec 25 2024').getTime() - 1);
 
         const context = await pineTS.run((context) => {
             const { ta } = context.pine;
@@ -21,7 +23,7 @@ describe('Indicators', () => {
                 bull_bias,
                 bear_bias,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const { result } = context;
 
         const part_bull_bias = result.bull_bias.reverse().slice(0, 10);
@@ -35,7 +37,7 @@ describe('Indicators', () => {
     });
 
     it('Institutional Bias from Pine Script source', async () => {
-        const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', '1d', 100, 0, new Date('Dec 25 2024').getTime() - 1);
+        const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', '1d', 100, undefined, new Date('Dec 25 2024').getTime() - 1);
 
         const code = `
 //@version=6
@@ -50,7 +52,7 @@ plotchar(bull_bias, title="bull_bias", color=color.green)
 plotchar(bear_bias, title="bear_bias", color=color.red)
         `;
 
-        const { result, plots } = await pineTS.run(code);
+        const { result, plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const part_bull_bias = plots.bull_bias.data
             .map((item: any) => item.value)
@@ -69,7 +71,7 @@ plotchar(bear_bias, title="bear_bias", color=color.red)
     });
 
     it('Institutional Bias from Pine Script source with inputs', async () => {
-        const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', '1d', 100, 0, new Date('Dec 25 2024').getTime() - 1);
+        const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', '1d', 100, undefined, new Date('Dec 25 2024').getTime() - 1);
 
         const code = `
 //@version=6
@@ -85,7 +87,7 @@ plotchar(bear_bias, title="bear_bias", color=color.red)
         `;
 
         const indicator = new Indicator(code, { 'Fast Length': 3, 'Slow Length': 6 });
-        const { result, plots } = await pineTS.run(indicator);
+        const { result, plots } = await pineTS.run(indicator, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const part_bull_bias = plots.bull_bias.data
             .map((item: any) => item.value)

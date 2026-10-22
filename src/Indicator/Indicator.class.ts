@@ -10,6 +10,7 @@ import { scanDeclaration } from './scanDeclaration';
 import { propsForDeclaration } from './propsSchema';
 import { buildPropProxy } from './propProxy';
 import type { IPineInput, IPineProp, PreparedScript } from './types';
+import { SOURCE_POLICY_VERSION, type SourceMode } from '../security/SourceMode';
 
 /**
  * The single owner of every per-script artifact. Holds the source, lazily
@@ -46,7 +47,7 @@ export class Indicator {
     declare public readonly prop: Record<string, unknown>;
 
     // Lazy artifacts — populated on first prepare() call.
-    private _prepared: PreparedScript | null = null;
+    private _preparedByMode = new Map<string, PreparedScript>();
     private _inputMeta: IPineInput[] | null = null;
     private _inputValues: Record<string, unknown> = {};
     private _explicitOverrides = new Set<string>(); // canonical keys the user wrote via .input.X = ...
@@ -103,19 +104,23 @@ export class Indicator {
      * on the instance, so passing the same Indicator to multiple `pine.run()`
      * calls produces a single transpilation pass.
      *
-     * NB: cache is keyed by *instance identity*, not by options. If you need
-     * different debug settings, create a new Indicator.
+     * Cache entries are separated by source trust mode and policy version.
+     * A JavaScript artifact prepared in trusted mode must never be reused by
+     * a later native-Pine run of this Indicator.
      */
-    public prepare(opts: { debug?: boolean; ln?: boolean } = {}): PreparedScript {
-        if (this._prepared) return this._prepared;
+    public prepare(opts: { debug?: boolean; ln?: boolean; sourceMode?: SourceMode } = {}): PreparedScript {
+        const sourceMode = opts.sourceMode ?? 'nativePine';
+        const cacheKey = `${SOURCE_POLICY_VERSION}:${sourceMode}:${!!opts.debug}:${!!opts.ln}`;
+        const cached = this._preparedByMode.get(cacheKey);
+        if (cached) return cached;
 
-        const fn = transpile(this.source, { debug: !!opts.debug, ln: opts.ln });
+        const fn = transpile(this.source, { debug: !!opts.debug, ln: opts.ln, sourceMode });
 
         const usesVisibleRange = detectViewportUsage(fn);
         const ltfSlices = (fn as any)._ltfSlices;
 
         const self = this;
-        this._prepared = {
+        const prepared: PreparedScript = {
             fn,
             get inputs() {
                 return self.getRuntimeInputs();
@@ -123,12 +128,13 @@ export class Indicator {
             usesVisibleRange,
             ltfSlices,
         };
-        return this._prepared;
+        this._preparedByMode.set(cacheKey, prepared);
+        return prepared;
     }
 
     /** True iff the script references any built-in in `VIEWPORT_DEPENDENT_BUILTINS`. */
-    public usesVisibleRange(): boolean {
-        return this.prepare().usesVisibleRange;
+    public usesVisibleRange(sourceMode: SourceMode = 'nativePine'): boolean {
+        return this.prepare({ sourceMode }).usesVisibleRange;
     }
 
     /**
@@ -147,7 +153,7 @@ export class Indicator {
      * override key matches.
      */
     public getRuntimeInputs(): Record<string, unknown> {
-        const out: Record<string, unknown> = { ...(this.inputs ?? {}) };
+        const out: Record<string, unknown> = Object.assign(Object.create(null), this.inputs ?? {});
         if (this._inputMeta) {
             for (const key of this._explicitOverrides) {
                 const value = this._inputValues[key];

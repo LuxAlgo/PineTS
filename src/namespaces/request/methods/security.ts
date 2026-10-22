@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { PineTS } from '../../../PineTS.class';
+import { compiledArtifactKind } from '../../../transpiler/analysis/VerifiedArtifact';
 import { Series } from '../../../Series';
 import { plainTickerId, splitTickerModifier, withTickerModifier } from '../../../tickerModifier';
 import { formatTimeframe, parseTimeframe, timeframeSeconds } from '../../../timeframe';
@@ -8,6 +9,7 @@ import { findSecContextIdx } from '../utils/findSecContextIdx';
 import { findLTFContextIdx } from '../utils/findLTFContextIdx';
 import { parseArgsForPineParams } from '../../utils';
 import { trackRequestContext, MAX_CALC_BARS } from '../../limits';
+import { PineRuntimeError } from '../../../errors/PineRuntimeError';
 
 // Pine signature (v5/v6):
 //   request.security(symbol, timeframe, expression, gaps, lookahead, ignore_invalid_symbol, currency, calc_bars_count)
@@ -323,7 +325,8 @@ export function security(context: any) {
 
         // Pass calc_bars_count as `periods` so the secondary fetches that many bars
         // ending at secEDate — gives the script the historical depth it asked for.
-        const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate);
+        const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate,
+            { executionBudget: context.executionBudget });
 
         // Mark as secondary context to prevent infinite recursion
         pineTS.markAsSecondary();
@@ -339,12 +342,16 @@ export function security(context: any) {
         const exprNameStr = typeof _expression_name === 'string' ? _expression_name : '';
         const sliceKey = exprNameStr.match(/p\d+$/)?.[0] ?? exprNameStr;
         const slice = (context as any)._ltfTruncatedBodies?.[sliceKey];
+        const sliceMode = compiledArtifactKind(slice) === 'verifiedPine' ? 'nativePine' : context.sourceMode;
         let secContext: any;
         try {
             secContext = slice
-                ? await pineTS.runPretranspiled(slice)
-                : await pineTS.run(context.pineTSCode);
+                ? await pineTS.runPretranspiled(slice, {}, undefined, { sourceMode: sliceMode })
+                : await pineTS.run(context.pineTSCode, undefined, undefined, { sourceMode: context.sourceMode });
         } catch (error) {
+            // `ignore_invalid_symbol` only changes symbol-lookup failures;
+            // resource/cancellation/runtime-policy failures must halt the run.
+            if (error instanceof PineRuntimeError) throw error;
             // The data source couldn't provide the requested series. As on
             // TradingView the script stops with the error, unless the call
             // passes ignore_invalid_symbol = true: then the series is na.

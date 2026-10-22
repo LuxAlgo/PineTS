@@ -16,7 +16,7 @@ describe('Math - Constants', () => {
             return { e, pi, phi, rphi };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {

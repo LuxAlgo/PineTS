@@ -5,6 +5,8 @@
 // Generates INDENT/DEDENT tokens like Python
 
 import { TokenType, Keywords, ContextualKeywords, MultiCharOperators, Token } from './tokens';
+import { MAX_COMPILER_NESTING, MAX_COMPILER_TOKENS, MAX_COMPILER_LITERAL_CODE_UNITS } from '../analysis/CompilerBudget';
+import { PineRuntimeError } from '../../errors/PineRuntimeError';
 
 export class Lexer {
     // TradingView counts a tab as four columns when measuring indentation.
@@ -664,6 +666,15 @@ export class Lexer {
     }
 
     addToken(type, value, indent = null, raw = null) {
+        if (this.tokens.length >= MAX_COMPILER_TOKENS) {
+            throw new PineRuntimeError('Pine compilation budget exceeded: token count.', 'compiler.budget');
+        }
+        if (this.indentStack.length > MAX_COMPILER_NESTING) {
+            throw new PineRuntimeError('Pine compilation budget exceeded: indentation depth.', 'compiler.budget');
+        }
+        if (type === TokenType.STRING && typeof value === 'string' && value.length > MAX_COMPILER_LITERAL_CODE_UNITS) {
+            throw new PineRuntimeError('Pine compilation budget exceeded: literal size.', 'compiler.budget');
+        }
         const token = new Token(type, value, this.line, this.column, indent !== null ? indent : this.getCurrentIndent(), raw);
         if (this.pendingWrap) {
             token.wrapped = this.pendingWrap;

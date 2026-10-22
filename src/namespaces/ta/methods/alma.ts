@@ -2,6 +2,7 @@
 
 import { Series } from '../../../Series';
 import { CarryHistory } from '../utils/history';
+import { chargeTaMemory, chargeTaWork, validTaLength } from '../utils/assertTaLength';
 
 /**
  * ALMA - Arnaud Legoux Moving Average
@@ -29,6 +30,7 @@ export function alma(context: any) {
         // The transpiler appends the call id after the optional `floor` argument.
         const _callId: string | undefined = typeof rest[rest.length - 1] === 'string' ? rest.pop() : undefined;
         const period = Series.from(_period).get(0);
+        if (!validTaLength(period, 'ta.alma')) return NaN;
         const offset = Series.from(_offset).get(0);
         const sigma = Series.from(_sigma).get(0);
         const floor = rest.length > 0 && !!Series.from(rest[0]).get(0);
@@ -38,7 +40,7 @@ export function alma(context: any) {
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
-                carry: new CarryHistory(),
+                carry: new CarryHistory(0, undefined, true, context.executionBudget),
                 // Weights for `weightsKey`; a series length recomputes them
                 weightsKey: '',
                 weights: [],
@@ -50,6 +52,9 @@ export function alma(context: any) {
 
         const weightsKey = `${period}_${offset}_${sigma}_${floor}`;
         if (state.weightsKey !== weightsKey) {
+            // A series period rebuilds weights on every change. Charge before replacing the buffer.
+            chargeTaWork(context, 2 * period, 'ta.alma');
+            chargeTaMemory(context, 8 * period, 'ta.alma');
             const m = floor ? Math.floor(offset * (period - 1)) : offset * (period - 1);
             const s = period / sigma;
             const weights = [];
@@ -70,7 +75,7 @@ export function alma(context: any) {
         }
 
         const series = Series.from(source);
-        carry.push(context.idx, series.get(0), period, series);
+        carry.push(context.idx, series.get(0), period, series, context.executionBudget);
         const h = carry.h;
 
         if (!(period >= 1) || h.size < period) {
@@ -82,6 +87,7 @@ export function alma(context: any) {
         const weights: number[] = state.weights;
         let alma = 0;
         const values = h.view(period);
+        chargeTaWork(context, period, 'ta.alma');
         for (let i = 0; i < period; i++) alma += weights[i] * values[i];
         return context.precision(alma);
     };
