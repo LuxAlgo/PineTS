@@ -2108,6 +2108,12 @@ export class Parser {
             }
             // Call expression
             else if (this.match(TokenType.LPAREN)) {
+                // Same rule as `[` below: a `(` that opens a new line starts a new
+                // statement (`(a and b) ? x : y` after a switch/if expression),
+                // not a call on the block expression before it.
+                if (this.startsNewLine()) {
+                    break;
+                }
                 expr = this.parseCallExpression(expr);
             }
             // Member access
