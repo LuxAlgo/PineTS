@@ -18,9 +18,10 @@ const LicenseHeader = `
 import json from '@rollup/plugin-json';
 import esbuild from 'rollup-plugin-esbuild';
 import sourcemaps from 'rollup-plugin-sourcemaps';
-import typescriptPaths from 'rollup-plugin-typescript-paths';
+import { typescriptPaths } from 'rollup-plugin-typescript-paths';
 import commonjs from '@rollup/plugin-commonjs';
 import resolve from '@rollup/plugin-node-resolve';
+import { readFileSync } from 'node:fs';
 
 const format = process.env.FORMAT || 'es';
 const build = process.env.BUILD || 'dev';
@@ -341,6 +342,32 @@ const ESBrowserConfigProd = {
     ],
 };
 
+// Node-only opt-in isolation adapter. Keep it out of the browser-facing main
+// entry and publish its child entry beside the adapter as an explicit asset.
+const IsolationNodeConfig = {
+    input: './src/isolation/node.ts',
+    output: {
+        file: './dist/isolation-node.mjs',
+        format: 'es',
+        sourcemap: true,
+        banner: LicenseHeader,
+    },
+    external: (id) => id.startsWith('node:'),
+    plugins: [
+        esbuild({ sourceMap: true, target: 'node20' }),
+        {
+            name: 'emit-isolation-worker',
+            generateBundle() {
+                this.emitFile({
+                    type: 'asset',
+                    fileName: 'isolation-worker.mjs',
+                    source: readFileSync('./src/isolation/worker.mjs', 'utf8'),
+                });
+            },
+        },
+    ],
+};
+
 let config = build === 'dev' ? ESConfigDev : ESConfigProd;
 if (format === 'cjs') {
     config = build === 'dev' ? CJSConfigDev : CJSConfigProd;
@@ -352,6 +379,10 @@ if (format === 'browser') {
 
 if (format === 'browser-es') {
     config = build === 'dev' ? ESBrowserConfigDev : ESBrowserConfigProd;
+}
+
+if (format === 'isolation-node') {
+    config = IsolationNodeConfig;
 }
 
 export default config;

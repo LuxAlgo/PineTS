@@ -2,6 +2,7 @@
 
 import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
+import { chargeTaWork } from '../utils/assertTaLength';
 
 export function bb(context: any) {
     return (source: any, _length: any, _mult: any, _callId?: string) => {
@@ -20,6 +21,7 @@ export function bb(context: any) {
 
         // Standard deviation summed over the window (a running sum of squares would cancel)
         const values = win.values();
+        chargeTaWork(context, length, 'ta.bb');
         let sumSquaredDiff = 0;
         for (let i = 0; i < length; i++) {
             sumSquaredDiff += Math.pow(values[i] - middle, 2);

@@ -4,14 +4,13 @@ import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
 import { PineArrayObject } from '../../array/PineArrayObject';
 import { inferValueType } from '@pinets/namespaces/array/utils';
+import { assertMatrixIndex } from '../indexValidation';
 
 export function remove_col(context: Context) {
     return (id: PineMatrixObject, column_index: number) => {
         const rows = id.matrix.length;
-        if (rows === 0) {
-            const anyType = inferValueType(id.matrix[0][0]);
-            return new PineArrayObject([], anyType as any, context);
-        }
+        const cols = rows > 0 ? id.matrix[0].length : 0;
+        assertMatrixIndex(column_index, cols, 'column', 'matrix.remove_col');
 
         const removedValues = [];
         for (let i = 0; i < rows; i++) {

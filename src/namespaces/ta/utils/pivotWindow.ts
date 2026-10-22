@@ -2,6 +2,8 @@
 
 import { Series } from '../../../Series';
 import { nonNaWindow } from './nonNaWindow';
+import { assertTaLength } from './assertTaLength';
+import type { ExecutionBudget } from '../../../security/ExecutionBudget';
 
 /**
  * Pivot high (low) confirmed at index `i` of `source` (oldest first), as on TradingView (since
@@ -10,13 +12,15 @@ import { nonNaWindow } from './nonNaWindow';
  * disqualify it). An na value is skipped, so the window then reaches further back. From bar `i =
  * leftbars + rightbars` on the window may hold fewer values (as ta.highest). NaN otherwise.
  */
-export function pivotAt(source: number[], i: number, leftbars: number, rightbars: number, high: boolean): number {
+export function pivotAt(source: number[], i: number, leftbars: number, rightbars: number, high: boolean, budget?: ExecutionBudget): number {
+    assertTaLength(leftbars + rightbars + 1, 'ta.pivot');
     const c = i - rightbars;
     const p = source[c];
     if (!(c >= 0) || p === undefined || p === null || isNaN(p)) return NaN;
     if (i < leftbars + rightbars) return NaN;
     let n = 0;
     for (let j = i; j >= 0 && n < leftbars + rightbars + 1; j--) {
+        budget?.chargeWork(1, 'ta.pivot');
         const v = source[j];
         if (v === undefined || v === null || isNaN(v)) continue;
         n++;
@@ -34,7 +38,8 @@ export function pivotAt(source: number[], i: number, leftbars: number, rightbars
  * newest among equal values. Without one the source series is read.
  */
 export function pivot(context: any, key: string | undefined, source: any, leftbars: number, rightbars: number, high: boolean): number | undefined {
-    if (!key) return pivotAt(Series.from(source).toArray(), context.idx, leftbars, rightbars, high);
+    assertTaLength(leftbars + rightbars + 1, 'ta.pivot');
+    if (!key) return pivotAt(Series.from(source).toArray(), context.idx, leftbars, rightbars, high, context.executionBudget);
 
     const win = nonNaWindow(context, key, Series.from(source), leftbars + rightbars + 1, 'extremes', undefined, 'bars');
     if (!win || !(rightbars >= 0)) return NaN;

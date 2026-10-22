@@ -2,18 +2,21 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { PineRuntimeError } from '../../../errors/PineRuntimeError';
+import { assertMatrixDimensions, chargeCollectionAllocation, chargeCollectionWork } from '../../collectionCapacity';
 
 export function reshape(context: Context) {
     return (id: PineMatrixObject, rows: number, cols: number) => {
         const currentRows = id.matrix.length;
         const currentCols = currentRows > 0 ? id.matrix[0].length : 0;
         const currentSize = currentRows * currentCols;
-        const newSize = rows * cols;
+        const newSize = assertMatrixDimensions(rows, cols, 'matrix.reshape');
 
         if (currentSize !== newSize) {
-            // Cannot reshape if element counts don't match
-            //FIXME : handle this
+            throw new PineRuntimeError('The new matrix dimensions must preserve the number of elements.', 'matrix.reshape');
         }
+        chargeCollectionWork(context, newSize, 'matrix.reshape');
+        chargeCollectionAllocation(context, newSize, 'matrix.reshape');
 
         const elements: any[] = [];
         for (let i = 0; i < currentRows; i++) {
@@ -21,10 +24,6 @@ export function reshape(context: Context) {
                 elements.push(id.matrix[i][j]);
             }
         }
-
-        // Pad or truncate if needed (though reshape usually implies same size)
-        while (elements.length < newSize) elements.push(NaN);
-        if (elements.length > newSize) elements.length = newSize;
 
         const newMatrix: any[][] = [];
         let k = 0;

@@ -2,6 +2,7 @@
 
 import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
+import { chargeTaWork } from '../utils/assertTaLength';
 
 export function variance(context: any) {
     return (source: any, _length: any, ...rest: any[]) => {
@@ -19,6 +20,7 @@ export function variance(context: any) {
         let sum = 0;
         let sumSquares = 0;
         const values = window.values();
+        chargeTaWork(context, length, 'ta.variance');
         for (let i = 0; i < length; i++) {
             const v = values[i];
             sum += v;

@@ -4,6 +4,7 @@
 import { Order, StrategyState, Trade } from './types';
 import { Series } from '../../Series';
 import { isNamedArgsBag } from '../utils';
+import { validateDrawingOptions } from '../drawingPolicy';
 
 // strategy() parameters in the TradingView reference order.
 //prettier-ignore
@@ -3518,6 +3519,7 @@ export function initializeStrategy(context: any, config: any): void {
     // 150% of equity trades on TradingView, where margin 100% rejects every order.
     const v5Margins = context.pineVersion === 5 ? { margin_long: 0, margin_short: 0 } : {};
     const finalConfig = { ...defaults, ...v5Margins, ...given };
+    validateDrawingOptions(finalConfig);
     const initialCapital = finalConfig.initial_capital;
     // Without `currency`, the account currency is the symbol's (TV: USDT on BINANCE:BTCUSDT).
     const accountCurrency = given.currency || context.pine?.syminfo?.currency || finalConfig.currency || 'USD';

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { CountsTail, ExtremeTail, History, SortedTail } from './history';
+import { chargeTaMemory, chargeTaWork, validTaLength } from './assertTaLength';
+import type { ExecutionBudget } from '../../../security/ExecutionBudget';
 
 export const isNa = (v: any): boolean => v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v));
 
@@ -42,7 +44,7 @@ const read = (src: ValueSource, k: number): number => (typeof src === 'function'
 const BACKFILL_BARS = 5000;
 
 class NonNaState implements NonNaView {
-    h = new History(1);
+    h: History;
     lastIdx = -1;
     savedEnd = 0;
     sorted: SortedTail | null;
@@ -52,14 +54,16 @@ class NonNaState implements NonNaView {
     // bar index of each value (with `'extremes'`)
     bars: History | null;
     length = 0;
+    reservedLength = 0;
     sum = NaN;
 
-    constructor(track: Track) {
-        this.sorted = track === 'sorted' ? new SortedTail() : null;
-        this.counts = track === 'counts' ? new CountsTail() : null;
-        this.hi = track === 'extremes' ? new ExtremeTail(true, true) : null;
-        this.lo = track === 'extremes' ? new ExtremeTail(false, true) : null;
-        this.bars = track === 'extremes' ? new History() : null;
+    constructor(track: Track, private readonly budget?: ExecutionBudget) {
+        this.h = new History(1, budget);
+        this.sorted = track === 'sorted' ? new SortedTail(budget) : null;
+        this.counts = track === 'counts' ? new CountsTail(budget) : null;
+        this.hi = track === 'extremes' ? new ExtremeTail(true, true, budget) : null;
+        this.lo = track === 'extremes' ? new ExtremeTail(false, true, budget) : null;
+        this.bars = track === 'extremes' ? new History(0, budget) : null;
     }
 
     push(v: number, bar: number): void {
@@ -90,6 +94,7 @@ class NonNaState implements NonNaView {
     private scratch: number[] = [];
     values(): number[] {
         const n = this.length;
+        this.budget?.chargeWork(n, 'ta.window');
         const out = this.scratch;
         out.length = n;
         const v = this.h.view(n);
@@ -136,16 +141,23 @@ export function nonNaWindow(
     current?: number,
     gate: Gate = 'values',
 ): NonNaView | undefined {
+    if (!validTaLength(length, 'ta.window')) return undefined;
     if (!context.taState) context.taState = {};
     let s: NonNaState = context.taState[key];
-    if (!s) s = context.taState[key] = new NonNaState(track);
+    const reserved = s?.reservedLength ?? 0;
+    if (length > reserved) {
+        // History prefixes, optional sorted/extreme indexes and rollback logs retain storage.
+        chargeTaMemory(context, 100 * (length - reserved), 'ta.window');
+    }
+    if (!s) s = context.taState[key] = new NonNaState(track, context.executionBudget);
+    s.reservedLength = Math.max(reserved, length);
     const h = s.h;
-    if (!(length >= 1)) return undefined;
     h.keepFor(length);
     s.bars?.keepFor(length);
 
     if (context.idx !== s.lastIdx) {
         if (s.lastIdx < 0) {
+            chargeTaWork(context, Math.min(context.idx, BACKFILL_BARS + 2 * length), 'ta.window');
             for (let k = Math.min(context.idx, BACKFILL_BARS + 2 * length); k >= 1; k--) {
                 const v = read(valueAt, k);
                 if (!isNa(v)) s.push(v, context.idx - k);

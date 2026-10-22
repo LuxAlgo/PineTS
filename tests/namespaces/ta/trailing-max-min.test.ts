@@ -20,7 +20,7 @@ indicator("t")
 // 0,0,0,100,0,0,0,-50,0,0,...  -> max steps up at bar 3, min steps down at bar 7
 s = bar_index == 3 ? 100 : bar_index == 7 ? -50 : 0
 plot(ta.max(s), "mx")
-plot(ta.min(s), "mn")`);
+plot(ta.min(s), "mn")`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const mx = plots['mx'].data.map((p) => p.value);
         const mn = plots['mn'].data.map((p) => p.value);
@@ -41,7 +41,7 @@ plot(ta.min(s), "mn")`);
 indicator("t")
 plot(close, "c")
 plot(ta.max(close), "mx")
-plot(ta.min(close), "mn")`);
+plot(ta.min(close), "mn")`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const c = plots['c'].data.map((p) => p.value);
         const mx = plots['mx'].data.map((p) => p.value);
@@ -69,7 +69,7 @@ indicator("t")
 // na for bars 0-2, then a spike, then na again on bar 5 which must not reset/poison the result
 s = bar_index < 3 ? na : bar_index == 4 ? 500 : bar_index == 5 ? na : bar_index == 6 ? -5 : 10
 plot(ta.max(s), "mx")
-plot(ta.min(s), "mn")`);
+plot(ta.min(s), "mn")`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const mx = plots['mx'].data.map((p) => p.value);
         const mn = plots['mn'].data.map((p) => p.value);
@@ -101,7 +101,7 @@ b = bar_index == 4 ? 3 : 1
 plot(ta.max(a), "ma")
 plot(ta.max(b), "mb")
 plot(ta.min(a), "na")
-plot(ta.min(b), "nb")`);
+plot(ta.min(b), "nb")`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const last = (k: string) => plots[k].data[plots[k].data.length - 1].value;
         expect(last('ma')).toBe(7);
@@ -124,7 +124,7 @@ plot(ta.min(b), "nb")`);
             plot(mn, 'mn');
             plot(close, 'c');
             return { mx, mn };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const c = plots['c'].data.map((p) => p.value);
         expect(plots['mx'].data[plots['mx'].data.length - 1].value).toBeCloseTo(Math.max(...c), 8);
         expect(plots['mn'].data[plots['mn'].data.length - 1].value).toBeCloseTo(Math.min(...c), 8);

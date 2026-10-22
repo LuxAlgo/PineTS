@@ -2,6 +2,7 @@
 
 import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
+import { chargeTaWork } from '../utils/assertTaLength';
 
 /**
  * Correlation Coefficient
@@ -26,6 +27,7 @@ export function correlation(context: any) {
             const w = nonNaWindow(context, `${key}_${suffix}`, valueAt, length);
             if (!w) return NaN;
             const values = w.values();
+            chargeTaWork(context, length, 'ta.correlation');
             let sum = 0;
             for (let i = 0; i < length; i++) sum += values[i];
             return sum / length;

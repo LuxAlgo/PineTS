@@ -184,7 +184,7 @@ console.log('Signal Line:', plots['Signal'].data);
 
 ### Using PineTS Syntax
 
-The same indicators can be written as a JavaScript function using `$.data` and `$.pine`:
+Trusted first-party indicators can also be written as a JavaScript function using `$.data` and `$.pine`. JavaScript requires an explicit trust mode; `run()` accepts only versioned Pine by default:
 
 ```javascript
 import { PineTS, Provider } from 'pinets';
@@ -211,8 +211,10 @@ const { plots } = await pineTS.run(($) => {
     plotchar(bearish, 'Sell Signal');
 
     return { ema9, ema21, atr, bullish, bearish };
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
+
+See [source modes](docs/source-mode.md) for the equivalent `stream()` and `update()` options and the security boundary.
 
 
 
@@ -244,6 +246,19 @@ stream.on('data', (ctx) => {
 
 stream.on('error', (err) => console.error('Stream error:', err));
 ```
+
+### Execution limits
+
+`setMaxLoops()` limits the total number of Pine loop iterations in one run, across all bars and secondary `request.*` contexts. The default is 500,000. An exhausted budget throws `PineRuntimeError`.
+
+```javascript
+const controller = new AbortController();
+pineTS.setMaxLoops(100_000);
+pineTS.setExecutionTimeout(5_000); // milliseconds, checked during execution
+pineTS.setAbortSignal(controller.signal);
+```
+
+The deadline and cancellation signal are checked at loop, function-call, bar, and charged built-in boundaries. A timer on the same JavaScript thread cannot abort synchronous work until that thread yields; a single blocking native operation needs an external worker or process timeout.
 
 
 

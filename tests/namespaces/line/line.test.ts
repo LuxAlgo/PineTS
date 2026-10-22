@@ -18,7 +18,7 @@ describe('LINE Namespace', () => {
             var ln_style = myLine.style;
             var ln_width = myLine.width;
             return { ln_x1, ln_y1, ln_x2, ln_y2, ln_xloc, ln_extend, ln_style, ln_width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.ln_x1[0]).toBe(0);
         expect(result.ln_y1[0]).toBe(50000);
@@ -46,7 +46,7 @@ describe('LINE Namespace', () => {
             var ln_style = myLine.style;
             var ln_width = myLine.width;
             return { ln_xloc, ln_extend, ln_style, ln_width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.ln_xloc[0]).toBe('bi');
         expect(result.ln_extend[0]).toBe('both');
@@ -67,7 +67,7 @@ describe('LINE Namespace', () => {
             var ln_y2 = myLine.y2;
             var ln_xloc = myLine.xloc;
             return { ln_x1, ln_y1, ln_x2, ln_y2, ln_xloc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.ln_x1[0]).toBe(5);
         expect(result.ln_y1[0]).toBe(45000);
@@ -90,7 +90,7 @@ describe('LINE Namespace', () => {
             var x2 = myLine.x2;
             var y2 = myLine.y2;
             return { x1, y1, x2, y2 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.x1[0]).toBe(100);
         expect(result.y1[0]).toBe(99000);
@@ -110,7 +110,7 @@ describe('LINE Namespace', () => {
             var x2 = myLine.x2;
             var y2 = myLine.y2;
             return { x1, y1, x2, y2 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.x1[0]).toBe(42);
         expect(result.y1[0]).toBe(75000);
@@ -130,7 +130,7 @@ describe('LINE Namespace', () => {
             var ln_width = myLine.width;
             var ln_style = myLine.style;
             return { ln_color, ln_width, ln_style };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.ln_color[0]).toBeTruthy();
         expect(result.ln_width[0]).toBe(5);
@@ -146,7 +146,7 @@ describe('LINE Namespace', () => {
             line.set_extend(myLine, 'right');
             var afterExtend = myLine.extend;
             return { beforeExtend, afterExtend };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.beforeExtend[0]).toBe('none');
         expect(result.afterExtend[0]).toBe('right');
@@ -162,7 +162,7 @@ describe('LINE Namespace', () => {
             var x2 = myLine.x2;
             var ln_xloc = myLine.xloc;
             return { x1, x2, ln_xloc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.x1[0]).toBe(1000000);
         expect(result.x2[0]).toBe(2000000);
@@ -183,7 +183,7 @@ describe('LINE Namespace', () => {
             var x2 = myLine.x2;
             var y2 = myLine.y2;
             return { x1, y1, x2, y2 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.x1[0]).toBe(42);
         expect(result.y1[0]).toBe(75000);
@@ -201,7 +201,7 @@ describe('LINE Namespace', () => {
             var x2 = line.get_x2(myLine);
             var y2 = line.get_y2(myLine);
             return { x1, y1, x2, y2 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.x1[0]).toBe(5);
         expect(result.y1[0]).toBe(40000);
@@ -223,7 +223,7 @@ describe('LINE Namespace', () => {
             // Extrapolation: x=20 should give y=300
             var priceExtrap = line.get_price(myLine, 20);
             return { priceAtMid, priceAtStart, priceAtEnd, priceExtrap };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.priceAtMid[0]).toBe(150);
         expect(result.priceAtStart[0]).toBe(100);
@@ -246,7 +246,7 @@ describe('LINE Namespace', () => {
             var differentIds = orig.id !== cp.id;
 
             return { origY1, copyY1, origY1After, copyY1After, differentIds };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.origY1[0]).toBe(50000);
         expect(result.copyY1[0]).toBe(50000);
@@ -265,7 +265,7 @@ describe('LINE Namespace', () => {
             var deletedFlag = myLine._deleted;
             var countAfter = line.all.length;
             return { deletedFlag, countBefore, countAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.deletedFlag[0]).toBe(true);
         expect(result.countBefore[0]).toBe(1);
@@ -283,7 +283,7 @@ describe('LINE Namespace', () => {
             line.delete(line3);
             var afterDeleteCount = line.all.length;
             return { totalCount, afterDeleteCount };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.totalCount[0]).toBe(3);
         expect(result.afterDeleteCount[0]).toBe(2);
@@ -303,7 +303,7 @@ describe('LINE Namespace', () => {
             var y2 = myLine.y2;
             var width = myLine.width;
             return { y1, y2, width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.y1[0]).toBe(50000);
         expect(result.y2[0]).toBe(60000);
@@ -323,7 +323,7 @@ describe('LINE Namespace', () => {
                 line.style_arrow_both,
             ].join(',');
             return { allStyles };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const styles = result.allStyles[0].split(',');
         expect(styles.length).toBe(6);
@@ -341,7 +341,7 @@ describe('LINE Namespace', () => {
         const { plots } = await pineTS.run((context) => {
             line.new(0, 50000, 10, 60000, xloc.bar_index, 'none', '#ff0000', line.style_solid, 2);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__lines__']).toBeDefined();
         expect(plots['__lines__'].data.length).toBeGreaterThan(0);
@@ -371,7 +371,7 @@ describe('LINE Namespace', () => {
             line.set_y2(myLine, 88000);
             line.set_color(myLine, '#00ff00');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const lineEntry = plots['__lines__'].data[0];
         const lines = lineEntry.value;
@@ -390,7 +390,7 @@ describe('LINE Namespace', () => {
             line.new(0, 55000, 10, 65000, xloc.bar_index, 'none', color.blue);
             line.new(0, 60000, 10, 70000, xloc.bar_index, 'none', color.green);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // There should be exactly 1 data entry containing all 3 lines
         expect(plots['__lines__'].data.length).toBe(1);
@@ -417,7 +417,7 @@ if bar_index < 5
 plot(close)
 `;
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2025-01-01').getTime(), new Date('2025-01-15').getTime());
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const lines = plots['__lines__'].data[0].value;
         expect(Array.isArray(lines)).toBe(true);
@@ -438,7 +438,7 @@ plot(close)
 indicator("probe", overlay = true)
 if barstate.isfirst
     line ln = line.new(0, 100, 5, 50, color = na)
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const ln = plots['__lines__']?.data?.[0]?.value?.[0];
         expect(ln).toBeDefined();
         const isNa = (v: any) => v === null || v === undefined || (typeof v === 'number' && isNaN(v));
@@ -452,7 +452,7 @@ if barstate.isfirst
 indicator("probe", overlay = true)
 if barstate.isfirst
     line ln = line.new(0, 100, 5, 50, color = color(na))
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const ln = plots['__lines__']?.data?.[0]?.value?.[0];
         expect(ln).toBeDefined();
         const isNa = (v: any) => v === null || v === undefined || (typeof v === 'number' && isNaN(v));
@@ -474,7 +474,7 @@ if barstate.isfirst
     chart.point cp1 = chart.point.new(time, na, low)
     chart.point cp2 = chart.point.new(time + 5*24*60*60*1000, na, low)
     line.new(cp1, cp2, xloc.bar_time, color = color.green)
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const ln = plots['__lines__']?.data?.[0]?.value?.[0];
         expect(ln).toBeDefined();
         expect(ln.xloc).toBe('bt');
@@ -496,7 +496,7 @@ if barstate.isfirst
     chart.point cp1 = chart.point.new(na, bar_index, low)
     chart.point cp2 = chart.point.new(na, bar_index + 5, low)
     line.new(cp1, cp2, xloc.bar_index, color = color.red)
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const ln = plots['__lines__']?.data?.[0]?.value?.[0];
         expect(ln).toBeDefined();
         expect(ln.xloc).toBe('bi');

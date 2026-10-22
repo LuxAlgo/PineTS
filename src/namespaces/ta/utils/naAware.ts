@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { isNa } from './nonNaWindow';
+import { validTaLength, chargeTaWork } from './assertTaLength';
 
 /**
  * Committed / tentative state keyed by `key`, or `undefined` without a key (stateless use).
@@ -37,6 +38,7 @@ function barState(context: any, key: string | undefined, init: () => any) {
  * after skipped bars or a keyless call walks the series back instead.
  */
 export function consecutiveMoves(context: any, key: string | undefined, series: any, length: number, up: boolean): boolean {
+    if (!validTaLength(length, up ? 'ta.rising' : 'ta.falling')) return false;
     const moved = (a: number, b: number) => (up ? a > b : a < b);
     const state = barState(context, key, () => ({ count: 0, callIdx: -1, length: NaN }));
 
@@ -48,6 +50,7 @@ export function consecutiveMoves(context: any, key: string | undefined, series: 
     } else {
         count = 0;
         for (let j = 0; j < context.idx && count < length; j++) {
+            chargeTaWork(context, 1, up ? 'ta.rising' : 'ta.falling');
             const a = series.get(j);
             const b = series.get(j + 1);
             if (isNa(a) || isNa(b)) continue;
@@ -86,6 +89,7 @@ export function crossPair(context: any, key: string | undefined, s1: any, s2: an
         }
     } else {
         for (let k = 1; k <= context.idx; k++) {
+            chargeTaWork(context, 1, 'ta.cross');
             const a = s1.get(k);
             const b = s2.get(k);
             if (!isNa(a) && !isNa(b)) {

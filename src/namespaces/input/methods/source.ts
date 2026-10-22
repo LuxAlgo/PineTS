@@ -5,7 +5,7 @@ import { parseInputOptions, resolveInput, resolveSourceName } from '../utils';
 export function source(context: any) {
     return (...args: any[]) => {
         const options = parseInputOptions(args);
-        const resolved = resolveInput(context, options);
+        const resolved = resolveInput(context, options, 'source');
         // A runtime override reaches us as the series NAME ('close', 'hlc3', …) —
         // the only encoding a host/worker boundary can serialize. Dereference it
         // to that series' current-bar value. An unknown name falls back to the

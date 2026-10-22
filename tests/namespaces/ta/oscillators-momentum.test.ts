@@ -26,7 +26,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -117,7 +117,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { macdLine, signalLine, histLine };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let macdLine_plotdata = plots['macdLine']?.data;
         let signalLine_plotdata = plots['signalLine']?.data;
@@ -179,7 +179,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -234,7 +234,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -289,7 +289,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -344,7 +344,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -399,7 +399,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -454,7 +454,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -509,7 +509,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -565,7 +565,7 @@ describe('Technical Analysis - Oscillators & Momentum', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2018-12-10').getTime();

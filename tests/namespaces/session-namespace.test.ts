@@ -14,7 +14,7 @@ describe('session namespace', () => {
             const reg = session.regular;
             const ext = session.extended;
             return { reg, ext };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.reg[0]).toBe('regular');
         expect(result.ext[0]).toBe('extended');
@@ -27,7 +27,7 @@ indicator("session isfirstbar")
 plot(session.isfirstbar ? 1 : 0, "first")
 `;
         const pineTS = makePineTS();
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const data = plots['first'].data;
         expect(data.length).toBeGreaterThan(24);
@@ -52,7 +52,7 @@ indicator("session islastbar")
 plot(session.islastbar ? 1 : 0, "last")
 `;
         const pineTS = makePineTS();
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const data = plots['last'].data;
         expect(data.length).toBeGreaterThan(24);
@@ -79,7 +79,7 @@ plot(session.ispremarket ? 1 : 0, "pre")
 plot(session.ispostmarket ? 1 : 0, "post")
 `;
         const pineTS = makePineTS();
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         for (const d of plots['market'].data) expect(d.value).toBe(1);
         for (const d of plots['pre'].data) expect(d.value).toBe(0);
@@ -94,7 +94,7 @@ plot(session.isfirstbar_regular == session.isfirstbar ? 1 : 0, "first_eq")
 plot(session.islastbar_regular == session.islastbar ? 1 : 0, "last_eq")
 `;
         const pineTS = makePineTS();
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         for (const d of plots['first_eq'].data) expect(d.value).toBe(1);
         for (const d of plots['last_eq'].data) expect(d.value).toBe(1);

@@ -25,7 +25,7 @@ describe('Heikin-Ashi chart style (extended tickers + chartStyle)', () => {
             const inheritHa = ticker.inherit(ha, 'BINANCE:ETHUSDT');
             const inheritStd = ticker.inherit(std, 'BINANCE:ETHUSDT');
             return { ha, std, stdNoArg, inheritHa, inheritStd };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.ha[0]).toBe('BINANCE:BTCUSDC;heikinashi');
         expect(result.std[0]).toBe('BINANCE:BTCUSDC');
         expect(result.stdNoArg[0]).toBe('BINANCE:BTCUSDC');
@@ -40,7 +40,7 @@ describe('Heikin-Ashi chart style (extended tickers + chartStyle)', () => {
             const isHa = chart.is_heikinashi;
             const tid = syminfo.tickerid;
             return { isStd, isHa, tid };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.isStd[0]).toBe(true);
         expect(result.isHa[0]).toBe(false);
         expect(result.tid[0]).toBe('BINANCE:BTCUSDC');
@@ -54,7 +54,7 @@ describe('Heikin-Ashi chart style (extended tickers + chartStyle)', () => {
             const tid = syminfo.tickerid;
             const std = ticker.standard(); // strips the modifier back off
             return { isStd, isHa, tid, std };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.isStd[0]).toBe(false);
         expect(result.isHa[0]).toBe(true);
         expect(result.tid[0]).toBe('BINANCE:BTCUSDC;heikinashi');
@@ -73,7 +73,7 @@ plot(v1, "v1")
 plot(v2, "v2")
 `;
         const onHa = new PineTS(Provider.Mock, 'BTCUSDC;heikinashi', 'D', null, RANGE[0], RANGE[1]);
-        const haCtx: any = await onHa.run(src);
+        const haCtx: any = await onHa.run(src, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (ctx: any, k: string): number => {
             const d = ctx.plots[k].data;
             return d[d.length - 1].value;
@@ -82,7 +82,7 @@ plot(v2, "v2")
         expect(last(haCtx, 'v2')).toBe(0);
 
         const onStd = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, RANGE[0], RANGE[1]);
-        const stdCtx: any = await onStd.run(src);
+        const stdCtx: any = await onStd.run(src, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(last(stdCtx, 'v1')).toBe(0);
         expect(last(stdCtx, 'v2')).toBe(1);
     });
@@ -95,7 +95,7 @@ plot(v2, "v2")
             const haClose = request.security(ticker.heikinashi(syminfo.tickerid), 'W', close);
             const stdClose = request.security(ticker.standard(syminfo.tickerid), 'W', close);
             return { haClose, stdClose };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         // Standalone: both resolve to the SAME standard weekly closes (documented no-op).
         expect(result.haClose[0]).toBe(result.stdClose[0]);
         expect(Number.isFinite(result.haClose[0])).toBe(true);
@@ -111,7 +111,7 @@ plot(v2, "v2")
             // Same timeframe, chart's own tickerid (modifier included): shortcut path.
             const viaSelf = request.security(syminfo.tickerid, 'D', close);
             return { viaStd, viaSelf };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(Number.isFinite(result.viaStd[0])).toBe(true);
         expect(Number.isFinite(result.viaSelf[0])).toBe(true);
     });

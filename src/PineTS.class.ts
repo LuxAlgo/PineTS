@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 LuxAlgo
 import { IProvider, ISymbolInfo } from './marketData/IProvider';
+import { BaseProvider } from './marketData/BaseProvider';
 import { Context } from './Context.class';
 import { splitTickerModifier, withTickerModifier } from './tickerModifier';
 import { createSyminfo } from './namespaces/Syminfo';
@@ -8,6 +9,10 @@ import { Series } from './Series';
 import { Indicator } from './Indicator';
 import { toImportResolver } from './imports/Function/FunctionImportResolver.class';
 import type { IImportResolver, ImportResolverFn } from './imports/IImportResolver';
+import type { SourceMode } from './security/SourceMode';
+import { ExecutionBudget } from './security/ExecutionBudget';
+import { PineRuntimeError } from './errors/PineRuntimeError';
+import { compiledArtifactKind } from './transpiler/analysis/VerifiedArtifact';
 import { processBarOrders, barPath, beginStrategyBar, riskStartBar, riskAtBarClose, processOrdersOnClose, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState, snapToTick } from './namespaces/strategy/utils';
 
 import { parseTimeframe, timeframeSeconds } from './timeframe';
@@ -70,7 +75,8 @@ export class PineTS {
     private _isSecondaryContext: boolean = false;
     /**
      * Mark this instance as the secondary context of a `request.*` call.
-     * It inherits what its parent runs with: the import resolver.
+     * It inherits the parent's import resolver. The shared execution budget
+     * must be passed to the constructor before its eager provider load starts.
      */
     public markAsSecondary(parent?: Context) {
         this._isSecondaryContext = true;
@@ -92,15 +98,48 @@ export class PineTS {
     }
 
     private _maxLoops: number = 500000;
+    private _inheritedExecutionBudget?: ExecutionBudget;
+    private _providerLoadBudget: ExecutionBudget;
+    private _hasBegunRun = false;
+    private _executionTimeoutMs?: number;
+    private _abortSignal?: AbortSignal;
 
     /**
-     * Set the maximum number of iterations allowed per loop.
-     * Mirrors TradingView's internal loop protection. If a for/while loop
-     * exceeds this limit, a runtime error is thrown.
-     * @param maxLoops Maximum iterations per loop (default: 500000)
+     * Set the maximum total Pine loop iterations allowed across this run,
+     * including all bars and secondary request contexts.
+     * @param maxLoops Total loop-iteration limit (default: 500000)
      */
     public setMaxLoops(maxLoops: number) {
+        if (!Number.isSafeInteger(maxLoops) || maxLoops < 1) throw new RangeError('maxLoops must be a positive safe integer');
         this._maxLoops = maxLoops;
+        if (!this._inheritedExecutionBudget && !this._hasBegunRun) this._providerLoadBudget.setLoopLimit(maxLoops);
+    }
+
+    /** Set an optional deadline for this run and its secondary contexts. */
+    public setExecutionTimeout(timeoutMs: number): void {
+        if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) throw new RangeError('timeoutMs must be a positive safe integer');
+        this._executionTimeoutMs = timeoutMs;
+        if (!this._inheritedExecutionBudget) this._providerLoadBudget.setDeadline(Date.now() + timeoutMs);
+    }
+
+    /** Cancel this run and its secondary contexts when the signal aborts. */
+    public setAbortSignal(signal: AbortSignal): void {
+        this._abortSignal = signal;
+        if (!this._inheritedExecutionBudget) this._providerLoadBudget.setAbortSignal(signal);
+    }
+
+    private _beginRunBudget(): void {
+        if (this._inheritedExecutionBudget) return;
+        if (!this._hasBegunRun) {
+            this._hasBegunRun = true;
+            return;
+        }
+        // The initial fetch belongs to the first run. Later executions reuse
+        // local candles but get fresh run-wide counters, as before hardening.
+        this._providerLoadBudget = new ExecutionBudget(this._maxLoops, {
+            deadline: this._executionTimeoutMs === undefined ? undefined : Date.now() + this._executionTimeoutMs,
+            signal: this._abortSignal,
+        });
     }
 
     private _fillsOnTickGrid: boolean = true;
@@ -166,6 +205,7 @@ export class PineTS {
     private _lastRunViewport: { left?: number; right?: number } = {};
     private _lastResult: Context | null = null;
     private _lastPineTSCode: Indicator | Function | String | null = null;
+    private _lastSourceMode: SourceMode | null = null;
 
     /**
      * Set the visible range of bars from the host (e.g. chart UI viewport).
@@ -223,7 +263,7 @@ export class PineTS {
      * The pineTSCode argument is optional after the first call — the same code
      * is reused. Pass it again only when the script source itself has changed.
      */
-    public async update(pineTSCode?: Indicator | Function | String): Promise<Context> {
+    public async update(pineTSCode?: Indicator | Function | String, options: { sourceMode?: SourceMode } = {}): Promise<Context> {
         const codeToRun = pineTSCode ?? this._lastPineTSCode;
         if (!codeToRun) {
             throw new Error('pine.update(): pineTSCode is required on the first call.');
@@ -233,12 +273,16 @@ export class PineTS {
         const viewportChanged = this._viewportLeft !== this._lastRunViewport.left
             || this._viewportRight !== this._lastRunViewport.right;
 
-        const needsRun = isFirstRun || (this._usesVisibleRange && viewportChanged);
+        const sourceMode = options.sourceMode ?? 'nativePine';
+        const sourceChanged = pineTSCode !== undefined && pineTSCode !== this._lastPineTSCode;
+        const needsRun = isFirstRun || sourceChanged || sourceMode !== this._lastSourceMode || (this._usesVisibleRange && viewportChanged);
         if (!needsRun) return this._lastResult as Context;
 
+        const result = (await this.run(codeToRun, undefined, undefined, { sourceMode })) as Context;
         this._lastPineTSCode = codeToRun;
+        this._lastSourceMode = sourceMode;
         this._lastRunViewport = { left: this._viewportLeft, right: this._viewportRight };
-        this._lastResult = (await this.run(codeToRun)) as Context;
+        this._lastResult = result;
         return this._lastResult;
     }
 
@@ -249,7 +293,15 @@ export class PineTS {
         private limit?: number,
         private sDate?: number,
         private eDate?: number,
+        options: { executionBudget?: ExecutionBudget; signal?: AbortSignal; deadline?: number } = {},
     ) {
+        // Data loading starts eagerly in the constructor. Secondary executions
+        // must provide their parent's budget here, before the first provider call.
+        this._inheritedExecutionBudget = options.executionBudget;
+        this._providerLoadBudget = options.executionBudget ?? new ExecutionBudget(this._maxLoops, {
+            signal: options.signal,
+            deadline: options.deadline,
+        });
         this._readyPromise = this._loadData(source, tickerId, timeframe, limit, sDate, eDate);
         // A failed load rejects ready(), and through it run() / stream(). Until
         // one of those awaits it nobody handles the rejection, so mark it
@@ -296,8 +348,15 @@ export class PineTS {
 
         if (source && (source as IProvider).getSymbolInfo) {
             try {
-                this._syminfo = await (source as IProvider).getSymbolInfo(tickerId);
+                const budget = this._providerLoadBudget;
+                budget.chargeProviderCall();
+                this._syminfo = await (source as IProvider).getSymbolInfo(tickerId, {
+                    budget,
+                    signal: budget.providerSignal,
+                    deadline: budget.providerDeadline,
+                });
             } catch (error) {
+                if (error instanceof PineRuntimeError) throw error;
                 console.warn('Failed to get symbol info, using default values:', error);
             }
         }
@@ -313,8 +372,33 @@ export class PineTS {
     private async loadMarketData(source: IProvider | any[], tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number) {
         if (Array.isArray(source)) {
             return source;
-        } else {
-            return (source as IProvider).getMarketData(tickerId, timeframe, limit, sDate, eDate);
+        }
+        const budget = this._providerLoadBudget;
+        const requestedLimit = limit == null ? undefined : limit;
+        if (source instanceof BaseProvider) {
+            return source.getMarketData(tickerId, timeframe, requestedLimit, sDate, eDate, {
+                budget,
+                signal: budget.providerSignal,
+                deadline: budget.providerDeadline,
+            });
+        }
+
+        // Third-party IProvider implementations need not extend BaseProvider.
+        // The broker still bounds explicit requests and returned data; providers
+        // must honor the passed signal/deadline to stop in-flight I/O promptly.
+        budget.chargeProviderCall();
+        const release = budget.reserveProviderRawBars(requestedLimit);
+        try {
+            const data = await (source as IProvider).getMarketData(tickerId, timeframe, requestedLimit, sDate, eDate, {
+                signal: budget.providerSignal,
+                deadline: budget.providerDeadline,
+            });
+            if (!Array.isArray(data)) throw new PineRuntimeError('Provider returned invalid market data.', 'request.provider');
+            release();
+            budget.chargeProviderRawBars(data.length);
+            return data;
+        } finally {
+            release();
         }
     }
 
@@ -330,7 +414,7 @@ export class PineTS {
      * @param periods
      * @returns Promise<Context>
      */
-    public run(pineTSCode: Indicator | Function | String, periods?: number): Promise<Context>;
+    public run(pineTSCode: Indicator | Function | String, periods?: number, pageSize?: undefined, options?: { sourceMode?: SourceMode }): Promise<Context>;
     /**
      * Run the Pine Script code with pagination, yielding results page by page.
      * @param pineTSCode
@@ -338,7 +422,7 @@ export class PineTS {
      * @param pageSize
      * @returns AsyncGenerator<Context>
      */
-    public run(pineTSCode: Indicator | Function | String, periods: number | undefined, pageSize: number): AsyncGenerator<Context>;
+    public run(pineTSCode: Indicator | Function | String, periods: number | undefined, pageSize: number, options?: { sourceMode?: SourceMode }): AsyncGenerator<Context>;
     /**
      * Run the Pine Script code and return the resulting context.
      * if pageSize is provided, the function will return an iterator that will yield the results page by page.
@@ -348,8 +432,9 @@ export class PineTS {
      * @param pageSize
      * @returns Context if pageSize is 0 or undefined, or AsyncGenerator<Context> if pageSize > 0
      */
-    public run(pineTSCode: Indicator | Function | String, periods?: number, pageSize?: number): Promise<Context> | AsyncGenerator<Context> {
+    public run(pineTSCode: Indicator | Function | String, periods?: number, pageSize?: number, options: { sourceMode?: SourceMode } = {}): Promise<Context> | AsyncGenerator<Context> {
         const ind = Indicator.from(pineTSCode as any);
+        const sourceMode = options.sourceMode ?? 'nativePine';
         this._currentIndicator = ind;
         // NB: `ind.prepare()` may throw synchronously for malformed Pine /
         // unparseable JS. We push it inside the async path so the throw
@@ -358,9 +443,9 @@ export class PineTS {
 
         if (pageSize && pageSize > 0) {
             const enableLiveStream = typeof this.eDate === 'undefined' && !Array.isArray(this.source);
-            return this._runPaginated(ind, periods, pageSize, enableLiveStream);
+            return this._runPaginated(ind, periods, pageSize, enableLiveStream, sourceMode);
         } else {
-            return this._runComplete(ind, periods);
+            return this._runComplete(ind, periods, sourceMode);
         }
     }
 
@@ -373,7 +458,7 @@ export class PineTS {
      */
     public stream(
         pineTSCode: Indicator | Function | String,
-        options: { pageSize?: number; live?: boolean; interval?: number } = {},
+        options: { pageSize?: number; live?: boolean; interval?: number; sourceMode?: SourceMode } = {},
     ): { on: (event: 'data' | 'error' | 'warning' | 'alert', callback: Function) => void; stop: () => void } {
         const { live = true, interval = 1000 } = options;
         const pageSize = options.pageSize || this.data.length; // Default pageSize to full data if not provided
@@ -416,7 +501,7 @@ export class PineTS {
 
                 // Pass undefined for periods to include all data
                 // We use the generator version directly to control enableLiveStream
-                const iterator = this._runPaginated(ind, undefined, pageSize, enableLiveStream);
+                const iterator = this._runPaginated(ind, undefined, pageSize, enableLiveStream, options.sourceMode ?? 'nativePine');
 
                 for await (const ctx of iterator) {
                     if (stopped) break;
@@ -477,16 +562,27 @@ export class PineTS {
      * additional transpile/parse pass. Used by `request.security_lower_tf`'s
      * slow path to execute the slice produced at primary-transpile time
      * (a truncated body containing only the prefix up to the call). The
-     * caller is responsible for ensuring `transpiledFn` was produced by
-     * this transpiler against the same source — calling this with an
-     * arbitrary function is unsafe.
+     * A provenance-tagged artifact from this transpiler is required;
+     * arbitrary host functions are rejected before execution.
      */
-    public async runPretranspiled(transpiledFn: Function, inputs: Record<string, any> = {}, periods?: number): Promise<Context> {
+    public async runPretranspiled(transpiledFn: Function, inputs: Record<string, any> = {}, periods?: number, options: { sourceMode?: SourceMode } = {}): Promise<Context> {
+        const kind = compiledArtifactKind(transpiledFn);
+        if (!kind) {
+            throw new TypeError('runPretranspiled requires a PineTS compiled artifact');
+        }
+        if (kind === 'trustedJavaScript' && options.sourceMode !== 'trustedJavaScript') {
+            throw new TypeError('runPretranspiled requires explicit trusted JavaScript mode for this artifact');
+        }
+        if (kind === 'verifiedPine' && options.sourceMode === 'trustedJavaScript') {
+            throw new TypeError('A verified Pine artifact cannot be reclassified as trusted JavaScript');
+        }
         await this.ready();
+        this._beginRunBudget();
         if (!periods) periods = this.data.length;
 
         const context = this._initializeContext(null as any, inputs, this._isSecondaryContext);
         context.pineVersion = (transpiledFn as any)._pineVersion ?? null;
+        context.sourceMode = kind === 'verifiedPine' ? 'nativePine' : 'trustedJavaScript';
         this._transpiledCode = transpiledFn;
         context.transpiledFn = transpiledFn;
         // Preserve slice attribution on the context so any nested LTF
@@ -509,16 +605,20 @@ export class PineTS {
      * occurred when var variables were modified in-place during re-execution.
      * @private
      */
-    private async _runComplete(ind: Indicator, periods?: number): Promise<Context> {
+    private async _runComplete(ind: Indicator, periods?: number, sourceMode: SourceMode = 'nativePine'): Promise<Context> {
         await this.ready();
+        this._beginRunBudget();
         if (!periods) periods = this.data.length;
 
-        await ind.resolveImports(this._importResolver);
-        const prepared = ind.prepare(this._debugSettings);
+        await ind.resolveImports(this._importResolver, this._providerLoadBudget);
+        const prepared = ind.prepare({ ...this._debugSettings, sourceMode });
         this._usesVisibleRange = prepared.usesVisibleRange;
 
         const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
         context.pineVersion = (prepared.fn as any)._pineVersion ?? null;
+        // The requested mode permits compatibility input; it does not change
+        // the provenance of a versioned Pine artifact compiled by the verifier.
+        context.sourceMode = compiledArtifactKind(prepared.fn) === 'verifiedPine' ? 'nativePine' : 'trustedJavaScript';
         this._transpiledCode = prepared.fn;
         context.transpiledFn = prepared.fn;
         // Propagate transpile-time slices (one per request.security_lower_tf
@@ -557,16 +657,19 @@ export class PineTS {
         periods: number | undefined,
         pageSize: number,
         enableLiveStream: boolean = false,
+        sourceMode: SourceMode = 'nativePine',
     ): AsyncGenerator<Context> {
         await this.ready();
+        this._beginRunBudget();
         if (!periods) periods = this.data.length;
 
-        await ind.resolveImports(this._importResolver);
-        const prepared = ind.prepare(this._debugSettings);
+        await ind.resolveImports(this._importResolver, this._providerLoadBudget);
+        const prepared = ind.prepare({ ...this._debugSettings, sourceMode });
         this._usesVisibleRange = prepared.usesVisibleRange;
 
         const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
         context.pineVersion = (prepared.fn as any)._pineVersion ?? null;
+        context.sourceMode = compiledArtifactKind(prepared.fn) === 'verifiedPine' ? 'nativePine' : 'trustedJavaScript';
         this._transpiledCode = prepared.fn;
         context.transpiledFn = prepared.fn;
         if (prepared.ltfSlices) (context as any)._ltfTruncatedBodies = prepared.ltfSlices;
@@ -733,6 +836,10 @@ export class PineTS {
         });
 
         pageContext.pineTSCode = fullContext.pineTSCode;
+        pageContext.transpiledFn = fullContext.transpiledFn;
+        pageContext.sourceMode = fullContext.sourceMode;
+        pageContext.pineVersion = fullContext.pineVersion;
+        pageContext.importResolver = fullContext.importResolver;
         pageContext.idx = fullContext.idx;
 
         // Copy only the new results for this page
@@ -783,7 +890,7 @@ export class PineTS {
 
         try {
             // Fetch new data starting from the last candle's open time
-            const newData = await provider.getMarketData(this.tickerId!, this.timeframe!, undefined, lastCandleOpenTime, eDate);
+            const newData = await this.loadMarketData(provider, this.tickerId!, this.timeframe!, undefined, lastCandleOpenTime, eDate);
 
             if (!newData || newData.length === 0) {
                 return { newCandles: 0, updatedLastCandle: false };
@@ -1106,6 +1213,7 @@ export class PineTS {
      * @private
      */
     private _initializeContext(pineTSCode: Function | String, inputs: Record<string, any> = {}, isSecondary: boolean = false): Context {
+        const executionBudget = this._providerLoadBudget;
         const context = new Context({
             marketData: this.data,
             source: this.source,
@@ -1115,6 +1223,7 @@ export class PineTS {
             sDate: this.sDate,
             eDate: this.eDate,
             inputs,
+            executionBudget,
         });
 
         context.pine.syminfo = createSyminfo(this._syminfo);
@@ -1145,7 +1254,7 @@ export class PineTS {
         context.viewportLeft = this._viewportLeft;
         context.viewportRight = this._viewportRight;
 
-        context.__maxLoops = this._maxLoops;
+        context.__maxLoops = executionBudget.maxLoopIterations;
         context._alertMode = this._alertMode;
         context._fillsOnTickGrid = this._fillsOnTickGrid;
         context.importResolver = this._importResolver;
@@ -1282,6 +1391,7 @@ export class PineTS {
         const contextVarNames = ['const', 'var', 'let', 'params'];
 
         for (let i = startIdx; i < endIdx; i++) {
+            context.executionBudget.chargeBar();
             context.idx = i;
             context._execTick = (context._execTick || 0) + 1;
 

@@ -3,6 +3,7 @@
 import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
 import { CarryHistory } from '../utils/history';
+import { chargeTaWork } from '../utils/assertTaLength';
 
 export function cci(context: any) {
     return (source: any, _length: any, _callId?: string) => {
@@ -11,10 +12,10 @@ export function cci(context: any) {
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `cci_${length}`;
-        const bars: CarryHistory = (context.taState[stateKey] ??= new CarryHistory());
+        const bars: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, true, context.executionBudget));
 
         const currentValue = series.get(0);
-        bars.push(context.idx, currentValue, length, series);
+        bars.push(context.idx, currentValue, length, series, context.executionBudget);
         const mean = nonNaWindow(context, `${stateKey}_mean`, series, length);
 
         // Not enough data yet
@@ -27,6 +28,7 @@ export function cci(context: any) {
 
         // Calculate Mean Deviation
         const values = bars.h.view(length);
+        chargeTaWork(context, length, 'ta.cci');
         let sumAbsoluteDeviations = 0;
         for (let i = 0; i < length; i++) {
             sumAbsoluteDeviations += Math.abs(values[length - 1 - i] - sma);

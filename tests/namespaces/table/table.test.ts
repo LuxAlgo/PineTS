@@ -16,7 +16,7 @@ describe('TABLE Namespace', () => {
             var t_frame_width = t.frame_width;
             var t_border_width = t.border_width;
             return { t_position, t_columns, t_rows, t_bgcolor, t_frame_width, t_border_width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.t_position[0]).toBe('top_right');
         expect(result.t_columns[0]).toBe(3);
@@ -48,7 +48,7 @@ describe('TABLE Namespace', () => {
             var t_border_color = t.border_color;
             var t_border_width = t.border_width;
             return { t_position, t_columns, t_rows, t_bgcolor, t_frame_color, t_frame_width, t_border_color, t_border_width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.t_position[0]).toBe('bottom_left');
         expect(result.t_columns[0]).toBe(4);
@@ -70,7 +70,7 @@ describe('TABLE Namespace', () => {
             var cellText = cell.text;
             var cellTextColor = cell.text_color;
             return { cellText, cellTextColor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellText[0]).toBe('Hello');
         expect(result.cellTextColor[0]).toBe('#000000');
@@ -87,7 +87,7 @@ describe('TABLE Namespace', () => {
             var cellTextColor = cell.text_color;
             var cellBgcolor = cell.bgcolor;
             return { cellText, cellTextColor, cellBgcolor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellText[0]).toBe('World');
         expect(result.cellTextColor[0]).toBe('#ffffff');
@@ -104,7 +104,7 @@ describe('TABLE Namespace', () => {
             var cell = t.getCell(0, 0);
             var cellText = cell.text;
             return { cellText };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellText[0]).toBe('Updated');
     });
@@ -119,7 +119,7 @@ describe('TABLE Namespace', () => {
             var cell = t.getCell(0, 0);
             var cellBgcolor = cell.bgcolor;
             return { cellBgcolor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellBgcolor[0]).toBe('#00ff00');
     });
@@ -134,7 +134,7 @@ describe('TABLE Namespace', () => {
             var cell = t.getCell(0, 0);
             var cellTextColor = cell.text_color;
             return { cellTextColor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellTextColor[0]).toBe('#ff00ff');
     });
@@ -156,7 +156,7 @@ describe('TABLE Namespace', () => {
             var cell10Null = cell10After === null;
             var cell20Exists = cell20After !== null;
             return { beforeClear, cell00Null, cell10Null, cell20Exists };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.beforeClear[0]).toBe(true);
         expect(result.cell00Null[0]).toBe(true);
@@ -179,7 +179,7 @@ describe('TABLE Namespace', () => {
             let parentRow = mergedCell !== null ? mergedCell._merge_parent[1] : -1;
             let mergeCount = t.merges.length;
             return { isMerged, parentCol, parentRow, mergeCount };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.isMerged[0]).toBe(true);
         expect(result.parentCol[0]).toBe(0);
@@ -196,7 +196,7 @@ describe('TABLE Namespace', () => {
             table.set_position(t, 'bottom_center');
             var posAfter = t.position;
             return { posBefore, posAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.posBefore[0]).toBe('top_right');
         expect(result.posAfter[0]).toBe('bottom_center');
@@ -218,7 +218,7 @@ describe('TABLE Namespace', () => {
             var t_frame_color = t.frame_color;
             var t_frame_width = t.frame_width;
             return { t_bgcolor, t_border_color, t_border_width, t_frame_color, t_frame_width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.t_bgcolor[0]).toBe('#111111');
         expect(result.t_border_color[0]).toBe('#222222');
@@ -237,7 +237,7 @@ describe('TABLE Namespace', () => {
             var deletedFlag = t._deleted;
             var countAfter = table.all.length;
             return { deletedFlag, countBefore, countAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.deletedFlag[0]).toBe(true);
         expect(result.countBefore[0]).toBe(1);
@@ -254,7 +254,7 @@ describe('TABLE Namespace', () => {
             table.delete(t2);
             var afterDeleteCount = table.all.length;
             return { totalCount, afterDeleteCount };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.totalCount[0]).toBe(2);
         expect(result.afterDeleteCount[0]).toBe(1);
@@ -270,7 +270,7 @@ describe('TABLE Namespace', () => {
             var deletedFlag = t._deleted;
             var countAfter = table.all.length;
             return { deletedFlag, countBefore, countAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.deletedFlag[0]).toBe(true);
         expect(result.countBefore[0]).toBe(1);
@@ -284,7 +284,7 @@ describe('TABLE Namespace', () => {
             var t = table.new('top_right', 2, 2, { bgcolor: '#1e293b' });
             table.cell(t, 0, 0, 'Test');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__tables__']).toBeDefined();
         expect(plots['__tables__'].data.length).toBeGreaterThan(0);
@@ -309,7 +309,7 @@ describe('TABLE Namespace', () => {
             table.new('top_right', 2, 2);
             table.new('bottom_left', 3, 3);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // There should be exactly 1 data entry containing all tables
         expect(plots['__tables__'].data.length).toBe(1);
@@ -333,7 +333,7 @@ describe('TABLE Namespace', () => {
             var cell = t.getCell(0, 0);
             var cellText = cell.text;
             return { cellText };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellText[0]).toBe('Delegate');
     });
@@ -349,7 +349,7 @@ describe('TABLE Namespace', () => {
             var cellTextColor = cell.text_color;
             var cellBgcolor = cell.bgcolor;
             return { cellText, cellTextColor, cellBgcolor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellText[0]).toBe('OptCell');
         expect(result.cellTextColor[0]).toBe('#aabbcc');
@@ -370,7 +370,7 @@ describe('TABLE Namespace', () => {
             var c = t.getCell(2, 0).text;
             var d = t.getCell(0, 1).text;
             return { a, b, c, d };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.a[0]).toBe('A');
         expect(result.b[0]).toBe('B');
@@ -391,7 +391,7 @@ describe('TABLE Namespace', () => {
             var cell10Null = t.getCell(1, 0) === null;
             var cell20Exists = t.getCell(2, 0) !== null;
             return { cell00Null, cell10Null, cell20Exists };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cell00Null[0]).toBe(true);
         expect(result.cell10Null[0]).toBe(true);
@@ -411,7 +411,7 @@ describe('TABLE Namespace', () => {
             let parentRow = mergedCell !== null ? mergedCell._merge_parent[1] : -1;
             let mergeCount = t.merges.length;
             return { isMerged, parentCol, parentRow, mergeCount };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.isMerged[0]).toBe(true);
         expect(result.parentCol[0]).toBe(0);
@@ -430,7 +430,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_text(0, 0, 'After');
             var cellText = t.getCell(0, 0).text;
             return { cellText };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellText[0]).toBe('After');
     });
@@ -444,7 +444,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_bgcolor(0, 0, '#ff6600');
             var cellBgcolor = t.getCell(0, 0).bgcolor;
             return { cellBgcolor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellBgcolor[0]).toBe('#ff6600');
     });
@@ -458,7 +458,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_text_color(0, 0, '#00ccff');
             var cellTextColor = t.getCell(0, 0).text_color;
             return { cellTextColor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellTextColor[0]).toBe('#00ccff');
     });
@@ -472,7 +472,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_text_size(0, 0, 'small');
             var cellTextSize = t.getCell(0, 0).text_size;
             return { cellTextSize };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellTextSize[0]).toBe('small');
     });
@@ -486,7 +486,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_height(0, 0, 50);
             var cellHeight = t.getCell(0, 0).height;
             return { cellHeight };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellHeight[0]).toBe(50);
     });
@@ -500,7 +500,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_width(0, 0, 100);
             var cellWidth = t.getCell(0, 0).width;
             return { cellWidth };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellWidth[0]).toBe(100);
     });
@@ -514,7 +514,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_tooltip(0, 0, 'Hover info');
             var cellTooltip = t.getCell(0, 0).tooltip;
             return { cellTooltip };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellTooltip[0]).toBe('Hover info');
     });
@@ -528,7 +528,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_text_halign(0, 0, 'left');
             var cellHalign = t.getCell(0, 0).text_halign;
             return { cellHalign };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellHalign[0]).toBe('left');
     });
@@ -542,7 +542,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_text_valign(0, 0, 'top');
             var cellValign = t.getCell(0, 0).text_valign;
             return { cellValign };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellValign[0]).toBe('top');
     });
@@ -556,7 +556,7 @@ describe('TABLE Namespace', () => {
             t.cell_set_text_font_family(0, 0, 'monospace');
             var cellFont = t.getCell(0, 0).text_font_family;
             return { cellFont };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellFont[0]).toBe('monospace');
     });
@@ -572,7 +572,7 @@ describe('TABLE Namespace', () => {
             t.set_position('bottom_left');
             var posAfter = t.position;
             return { posBefore, posAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.posBefore[0]).toBe('top_right');
         expect(result.posAfter[0]).toBe('bottom_left');
@@ -586,7 +586,7 @@ describe('TABLE Namespace', () => {
             t.set_bgcolor('#aabb00');
             var bgAfter = t.bgcolor;
             return { bgAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.bgAfter[0]).toBe('#aabb00');
     });
@@ -599,7 +599,7 @@ describe('TABLE Namespace', () => {
             t.set_border_color('#99ff11');
             var borderColor = t.border_color;
             return { borderColor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.borderColor[0]).toBe('#99ff11');
     });
@@ -612,7 +612,7 @@ describe('TABLE Namespace', () => {
             t.set_border_width(5);
             var borderWidth = t.border_width;
             return { borderWidth };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.borderWidth[0]).toBe(5);
     });
@@ -625,7 +625,7 @@ describe('TABLE Namespace', () => {
             t.set_frame_color('#334455');
             var frameColor = t.frame_color;
             return { frameColor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.frameColor[0]).toBe('#334455');
     });
@@ -638,7 +638,7 @@ describe('TABLE Namespace', () => {
             t.set_frame_width(3);
             var frameWidth = t.frame_width;
             return { frameWidth };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.frameWidth[0]).toBe(3);
     });
@@ -661,7 +661,7 @@ describe('TABLE Namespace', () => {
             var t_frame_color = t.frame_color;
             var t_frame_width = t.frame_width;
             return { t_bgcolor, t_border_color, t_border_width, t_frame_color, t_frame_width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.t_bgcolor[0]).toBe('#111111');
         expect(result.t_border_color[0]).toBe('#222222');
@@ -693,7 +693,7 @@ describe('TABLE Namespace', () => {
             var dl_bgcolor = t2.bgcolor;
 
             return { ns_text, ns_textColor, ns_bgcolor, dl_text, dl_textColor, dl_bgcolor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Both approaches should produce identical results
         expect(result.dl_text[0]).toBe(result.ns_text[0]);
@@ -735,7 +735,7 @@ describe('TABLE Namespace', () => {
             var tbFrameW = tb.frame_width;
 
             return { header0, header1, data0, data3halign, tbBgcolor, tbBorderW, tbFrameW };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.header0[0]).toBe('Cluster');
         expect(result.header1[0]).toBe('Size');
@@ -761,7 +761,7 @@ describe('TABLE Namespace', () => {
             t.cell(0, 0, 'Works');
             var cellText = t.getCell(0, 0).text;
             return { hasHelper, cellText };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.hasHelper[0]).toBe(true);
         expect(result.cellText[0]).toBe('Works');
@@ -780,7 +780,7 @@ describe('TABLE Namespace', () => {
             var cellA = t.getCell(0, 0).text_formatting;
             var cellB = t.getCell(1, 0).text_formatting;
             return { defaultFormatting, cellA, cellB };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.defaultFormatting[0]).toBe('none');
         expect(result.cellA[0]).toBe('bold');
@@ -802,7 +802,7 @@ if barstate.islast
     table.cell(t, 2, 0, "c")
     t.cell_set_text_formatting(2, 0, text.format_bold)
 plot(close)
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const tbl = plots['__tables__'].data[0].value.find((t: any) => t.columns === 3);
         const cells = tbl.cells[0];

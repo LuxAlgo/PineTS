@@ -7,6 +7,7 @@ import { ChartPointObject } from '../chart/ChartPointObject';
 import { resolvePoint } from '../chart/resolvePoint';
 import { NAHelper } from '../Core';
 import { silentInSecondary } from '../silentInSecondary';
+import { consumeDrawingCreation, DrawingStore, validateDrawingMaximum } from '../drawingPolicy';
 
 //prettier-ignore
 const LINE_NEW_SIGNATURES = [
@@ -23,7 +24,7 @@ const LINE_NEW_ARGS_TYPES = {
 };
 
 export class LineHelper {
-    private _lines: LineObject[] = [];
+    private _lines = new DrawingStore<LineObject>();
     public linefills: { deleteForLine(line: LineObject): void } | null = null;
 
     constructor(private context: any) {}
@@ -45,14 +46,7 @@ export class LineHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
-        // Compact out deleted objects so the backing array stays bounded to the
-        // active set. Without this it grows O(bars·objects), and every syncToPlot
-        // / _enforceMaxCount scan over it becomes O(that) → quadratic overall
-        // (RC3). Transparent: the emitted set is unchanged (deleted objects were
-        // already filtered out). rollbackFromBar filters by _createdAtBar, which
-        // is orthogonal to _deleted, so streaming rollback is unaffected.
-        this._lines = this._lines.filter(ln => !ln._deleted);
-        const allPlotData = this._lines.map(ln => ln.toPlotData());
+        const allPlotData = this._lines.values().map(ln => ln.toPlotData());
 
         // Split force_overlay objects into a separate overlay plot (renders on main chart pane)
         const regular = allPlotData.filter((l: any) => !l.force_overlay);
@@ -127,6 +121,8 @@ export class LineHelper {
         width: number = 1,
         force_overlay: boolean = false,
     ): LineObject {
+        const maximum = this._maximum();
+        consumeDrawingCreation(this.context, 'line.new');
         // Resolve any Series/function values to scalars for line properties
         const ln = new LineObject(
             x1, y1, x2, y2, xloc,
@@ -138,25 +134,12 @@ export class LineHelper {
         );
         ln._helper = this;
         ln._createdAtBar = this.context.idx;
-        this._lines.push(ln);
-        this._enforceMaxCount();
+        this._lines.add(ln, maximum);
         return ln;
     }
 
-    private _enforceMaxCount(): void {
-        const maxCount = this.context.indicator?.max_lines_count ?? 50;
-        const active = this._lines.filter(l => !l._deleted);
-        if (active.length > maxCount) {
-            const toRemove = active.length - maxCount;
-            let removed = 0;
-            for (const l of this._lines) {
-                if (removed >= toRemove) break;
-                if (!l._deleted) {
-                    l._deleted = true;
-                    removed++;
-                }
-            }
-        }
+    private _maximum(): number {
+        return validateDrawingMaximum('max_lines_count', this.context.indicator?.max_lines_count ?? this.context.strategy?.config?.max_lines_count ?? 50);
     }
 
     // line.new() — explicit Pine Script factory method
@@ -342,11 +325,12 @@ export class LineHelper {
     @silentInSecondary
     copy(id: LineObject): LineObject | undefined {
         if (!id) return undefined;
+        const maximum = this._maximum();
+        consumeDrawingCreation(this.context, 'line.copy');
         const ln = id._clone();
         ln._helper = this;
         ln._createdAtBar = this.context.idx;
-        this._lines.push(ln);
-        this._enforceMaxCount();
+        this._lines.add(ln, maximum);
         return ln;
     }
 
@@ -354,14 +338,14 @@ export class LineHelper {
     @silentInSecondary
     delete(id: LineObject): void {
         if (!id) return;
-        id._deleted = true;
+        this._lines.delete(id);
         if (id instanceof LineObject) this.linefills?.deleteForLine(id);
     }
 
     // --- Property: all active lines ---
 
     get all(): LineObject[] {
-        return this._lines.filter((l) => !l._deleted);
+        return this._lines.values();
     }
 
     /**
@@ -369,7 +353,7 @@ export class LineHelper {
      * Called during streaming rollback to prevent accumulation.
      */
     rollbackFromBar(barIdx: number): void {
-        this._lines = this._lines.filter((l) => l._createdAtBar < barIdx);
+        this._lines.rollbackFromBar(barIdx);
         this.syncToPlot();
     }
 

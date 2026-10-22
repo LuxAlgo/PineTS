@@ -28,7 +28,7 @@ import { describeArgument, inferQualified, QualifierEnv, startPos, ValueType } f
  *     parameter is an undeclared identifier there, and a variable holding
  *     another input is rejected.
  *
- * The call is tagged with a trailing `{ __inputId, __varId }` argument; the
+ * The call is tagged with a trailing `{ __inputId, __varId, __inputType }` argument; the
  * runtime pops it (input/utils.parseInputOptions) and uses the id as the
  * primary override key.
  */
@@ -499,6 +499,9 @@ class InputAnalyzer {
 
         const props = [new Property(new Identifier('__inputId'), new Literal(id))];
         if (varId !== undefined) props.push(new Property(new Identifier('__varId'), new Literal(varId)));
+        if (fn === '' && defvalType && ['int', 'float', 'bool', 'string', 'color', 'source'].includes(defvalType)) {
+            props.push(new Property(new Identifier('__inputType'), new Literal(defvalType)));
+        }
         args.push(new ObjectExpression(props));
     }
 

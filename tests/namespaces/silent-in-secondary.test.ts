@@ -55,7 +55,7 @@ describe('silentInSecondary — side-effect helpers no-op in secondary contexts'
             label.new(0, 0, 'x');
             box.new(0, 0, 1, 1);
             polyline.new([]);
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Sanity: the main context DID accumulate drawings (these calls
         // ran in the primary, where the decorator does nothing).
@@ -90,7 +90,7 @@ describe('silentInSecondary — side-effect helpers no-op in secondary contexts'
             const _res = await request.security_lower_tf('BTCUSDC', 'D', ta.sma(close, 3));
             plot(close, 'main_plot');
             plotchar(close, 'main_plotchar');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Main context: plots were registered.
         const mainKeys = Object.keys((context as any).plots);
@@ -123,7 +123,7 @@ describe('silentInSecondary — side-effect helpers no-op in secondary contexts'
             // Force slow-path secondary by wrapping close in ta.sma.
             const _res = await request.security_lower_tf('BTCUSDC', 'D', ta.sma(close, 3));
             alert.any('fire');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Main: alerts accumulated.
         expect((context as any).alerts.length).toBeGreaterThan(0);
@@ -152,7 +152,7 @@ describe('silentInSecondary — side-effect helpers no-op in secondary contexts'
             // Side effects: silenced in the secondary, kept in the main.
             line.new(0, 0, 1, 1);
             label.new(0, 0, 'x');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // The captured `res` should still have valid data — Layer 1 +
         // decorator combined shouldn't alter the value, only suppress

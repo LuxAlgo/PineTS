@@ -19,7 +19,7 @@ describe('Transpiler Complex Expressions', () => {
             plotchar(result, 'nested');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['nested']).toBeDefined();
         expect(Array.isArray(plots['nested'].data)).toBe(true);
@@ -40,7 +40,7 @@ describe('Transpiler Complex Expressions', () => {
             return { scalar_a: a, scalar_b: b };
         `;
 
-        const { result } = await pineTS.run(code);
+        const { result } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result).toBeDefined();
         expect(result.scalar_a).toBeDefined();
         expect(result.scalar_b).toBeDefined();
@@ -59,7 +59,7 @@ describe('Transpiler Complex Expressions', () => {
             plotchar(value, 'result');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['result']).toBeDefined();
         expect(typeof plots['result'].data[0].value).toBe('number');
@@ -77,7 +77,7 @@ describe('Transpiler Complex Expressions', () => {
             plotchar(result, 'complex');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['complex']).toBeDefined();
         expect(typeof plots['complex'].data[0].value).toBe('number');
@@ -98,7 +98,7 @@ describe('Transpiler Complex Expressions', () => {
             plotchar(positive, 'positive');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['negative']).toBeDefined();
         expect(plots['positive']).toBeDefined();
@@ -122,7 +122,7 @@ describe('Transpiler Complex Expressions', () => {
             plotchar(either ? 1 : 0, 'or');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['and']).toBeDefined();
         expect(plots['or']).toBeDefined();
@@ -140,7 +140,7 @@ describe('Transpiler Complex Expressions', () => {
             plotchar(level, 'level');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['level']).toBeDefined();
         expect(typeof plots['level'].data[0].value).toBe('number');
@@ -161,7 +161,7 @@ describe('Transpiler Complex Expressions', () => {
             plotchar(diff, 'diff');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['diff']).toBeDefined();
     });

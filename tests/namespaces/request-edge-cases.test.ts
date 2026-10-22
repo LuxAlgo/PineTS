@@ -21,7 +21,7 @@ describe('request.security Edge Cases', () => {
                 const matches = result == close;
                 plotchar(matches ? 1 : 0, 'matches');
                 plotchar(result, 'result');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['matches']).toBeDefined();
             expect(plots['result']).toBeDefined();
@@ -43,7 +43,7 @@ describe('request.security Edge Cases', () => {
                 plotchar(tf_4h, '4h');
                 plotchar(tf_1d, '1d');
                 plotchar(tf_1w, '1w');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['4h']).toBeDefined();
             expect(plots['1d']).toBeDefined();
@@ -67,7 +67,7 @@ describe('request.security Edge Cases', () => {
                 plotchar(htf_close, 'close');
                 plotchar(htf_sma, 'sma');
                 plotchar(htf_hl2, 'hl2');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['close']).toBeDefined();
             expect(plots['sma']).toBeDefined();
@@ -88,7 +88,7 @@ describe('request.security Edge Cases', () => {
 
                 plotchar(no_lookahead, 'no_lookahead');
                 plotchar(with_lookahead, 'with_lookahead');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['no_lookahead']).toBeDefined();
             expect(plots['with_lookahead']).toBeDefined();
@@ -112,7 +112,7 @@ describe('request.security Edge Cases', () => {
 
                 plotchar(no_gaps, 'no_gaps');
                 plotchar(with_gaps, 'with_gaps');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['no_gaps']).toBeDefined();
             expect(plots['with_gaps']).toBeDefined();
@@ -130,7 +130,7 @@ describe('request.security Edge Cases', () => {
                 const htf_result = await request.security('BTCUSDC', '240', close > open ? 1 : 0, false, false);
 
                 plotchar(htf_result, 'result');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['result']).toBeDefined();
             expect(Array.isArray(plots['result'].data)).toBe(true);
@@ -149,7 +149,7 @@ describe('request.security Edge Cases', () => {
 
                 plotchar(htf_range, 'range');
                 plotchar(htf_body, 'body');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['range']).toBeDefined();
             expect(plots['body']).toBeDefined();
@@ -166,7 +166,7 @@ describe('request.security Edge Cases', () => {
                 const htf_complex = await request.security('BTCUSDC', '240', ta.ema(ta.sma(close, 20), 10), false, false);
 
                 plotchar(htf_complex, 'complex');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['complex']).toBeDefined();
             expect(Array.isArray(plots['complex'].data)).toBe(true);
@@ -188,7 +188,7 @@ describe('request.security Edge Cases', () => {
 
                 plotchar(res, 'first');
                 plotchar(data, 'second');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['first']).toBeDefined();
             expect(plots['second']).toBeDefined();
@@ -207,7 +207,7 @@ describe('request.security Edge Cases', () => {
 
                 plotchar(res, 'open');
                 plotchar(data, 'close');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['open']).toBeDefined();
             expect(plots['close']).toBeDefined();
@@ -224,7 +224,7 @@ describe('request.security Edge Cases', () => {
 
                 plotchar(htf_close, 'close');
                 plotchar(htf_sma, 'sma');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['close']).toBeDefined();
             expect(plots['sma']).toBeDefined();
@@ -243,7 +243,7 @@ describe('request.security Edge Cases', () => {
                 const result = await request.security('BTCUSDC', '240', close / 0, false, false);
 
                 plotchar(result, 'result');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['result']).toBeDefined();
         });
@@ -264,7 +264,7 @@ describe('request.security Edge Cases', () => {
                 // Should be different values
                 plotchar(ema1, 'ema_4h');
                 plotchar(ema2, 'ema_1d');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['ema_4h']).toBeDefined();
             expect(plots['ema_1d']).toBeDefined();

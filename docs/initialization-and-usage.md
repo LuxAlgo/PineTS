@@ -136,7 +136,7 @@ await pineTS.run((context) => {
 
     console.log('Current close:', close[0]);
     console.log('Previous close:', close[1]);
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 **Time series indexing:**
@@ -255,16 +255,22 @@ The `run()` method executes your indicator or strategy code across all candles i
 ```typescript
 const context = await pineTS.run(
     pineTSCode: Indicator | Function | String,
-    n?: number
-): Promise<Context>
+    n?: number,
+    pageSize?: number,
+    options?: { sourceMode?: 'nativePine' | 'trustedJavaScript' }
+): Promise<Context> | AsyncGenerator<Context>
 ```
 
 ### Parameters
 
 | Parameter    | Type                              | Default     | Description                                                                              |
 | ------------ | --------------------------------- | ----------- | ---------------------------------------------------------------------------------------- |
-| `pineTSCode` | `Indicator \| Function \| String` | Required    | The indicator/strategy function to execute. Use `Indicator` class to pass runtime inputs |
+| `pineTSCode` | `Indicator \| Function \| String` | Required    | Versioned Pine source or an `Indicator`; JavaScript source requires trusted mode |
 | `n`          | `number`                          | All periods | Number of most recent periods to process. If not specified, processes all available data |
+| `pageSize`   | `number`                          | None        | When positive, returns an async generator of contexts instead of one promise             |
+| `options.sourceMode` | `'nativePine' \| 'trustedJavaScript'` | `'nativePine'` | Native Pine is the safe default. JavaScript callbacks or markerless JavaScript require an explicit trusted opt-in |
+
+Only use `sourceMode: 'trustedJavaScript'` for source you control and trust: this mode does not sandbox JavaScript. A Pine Script string with a `//@version` marker works with the default mode.
 
 ### Running with Runtime Inputs
 
@@ -300,7 +306,7 @@ The `Indicator` class also lets you override `indicator()` / `strategy()` declar
 
 ### Return Value
 
-Returns a `Promise<Context>` object containing:
+Without `pageSize`, returns a `Promise<Context>` whose context contains:
 
 -   `result`: The computed indicator values
 -   `data`: Market data arrays (open, high, low, close, volume, etc.)
@@ -321,7 +327,8 @@ const evt = pineTS.stream(
     options?: {
         pageSize?: number,
         live?: boolean,
-        interval?: number
+        interval?: number,
+        sourceMode?: 'nativePine' | 'trustedJavaScript'
     }
 );
 ```
@@ -333,6 +340,7 @@ const evt = pineTS.stream(
 | `pageSize` | `number`  | `undefined` (all) | Number of bars per chunk. If not specified, processes all available historical data in one go. |
 | `live`     | `boolean` | `true`            | Whether to continue fetching live data after processing historical data.                       |
 | `interval` | `number`  | `1000`            | Polling interval in milliseconds for live data.                                                |
+| `sourceMode` | `'nativePine' \| 'trustedJavaScript'` | `'nativePine'` | Set to `'trustedJavaScript'` only for trusted JavaScript source. |
 
 ### Usage
 
@@ -340,6 +348,9 @@ The method returns an object with `on()` and `stop()` methods:
 
 ```typescript
 // Start streaming
+const indicator = `//@version=5
+indicator("Live Close")
+plot(close)`;
 const evt = pineTS.stream(indicator, { pageSize: 1, live: true, interval: 2000 });
 
 // Handle data updates
@@ -390,6 +401,7 @@ free to call.
 ```typescript
 const context = await pineTS.update(
     pineTSCode?: Indicator | Function | String,
+    options?: { sourceMode?: 'nativePine' | 'trustedJavaScript' }
 ): Promise<Context>
 ```
 
@@ -404,12 +416,16 @@ const context = await pineTS.update(
 
 The `pineTSCode` argument is optional after the first call — the previously
 seen code is reused. Pass it again only when the script source itself
-changes.
+changes. JavaScript callbacks or markerless JavaScript require
+`{ sourceMode: 'trustedJavaScript' }` on each `update()` call; versioned Pine uses the default mode.
 
 ### Example
 
 ```typescript
 const pine = new PineTS(Provider.Binance, 'BTCUSDT', '1W', 500);
+const code = `//@version=6
+indicator("Visible-range demo")
+plot(chart.left_visible_bar_time)`;
 
 // First call: behaves like run()
 await pine.update(code);
@@ -593,7 +609,7 @@ const { result } = await pineTS.run((context) => {
     const ema21 = ta.ema(close, 21);
 
     return { ema9, ema21 };
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 ---
@@ -613,7 +629,7 @@ const { result } = await pineTS.run((context) => {
 
     const sma = ta.sma(close, 20);
     return sma; // Single value
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
 // result is an array of numbers
 console.log(result); // [45123.5, 45234.2, 45345.8, ...]
@@ -633,7 +649,7 @@ const { result } = await pineTS.run((context) => {
     const rsi = ta.rsi(close, 14);
 
     return { ema9, ema21, rsi }; // Object with multiple values
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
 // result is an object with arrays
 console.log(result.ema9); // [45123.5, 45234.2, ...]
@@ -652,7 +668,7 @@ const context = await pineTS.run((context) => {
 
     const ema = ta.ema(close, 9);
     return { ema };
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
 console.log(context.result); // The indicator results
 console.log(context.data); // Market data
@@ -681,7 +697,7 @@ async function runSMA() {
 
         const sma20 = ta.sma(close, 20);
         return sma20;
-    });
+    }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
     console.log('SMA(20):', result);
 }
@@ -718,7 +734,7 @@ async function runMultipleIndicators() {
             lowerBB: lowerBand,
             atr,
         };
-    });
+    }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
     console.log('RSI:', result.rsi);
     console.log('MACD:', result.macd);
@@ -758,7 +774,7 @@ async function runWithDateRange() {
             ema200,
             bullish: ema50 > ema200,
         };
-    });
+    }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
     console.log('EMA50:', result.ema50);
     console.log('EMA200:', result.ema200);
@@ -788,7 +804,7 @@ async function runWithCustomData() {
 
         const sma10 = ta.sma(close, 10);
         return { sma10 };
-    });
+    }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
     console.log('SMA(10):', result.sma10);
 }
@@ -812,7 +828,7 @@ async function runLastNPeriods() {
 
         const rsi = ta.rsi(close, 14);
         return { rsi };
-    }, 100); // Only process last 100 periods
+    }, 100, undefined, { sourceMode: 'trustedJavaScript' }); // Only process last 100 periods
 
     console.log('RSI (last 100 periods):', result.rsi);
 }
@@ -820,30 +836,27 @@ async function runLastNPeriods() {
 runLastNPeriods();
 ```
 
-### Example 6: Using TA Cache for Performance
+### Example 6: Reusing a Cached Indicator
 
 ```typescript
-import { PineTS, Provider } from 'pinets';
+import { PineTS, Provider, Indicator } from 'pinets';
 
 async function runWithCache() {
     const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', '1h', 5000);
 
-    // Enable TA cache for better performance on large datasets
-    const { result } = await pineTS.run(
-        (context) => {
-            const { ta } = context;
-            const { close } = context.data;
+    // Reuse this Indicator across runs to reuse its compiled script.
+    const indicator = new Indicator((context) => {
+        const { ta } = context;
+        const { close } = context.data;
 
-            const ema20 = ta.ema(close, 20);
-            const ema50 = ta.ema(close, 50);
+        const ema20 = ta.ema(close, 20);
+        const ema50 = ta.ema(close, 50);
 
-            return { ema20, ema50 };
-        },
-        undefined,
-        true
-    ); // Enable cache
+        return { ema20, ema50 };
+    });
+    const { result } = await pineTS.run(indicator, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
-    console.log('Results computed with caching enabled');
+    console.log('Results computed with a reusable indicator');
 }
 
 runWithCache();
@@ -886,7 +899,7 @@ async function runComplexStrategy() {
             takeProfit,
             price: close,
         };
-    });
+    }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
     // Access results
     const { result } = context;
@@ -914,10 +927,10 @@ Always use `await` with `pineTS.run()` since data fetching is asynchronous:
 
 ```typescript
 // ✅ Correct
-const { result } = await pineTS.run((context) => { ... });
+const { result } = await pineTS.run((context) => { ... }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
 // ❌ Wrong - will not work properly
-const { result } = pineTS.run((context) => { ... }); // Missing await
+const { result } = pineTS.run((context) => { ... }, undefined, undefined, { sourceMode: 'trustedJavaScript' }); // Missing await
 ```
 
 ### 2. Destructuring for Cleaner Code
@@ -933,7 +946,7 @@ const { result } = await pineTS.run((context) => {
     // Now you can use them directly
     const sma = ta.sma(close, 20);
     return sma;
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 ### 3. Return Objects for Multiple Values
@@ -953,11 +966,12 @@ return sma;
 For large datasets or complex calculations:
 
 ```typescript
-// Enable TA cache
-const { result } = await pineTS.run(indicatorFn, undefined, true);
+// Reuse an Indicator instance to cache compilation across runs
+const indicator = new Indicator(indicatorFn);
+const { result } = await pineTS.run(indicator, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
 // Or process fewer periods
-const { result } = await pineTS.run(indicatorFn, 100); // Last 100 periods only
+const { result: last100 } = await pineTS.run(indicator, 100, undefined, { sourceMode: 'trustedJavaScript' }); // Last 100 periods only
 ```
 
 ### 5. Error Handling
@@ -969,7 +983,7 @@ try {
     const pineTS = new PineTS(Provider.Binance, 'BTCUSDT', 'D', 100);
     const { result } = await pineTS.run((context) => {
         // Your indicator logic
-    });
+    }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
     console.log(result);
 } catch (error) {
     console.error('Error running indicator:', error);

@@ -33,7 +33,7 @@ if barstate.islast
     for i = 0 to 23
         t.cell(i % 6, (i / 6) + 1, str.tostring(i))
 plot(close)
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const tables = plots['__tables__'].data[0].value;
         expect(tables.length).toBe(1);
@@ -58,7 +58,7 @@ plot(close)
             var cell = t.getCell(1, 2);
             var cellText = cell ? cell.text : 'missing';
             return { cellText };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.cellText[0]).toBe('X');
     });
 
@@ -71,7 +71,7 @@ plot(close)
             var cell = t.getCell(0, 0);
             var untouched = cell === null;
             return { untouched };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.untouched[0]).toBe(true);
     });
 
@@ -88,7 +88,7 @@ plot(close)
             var mergeEndCol = merge.endCol;
             var mergeEndRow = merge.endRow;
             return { cellText, mergeEndCol, mergeEndRow };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.cellText[0]).toBe('B');
         expect(result.mergeEndCol[0]).toBe(2);
         expect(result.mergeEndRow[0]).toBe(0);
@@ -101,7 +101,7 @@ plot(close)
             var t_columns = t.columns;
             var t_rows = t.rows;
             return { t_columns, t_rows };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.t_columns[0]).toBe(3);
         expect(result.t_rows[0]).toBe(2);
     });

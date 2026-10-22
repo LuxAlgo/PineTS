@@ -35,7 +35,7 @@ describe('Barstate Namespace', () => {
             return { isFirst };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.isFirst.length).toBeGreaterThan(10);
         // First bar should be true, rest should be false
@@ -54,7 +54,7 @@ describe('Barstate Namespace', () => {
             return { isLast };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const len = result.isLast.length;
 
         expect(len).toBeGreaterThan(10);
@@ -75,7 +75,7 @@ describe('Barstate Namespace', () => {
             return { isHistory, isRealtime };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const len = result.isHistory.length;
 
         expect(len).toBeGreaterThan(10);
@@ -98,7 +98,7 @@ describe('Barstate Namespace', () => {
             return { isConfirmed };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const len = result.isConfirmed.length;
 
         // All bars from 2020 should be confirmed (their closeTime is far in the past)
@@ -125,7 +125,7 @@ describe('Barstate Namespace', () => {
             return { confirmedCount };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Every bar in 2020 should have confirmedCount = 1
         // (before the fix, every bar had confirmedCount = 0)
@@ -144,7 +144,7 @@ describe('Barstate Namespace', () => {
             return { isLCH };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Should not crash and return booleans for each bar
         expect(result.isLCH.length).toBeGreaterThan(10);
@@ -166,7 +166,7 @@ if barstate.isconfirmed
 
 plot(confirmedBars, "Confirmed")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['Confirmed']).toBeDefined();
 
         // Last value should be the total number of confirmed bars

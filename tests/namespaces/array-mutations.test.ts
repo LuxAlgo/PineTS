@@ -28,7 +28,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(last, 'last');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(3);
             expect(plots['last'].data[0].value).toBe(30);
         });
@@ -49,7 +49,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(last, 'last');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(4);
             expect(plots['last'].data[0].value).toBe(4);
         });
@@ -75,7 +75,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(last, 'last');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(2);
             expect(plots['first'].data[0].value).toBe(5);
             expect(plots['last'].data[0].value).toBe(10);
@@ -98,7 +98,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(first, 'first');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(5);
             expect(plots['first'].data[0].value).toBe(1);
         });
@@ -125,7 +125,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(val2, 'val2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(3);
             expect(plots['val0'].data[0].value).toBe(10);
             expect(plots['val1'].data[0].value).toBe(20);
@@ -148,7 +148,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(size, 'size');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['first'].data[0].value).toBe(1);
             expect(plots['size'].data[0].value).toBe(3);
         });
@@ -170,7 +170,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(newSize, 'newSize');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['last'].data[0].value).toBe(3);
             expect(plots['newSize'].data[0].value).toBe(3);
         });
@@ -195,7 +195,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(val2, 'val2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val0'].data[0].value).toBe(10);
             expect(plots['val1'].data[0].value).toBe(100);
             expect(plots['val2'].data[0].value).toBe(30);
@@ -215,7 +215,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(first, 'first');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['first'].data[0].value).toBe(42);
         });
 
@@ -234,7 +234,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(last, 'last');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['last'].data[0].value).toBe(99);
         });
     });
@@ -258,7 +258,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(val4, 'val4');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val0'].data[0].value).toBe(42);
             expect(plots['val2'].data[0].value).toBe(42);
             expect(plots['val4'].data[0].value).toBe(42);
@@ -286,7 +286,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(val4, 'val4');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val0'].data[0].value).toBe(1); // Not filled
             expect(plots['val1'].data[0].value).toBe(99); // Filled
             expect(plots['val2'].data[0].value).toBe(99); // Filled
@@ -307,7 +307,7 @@ describe('Array Methods - Mutations', () => {
             `;
 
             // TradingView: "In 'array.fill()' function. Index 0 is out of bounds, array size is 0."
-            await expect(pineTS.run(code)).rejects.toThrow('Index 0 is out of bounds, array size is 0.');
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow('Index 0 is out of bounds, array size is 0.');
         });
     });
 
@@ -328,7 +328,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(last, 'last');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(3);
             expect(plots['first'].data[0].value).toBe(1);
             expect(plots['last'].data[0].value).toBe(1);
@@ -346,7 +346,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(size, 'size');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(0);
         });
     });
@@ -368,7 +368,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(last === 'test' ? 1 : 0, 'lastMatch');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(2);
             expect(plots['firstMatch'].data[0].value).toBe(1);
             expect(plots['lastMatch'].data[0].value).toBe(1);
@@ -390,7 +390,7 @@ describe('Array Methods - Mutations', () => {
                 plotchar(sum, 'sum');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(4);
             expect(plots['sum'].data[0].value).toBe(28); // 7 * 4
         });

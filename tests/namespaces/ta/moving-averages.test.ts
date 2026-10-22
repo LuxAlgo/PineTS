@@ -128,7 +128,7 @@ res = ta.linreg(source, 9, 3)
 plot(res, "plot")
 `;
 
-        const { result, plots } = await pineTS.run(pineCode);
+        const { result, plots } = await pineTS.run(pineCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -183,7 +183,7 @@ plot(res, "plot")
             return { alma };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata = plots['alma']?.data;
         const startDate = new Date('2025-08-01').getTime();
@@ -229,7 +229,7 @@ plot(res, "plot")
             return { swma };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata = plots['swma']?.data;
         const startDate = new Date('2025-08-01').getTime();
@@ -277,7 +277,7 @@ plot(res, "plot")
             return { vwap };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata = plots['vwap']?.data;
         const startDate = new Date('2025-08-01').getTime();
@@ -330,7 +330,7 @@ plot(res, "plot")
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -402,7 +402,7 @@ plot(res, "plot")
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -463,7 +463,7 @@ plot(res, "plot")
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2018-12-10').getTime();

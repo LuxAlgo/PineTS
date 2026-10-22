@@ -19,7 +19,7 @@ describe('Math Edge Cases', () => {
                 plotchar(is_nan ? 1 : 0, 'is_nan');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['is_nan'].data[0].value).toBe(1);
         });
 
@@ -35,7 +35,7 @@ describe('Math Edge Cases', () => {
                 plotchar(is_nan ? 1 : 0, 'is_nan');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['is_nan'].data[0].value).toBe(1);
         });
 
@@ -49,7 +49,7 @@ describe('Math Edge Cases', () => {
                 plotchar(result, 'result');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['result'].data[0].value).toBe(-Infinity);
         });
 
@@ -63,7 +63,7 @@ describe('Math Edge Cases', () => {
                 plotchar(result, 'result');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['result'].data[0].value).toBe(Infinity);
         });
 
@@ -79,7 +79,7 @@ describe('Math Edge Cases', () => {
                 plotchar(is_nan ? 1 : 0, 'is_nan');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['is_nan'].data[0].value).toBe(1);
         });
     });
@@ -95,7 +95,7 @@ describe('Math Edge Cases', () => {
                 plotchar(result, 'result');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['result'].data[0].value).toBe(Infinity);
         });
 
@@ -115,7 +115,7 @@ describe('Math Edge Cases', () => {
                 plotchar(sqrt_inf, 'sqrt_inf');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['sum'].data[0].value).toBe(Infinity);
             expect(plots['product'].data[0].value).toBe(Infinity);
             expect(plots['sqrt_inf'].data[0].value).toBe(Infinity);
@@ -133,7 +133,7 @@ describe('Math Edge Cases', () => {
                 plotchar(is_nan ? 1 : 0, 'is_nan');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['is_nan'].data[0].value).toBe(1);
         });
     });
@@ -152,7 +152,7 @@ describe('Math Edge Cases', () => {
                 plotchar(are_equal ? 1 : 0, 'equal');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // Based on __eq implementation: NaN == NaN returns true
             expect(plots['equal'].data[0].value).toBe(0);
         });
@@ -174,7 +174,7 @@ describe('Math Edge Cases', () => {
                 plotchar(neg_inf2, 'neg_inf2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['inf1'].data[0].value).toBe(Infinity);
             expect(plots['inf2'].data[0].value).toBe(Infinity);
             expect(plots['neg_inf1'].data[0].value).toBe(-Infinity);
@@ -196,7 +196,7 @@ describe('Math Edge Cases', () => {
                 plotchar(abs_neg, 'neg');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['pos'].data[0].value).toBe(1000000);
             expect(plots['neg'].data[0].value).toBe(1000000);
         });
@@ -214,7 +214,7 @@ describe('Math Edge Cases', () => {
                 plotchar(min_val, 'min_val');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['max_val'].data[0].value).toBe(1000000);
             expect(plots['min_val'].data[0].value).toBe(-1000000);
         });
@@ -236,7 +236,7 @@ describe('Math Edge Cases', () => {
                 plotchar(floor_neg, 'floor_neg');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['ceil_val'].data[0].value).toBe(4);
             expect(plots['floor_val'].data[0].value).toBe(3);
             expect(plots['ceil_neg'].data[0].value).toBe(-3);
@@ -258,7 +258,7 @@ describe('Math Edge Cases', () => {
                 plotchar(round_neg, 'neg');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['up'].data[0].value).toBe(4);
             expect(plots['down'].data[0].value).toBe(3);
             expect(plots['neg'].data[0].value).toBe(-4);
@@ -278,7 +278,7 @@ describe('Math Edge Cases', () => {
                 plotchar(math.round(1234.5678), 'none');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // TradingView rounds to 2 * precision decimals first: 7.24999 -> 7.25 -> 7.3
             expect(plots['p1'].data[0].value).toBe(7.3);
             expect(plots['p1_half_up'].data[0].value).toBe(7.3);
@@ -305,7 +305,7 @@ describe('Math Edge Cases', () => {
                 plotchar(na(tan_inf) ? 1 : 0, 'tan_nan');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['sin_nan'].data[0].value).toBe(1);
             expect(plots['cos_nan'].data[0].value).toBe(1);
             expect(plots['tan_nan'].data[0].value).toBe(1);
@@ -324,7 +324,7 @@ describe('Math Edge Cases', () => {
                 plotchar(na(acos_out) ? 1 : 0, 'acos_nan');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['asin_nan'].data[0].value).toBe(1);
             expect(plots['acos_nan'].data[0].value).toBe(1);
         });
@@ -341,7 +341,7 @@ describe('Math Edge Cases', () => {
                 plotchar(result, 'result');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['result'].data[0].value).toBe(Infinity);
         });
 
@@ -362,7 +362,7 @@ describe('Math Edge Cases', () => {
                 plotchar(na(log10_neg) ? 1 : 0, 'log10_neg');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['ln_zero'].data[0].value).toBe(-Infinity);
             expect(plots['log10_zero'].data[0].value).toBe(-Infinity);
             expect(plots['ln_neg'].data[0].value).toBe(1);
@@ -384,7 +384,7 @@ describe('Math Edge Cases', () => {
                 plotchar(is_large ? 1 : 0, 'large');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['large'].data[0].value).toBe(1);
         });
 
@@ -401,7 +401,7 @@ describe('Math Edge Cases', () => {
                 plotchar(is_zero ? 1 : 0, 'zero');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['zero'].data[0].value).toBe(1);
         });
     });
@@ -424,7 +424,7 @@ describe('Math Edge Cases', () => {
                 plotchar(deg_from_zero, 'zero');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['pi'].data[0].value).toBeCloseTo(180, 10);
             expect(plots['half_pi'].data[0].value).toBeCloseTo(90, 10);
             expect(plots['quarter_pi'].data[0].value).toBeCloseTo(45, 10);
@@ -448,7 +448,7 @@ describe('Math Edge Cases', () => {
                 plotchar(rad_from_zero, 'rad_zero');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rad_180'].data[0].value).toBeCloseTo(Math.PI, 10);
             expect(plots['rad_90'].data[0].value).toBeCloseTo(Math.PI / 2, 10);
             expect(plots['rad_45'].data[0].value).toBeCloseTo(Math.PI / 4, 10);
@@ -471,7 +471,7 @@ describe('Math Edge Cases', () => {
                 plotchar(roundtrip_rad, 'roundtrip_rad');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['roundtrip_deg'].data[0].value).toBeCloseTo(123.456, 10);
             expect(plots['roundtrip_rad'].data[0].value).toBeCloseTo(1.234, 10);
         });
@@ -489,7 +489,7 @@ describe('Math Edge Cases', () => {
                 plotchar(neg_rad, 'neg_rad');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['neg_deg'].data[0].value).toBeCloseTo(-180, 10);
             expect(plots['neg_rad'].data[0].value).toBeCloseTo(-Math.PI, 10);
         });
@@ -508,7 +508,7 @@ describe('Math Edge Cases', () => {
                 plotchar(na(rad_nan) ? 1 : 0, 'rad_is_nan');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['deg_is_nan'].data[0].value).toBe(1);
             expect(plots['rad_is_nan'].data[0].value).toBe(1);
         });
@@ -530,7 +530,7 @@ describe('Math Edge Cases', () => {
                 plotchar(rad_neg_inf, 'rad_neg_inf');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['deg_inf'].data[0].value).toBe(Infinity);
             expect(plots['rad_inf'].data[0].value).toBe(Infinity);
             expect(plots['deg_neg_inf'].data[0].value).toBe(-Infinity);

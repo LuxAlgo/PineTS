@@ -14,6 +14,7 @@ import {
     transformIfStatement,
     transformFunctionDeclaration,
     createLoopGuardNodes,
+    instrumentLoopBudget,
 } from './StatementTransformer';
 
 /**
@@ -158,6 +159,10 @@ export function propagateAsyncAwait(ast: any): void {
             }
         }
     }
+
+    // This is the last AST transformation before code generation. Charge and
+    // verify every emitted loop here, including those inside initializer IIFEs.
+    instrumentLoopBudget(ast);
 }
 
 // Pine comparison operators → na-aware runtime helpers. Includes the
@@ -658,4 +663,5 @@ export function runTransformationPass(
             }
         },
     });
+
 }

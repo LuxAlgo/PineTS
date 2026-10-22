@@ -11,10 +11,10 @@ export function roc(context: any) {
         // a skipped bar repeating the last call's value)
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `roc_${length}`;
-        const carry: CarryHistory = (context.taState[stateKey] ??= new CarryHistory());
+        const carry: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, true, context.executionBudget));
         const series = Series.from(source);
         const currentValue = series.get(0);
-        carry.push(context.idx, currentValue, length, series);
+        carry.push(context.idx, currentValue, length, series, context.executionBudget);
 
         if (!(length >= 0) || carry.h.size <= length) {
             return NaN;

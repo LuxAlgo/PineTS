@@ -41,7 +41,7 @@ describe('ARRAY Namespace', () => {
                     abs_native,
                     abs_var,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -109,7 +109,7 @@ describe('ARRAY Namespace', () => {
                     avg1,
                     avg2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -178,7 +178,7 @@ describe('ARRAY Namespace', () => {
                     size_after1,
                     size_after2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -250,7 +250,7 @@ describe('ARRAY Namespace', () => {
                     val1,
                     val2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -318,7 +318,7 @@ describe('ARRAY Namespace', () => {
                     copy_original,
                     copy_modified,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -394,7 +394,7 @@ describe('ARRAY Namespace', () => {
                     cov1,
                     cov2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -464,7 +464,7 @@ describe('ARRAY Namespace', () => {
                     every2,
                     every3,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -530,7 +530,7 @@ describe('ARRAY Namespace', () => {
                     fill_first,
                     fill_last,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -596,7 +596,7 @@ describe('ARRAY Namespace', () => {
                     first1,
                     first2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -662,7 +662,7 @@ describe('ARRAY Namespace', () => {
                     get_middle,
                     get_last,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -731,7 +731,7 @@ describe('ARRAY Namespace', () => {
                     includes2,
                     includes3,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -801,7 +801,7 @@ describe('ARRAY Namespace', () => {
                     index2,
                     index3,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -871,7 +871,7 @@ describe('ARRAY Namespace', () => {
                     insert_middle1,
                     insert_middle2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -940,7 +940,7 @@ describe('ARRAY Namespace', () => {
                     joined1,
                     joined2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1006,7 +1006,7 @@ describe('ARRAY Namespace', () => {
                     last1,
                     last2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1077,7 +1077,7 @@ describe('ARRAY Namespace', () => {
                     index2,
                     index3,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1145,7 +1145,7 @@ describe('ARRAY Namespace', () => {
                     max1,
                     max2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1213,7 +1213,7 @@ describe('ARRAY Namespace', () => {
                     min1,
                     min2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1276,7 +1276,7 @@ describe('ARRAY Namespace', () => {
                     new_value1,
                     new_value2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1347,7 +1347,7 @@ describe('ARRAY Namespace', () => {
                     size_after1,
                     size_after2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1416,7 +1416,7 @@ describe('ARRAY Namespace', () => {
                     push_last1,
                     push_last2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1490,7 +1490,7 @@ describe('ARRAY Namespace', () => {
                     range_sum1,
                     range_sum2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1561,7 +1561,7 @@ describe('ARRAY Namespace', () => {
                     size1,
                     size2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1626,7 +1626,7 @@ describe('ARRAY Namespace', () => {
                     set_first,
                     set_last,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1697,7 +1697,7 @@ describe('ARRAY Namespace', () => {
                     size_after1,
                     size_after2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1757,7 +1757,7 @@ describe('ARRAY Namespace', () => {
                     size1,
                     size2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1829,7 +1829,7 @@ describe('ARRAY Namespace', () => {
                     val1,
                     val2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1899,7 +1899,7 @@ describe('ARRAY Namespace', () => {
                     some2,
                     some3,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -1970,7 +1970,7 @@ describe('ARRAY Namespace', () => {
                     min1,
                     max2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -2044,7 +2044,7 @@ describe('ARRAY Namespace', () => {
                     std_first1,
                     std_first2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -2112,7 +2112,7 @@ describe('ARRAY Namespace', () => {
                     stdev1,
                     stdev2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -2180,7 +2180,7 @@ describe('ARRAY Namespace', () => {
                     sum1,
                     sum2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -2249,7 +2249,7 @@ describe('ARRAY Namespace', () => {
                     unshift_first1,
                     unshift_first2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -2317,7 +2317,7 @@ describe('ARRAY Namespace', () => {
                     variance1,
                     variance2,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();

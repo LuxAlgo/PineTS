@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
-import { BarRing, validLength } from '../utils/barRing';
+import { BarRing } from '../utils/barRing';
 import { lowerBound, upperBound } from '../utils/windows';
+import { chargeTaMemory, chargeTaWork, validTaLength } from '../utils/assertTaLength';
 
 /** The BarRing of the window, its slots also kept sorted by value (na left out) so ranks need no sort. */
 class RankRing {
@@ -85,13 +86,20 @@ function rankCorrelation(values: number[], length: number): number {
 export function rci(context: any) {
     return (source: any, _length: any, _callId?: string) => {
         const length = Series.from(_length).get(0);
-        if (!validLength(length)) return NaN;
+        if (!validTaLength(length, 'ta.rci')) return NaN;
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `rci_${length}`;
         const series = Series.from(source);
         let win: RankRing = context.taState[stateKey];
-        if (!win || win.length !== length) win = context.taState[stateKey] = new RankRing(length, context.idx, series);
+        if (!win || win.length !== length) {
+            // Initial sorted-slot construction can shift O(length²) elements.
+            chargeTaWork(context, length * length, 'ta.rci');
+            chargeTaMemory(context, 40 * (length + 1), 'ta.rci');
+            win = context.taState[stateKey] = new RankRing(length, context.idx, series);
+        }
+
+        chargeTaWork(context, 4 * length, 'ta.rci');
 
         const idx = context.idx;
         const currentValue = series.get(0);
@@ -113,6 +121,7 @@ export function rci(context: any) {
             if (ring.stalePrefill(s, idx - d)) sortPath = true;
         }
         if (sortPath) {
+            chargeTaWork(context, length * (5 + Math.ceil(Math.log2(length))), 'ta.rci');
             const oldestFirst: number[] = [];
             for (let d = length - 1; d >= 0; d--) oldestFirst.push(ring.read(idx - d));
             const r = rankCorrelation(oldestFirst, length);

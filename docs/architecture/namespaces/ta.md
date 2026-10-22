@@ -10,6 +10,10 @@ permalink: /architecture/namespaces/ta/
 
 This directory contains the implementation of Pine Script's `ta.*` namespace functions. These functions are designed to replicate Pine Script's behavior in a JavaScript environment, with a strong focus on **incremental calculation** and **Series compatibility**.
 
+## Runtime length policy
+
+Window and period arguments must be finite safe integers from 1 through 5,000. The `ta` namespace validates them before invoking a method; the window helpers also check lengths before allocation or iteration. `ta.change`, `ta.mom`, and `ta.roc` retain their zero-bar offset, while pivot left/right arguments may be zero if the combined span (`left + right + 1`) is at most 5,000. Invalid or excessive public arguments raise `PineRuntimeError` with the relevant `ta.*` method. Native scans and retained buffers consume the run's shared execution budget, including on changing series lengths and repeated same-bar evaluations.
+
 ## Architecture Overview
 
 Each TA function is implemented as a factory function that takes the execution `context` and returns the actual calculation function. This closure pattern allows functions to access the global state and other context methods efficiently.

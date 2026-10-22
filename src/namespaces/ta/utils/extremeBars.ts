@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { nonNaWindow } from './nonNaWindow';
+import { validTaLength } from './assertTaLength';
+import type { ExecutionBudget } from '../../../security/ExecutionBudget';
 
 const nanLike = (v: any) => v === undefined || isNaN(v);
 
@@ -12,7 +14,8 @@ const nanLike = (v: any) => v === undefined || isNaN(v);
  * NaN while there are none.
  */
 export function extremeBarsOffset(context: any, key: string | undefined, series: any, length: number, max: boolean): number {
-    if (!key) return extremeBarsScan(series, length, max, context.idx);
+    if (!validTaLength(length, 'ta.extremebars')) return NaN;
+    if (!key) return extremeBarsScan(series, length, max, context.idx, context.executionBudget);
     const win = nonNaWindow(context, key, series, length, 'extremes', undefined, 'bars');
     if (!win) return NaN;
     const bar = max ? win.maxBar() : win.minBar();
@@ -21,11 +24,13 @@ export function extremeBarsOffset(context: any, key: string | undefined, series:
 }
 
 /** The same, scanning the series (no state). */
-export function extremeBarsScan(series: any, length: number, max: boolean, idx: number): number {
+export function extremeBarsScan(series: any, length: number, max: boolean, idx: number, budget?: ExecutionBudget): number {
+    if (!validTaLength(length, 'ta.extremebars')) return NaN;
     let best = NaN;
     let bestOffset = NaN;
     let n = 0;
     for (let i = 0; n < length && i <= idx; i++) {
+        budget?.chargeWork(1, 'ta.extremebars');
         const val = series.get(i);
         if (nanLike(val)) continue;
         n++;

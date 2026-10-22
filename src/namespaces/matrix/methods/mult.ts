@@ -3,6 +3,7 @@
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
 import { PineArrayObject } from '../../array/PineArrayObject';
+import { chargeCollectionWork } from '../../collectionCapacity';
 
 export function mult(context: Context) {
     return (id: PineMatrixObject, id2: PineMatrixObject | number | PineArrayObject) => {
@@ -18,6 +19,7 @@ export function mult(context: Context) {
                 return new PineMatrixObject(0, 0, NaN, context);
             }
 
+            chargeCollectionWork(context, rows1 * cols2 * cols1, 'matrix.mult');
             const newMatrix = new PineMatrixObject(rows1, cols2, 0, context);
 
             for (let i = 0; i < rows1; i++) {
@@ -38,6 +40,7 @@ export function mult(context: Context) {
                 return new PineArrayObject([], 'float' as any, context);
             }
 
+            chargeCollectionWork(context, rows1 * cols1, 'matrix.mult');
             const result: number[] = [];
             for (let i = 0; i < rows1; i++) {
                 let sum = 0;
@@ -50,6 +53,7 @@ export function mult(context: Context) {
         } else {
             // Scalar multiplication
             const scalar = id2 as number;
+            chargeCollectionWork(context, rows1 * cols1, 'matrix.mult');
             const newMatrix = new PineMatrixObject(rows1, cols1, NaN, context);
             for (let i = 0; i < rows1; i++) {
                 for (let j = 0; j < cols1; j++) {

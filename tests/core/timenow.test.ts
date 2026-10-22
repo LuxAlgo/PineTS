@@ -12,7 +12,7 @@ plot(timenow, "now")
 `;
         const before = Date.now();
         const pineTS = makePineTS();
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const after = Date.now();
 
         const data = plots['now'].data.filter((d: any) => d.value != null && !isNaN(d.value));
@@ -32,7 +32,7 @@ plot(timenow, "now")
         const { result } = await pineTS.run(($: any) => {
             const now = timenow;
             return { now };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const after = Date.now();
 
         expect(result.now[0]).toBeGreaterThanOrEqual(before);

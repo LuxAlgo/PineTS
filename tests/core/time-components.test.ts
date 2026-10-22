@@ -22,7 +22,7 @@ describe('dayofmonth', () => {
             const { dayofmonth } = $.pine;
             let d = dayofmonth;
             return { d };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.d[0]).toBe(7);
     });
 
@@ -31,7 +31,7 @@ describe('dayofmonth', () => {
             const { dayofmonth } = $.pine;
             let d = dayofmonth(1546819200000);
             return { d };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.d[0]).toBe(7);
     });
 
@@ -41,7 +41,7 @@ describe('dayofmonth', () => {
             // UTC+5 → 2019-01-07 05:00 → still day 7
             let d = dayofmonth(1546819200000, 'UTC+5');
             return { d };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.d[0]).toBe(7);
     });
 
@@ -52,7 +52,7 @@ indicator("DayOfMonth Test")
 d = dayofmonth
 plot(d, "dom")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['dom']).toBeDefined();
         expect(plots['dom'].data[0].value).toBe(7);
     });
@@ -64,7 +64,7 @@ describe('dayofweek', () => {
             const { dayofweek } = $.pine;
             let d = dayofweek;
             return { d };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.d[0]).toBe(2); // Monday
     });
 
@@ -73,7 +73,7 @@ describe('dayofweek', () => {
             const { dayofweek } = $.pine;
             let d = dayofweek(1546819200000);
             return { d };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.d[0]).toBe(2); // Monday
     });
 
@@ -82,7 +82,7 @@ describe('dayofweek', () => {
             const { dayofweek } = $.pine;
             let d = dayofweek(1546819200000, 'UTC');
             return { d };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.d[0]).toBe(2); // Monday
     });
 
@@ -97,7 +97,7 @@ describe('dayofweek', () => {
             let fri = dayofweek.friday;
             let sat = dayofweek.saturday;
             return { sun, mon, tue, wed, thu, fri, sat };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = result.sun.length - 1;
         expect(result.sun[last]).toBe(1);
         expect(result.mon[last]).toBe(2);
@@ -115,7 +115,7 @@ indicator("DayOfWeek Test")
 d = dayofweek
 plot(d, "dow")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['dow']).toBeDefined();
         expect(plots['dow'].data[0].value).toBe(2); // Monday
     });
@@ -127,7 +127,7 @@ describe('hour', () => {
             const { hour } = $.pine;
             let h = hour;
             return { h };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.h[0]).toBe(0); // 00:00 UTC
     });
 
@@ -136,7 +136,7 @@ describe('hour', () => {
             const { hour } = $.pine;
             let h = hour(1546819200000);
             return { h };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.h[0]).toBe(0);
     });
 
@@ -146,7 +146,7 @@ describe('hour', () => {
             // UTC+5 → 05:00
             let h = hour(1546819200000, 'UTC+5');
             return { h };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.h[0]).toBe(5);
     });
 
@@ -157,7 +157,7 @@ indicator("Hour Test")
 h = hour
 plot(h, "hour")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['hour']).toBeDefined();
         expect(plots['hour'].data[0].value).toBe(0);
     });
@@ -169,7 +169,7 @@ describe('minute', () => {
             const { minute } = $.pine;
             let m = minute;
             return { m };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.m[0]).toBe(0);
     });
 
@@ -179,7 +179,7 @@ describe('minute', () => {
             // 1546819200000 + 30*60*1000 = +30 minutes
             let m = minute(1546819200000 + 30 * 60 * 1000);
             return { m };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.m[0]).toBe(30);
     });
 
@@ -189,7 +189,7 @@ describe('minute', () => {
             // UTC+05:30 offset doesn't change minutes of a round hour
             let m = minute(1546819200000, 'UTC+5');
             return { m };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.m[0]).toBe(0);
     });
 
@@ -200,7 +200,7 @@ indicator("Minute Test")
 m = minute
 plot(m, "minute")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['minute']).toBeDefined();
         expect(plots['minute'].data[0].value).toBe(0);
     });
@@ -212,7 +212,7 @@ describe('month', () => {
             const { month } = $.pine;
             let m = month;
             return { m };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.m[0]).toBe(1); // January
     });
 
@@ -221,7 +221,7 @@ describe('month', () => {
             const { month } = $.pine;
             let m = month(1546819200000);
             return { m };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.m[0]).toBe(1);
     });
 
@@ -230,7 +230,7 @@ describe('month', () => {
             const { month } = $.pine;
             let m = month(1546819200000, 'UTC');
             return { m };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.m[0]).toBe(1);
     });
 
@@ -241,7 +241,7 @@ indicator("Month Test")
 m = month
 plot(m, "month")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['month']).toBeDefined();
         expect(plots['month'].data[0].value).toBe(1);
     });
@@ -253,7 +253,7 @@ describe('second', () => {
             const { second } = $.pine;
             let s = second;
             return { s };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.s[0]).toBe(0);
     });
 
@@ -263,7 +263,7 @@ describe('second', () => {
             // +45 seconds
             let s = second(1546819200000 + 45 * 1000);
             return { s };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.s[0]).toBe(45);
     });
 
@@ -273,7 +273,7 @@ describe('second', () => {
             // Timezone doesn't affect seconds
             let s = second(1546819200000 + 45 * 1000, 'UTC+5');
             return { s };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.s[0]).toBe(45);
     });
 
@@ -284,7 +284,7 @@ indicator("Second Test")
 s = second
 plot(s, "second")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['second']).toBeDefined();
         expect(plots['second'].data[0].value).toBe(0);
     });
@@ -296,7 +296,7 @@ describe('weekofyear', () => {
             const { weekofyear } = $.pine;
             let w = weekofyear;
             return { w };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         // 2019-01-07 is ISO week 2
         expect(result.w[0]).toBe(2);
     });
@@ -306,7 +306,7 @@ describe('weekofyear', () => {
             const { weekofyear } = $.pine;
             let w = weekofyear(1546819200000);
             return { w };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.w[0]).toBe(2);
     });
 
@@ -315,7 +315,7 @@ describe('weekofyear', () => {
             const { weekofyear } = $.pine;
             let w = weekofyear(1546819200000, 'UTC');
             return { w };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.w[0]).toBe(2);
     });
 
@@ -326,7 +326,7 @@ indicator("WeekOfYear Test")
 w = weekofyear
 plot(w, "woy")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['woy']).toBeDefined();
         expect(plots['woy'].data[0].value).toBe(2);
     });
@@ -338,7 +338,7 @@ describe('year', () => {
             const { year } = $.pine;
             let y = year;
             return { y };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.y[0]).toBe(2019);
     });
 
@@ -347,7 +347,7 @@ describe('year', () => {
             const { year } = $.pine;
             let y = year(1546819200000);
             return { y };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.y[0]).toBe(2019);
     });
 
@@ -356,7 +356,7 @@ describe('year', () => {
             const { year } = $.pine;
             let y = year(1546819200000, 'UTC');
             return { y };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(result.y[0]).toBe(2019);
     });
 
@@ -367,7 +367,7 @@ indicator("Year Test")
 y = year
 plot(y, "year")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['year']).toBeDefined();
         expect(plots['year'].data[0].value).toBe(2019);
     });
@@ -379,7 +379,7 @@ describe('time_tradingday', () => {
             const { time_tradingday } = $.pine;
             let td = time_tradingday;
             return { td };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         // Weekly bar opens 2019-01-07, closes (= next bar open) 2019-01-14.
         // TradingView returns 00:00 UTC of the close date → 2019-01-14
         expect(result.td[0]).toBe(Date.UTC(2019, 0, 14, 0, 0, 0));
@@ -392,7 +392,7 @@ indicator("TimeTradingDay Test")
 td = time_tradingday
 plot(td, "td")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['td']).toBeDefined();
         // Weekly bar opens 2019-01-07, closeTime = 2019-01-14 → time_tradingday = midnight 2019-01-14
         expect(plots['td'].data[0].value).toBe(Date.UTC(2019, 0, 14, 0, 0, 0));

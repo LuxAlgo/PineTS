@@ -20,7 +20,7 @@ describe('Array Access & Information', () => {
                 arr_val,
                 first,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const part_arr_val = result.arr_val.reverse().slice(0, 5);
         const part_first = result.first.reverse().slice(0, 5);
@@ -50,7 +50,7 @@ describe('Array Access & Information', () => {
                 arr_val,
                 first,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const part_arr_val = result.arr_val.reverse().slice(0, 5);
         const part_first = result.first.reverse().slice(0, 5);
@@ -81,7 +81,7 @@ describe('Array Access & Information', () => {
             return { a, res, last, size };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -136,7 +136,7 @@ describe('Array Access & Information', () => {
             return { a, res };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {

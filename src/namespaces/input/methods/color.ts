@@ -5,6 +5,6 @@ import { parseInputOptions, resolveInput } from '../utils';
 export function color(context: any) {
     return (...args: any[]) => {
         const options = parseInputOptions(args);
-        return resolveInput(context, options);
+        return resolveInput(context, options, 'color');
     };
 }
