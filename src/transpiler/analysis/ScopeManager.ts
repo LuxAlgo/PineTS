@@ -82,9 +82,11 @@ export class ScopeManager {
     private taCallIdCounter: number = 0;
     private userCallIdCounter: number = 0;
     private plotCallIdCounter: number = 0;
+    private bareCallIdCounters: Map<string, number> = new Map();
     private alertCallIdCounter: number = 0;
     private loopGuardCounter: number = 0;
     private hoistingStack: any[][] = [];
+    private hoistingRoots: number[] = [];
     private suppressHoisting: boolean = false;
     private inLoopTest: boolean = false;
     private reservedNames: Set<string> = new Set();
@@ -225,6 +227,16 @@ export class ScopeManager {
         return {
             type: 'Literal',
             value: `#${this.plotCallIdCounter++}`,
+        };
+    }
+    // Bare plot functions (bgcolor, barcolor, …) get keys in their own space,
+    // `bgcolor#0`, so they never shift the `#N` keys of untitled plot() calls.
+    public getNextBareCallsiteId(fnName: string): any {
+        const n = this.bareCallIdCounters.get(fnName) ?? 0;
+        this.bareCallIdCounters.set(fnName, n + 1);
+        return {
+            type: 'Literal',
+            value: `${fnName}#${n}`,
         };
     }
     public getNextAlertCallId(): any {
@@ -553,6 +565,18 @@ export class ScopeManager {
         return newName;
     }
 
+    /**
+     * Hide a variable just declared in the current scope so its initializer resolves
+     * to the enclosing binding. Returns a callback that restores the declaration.
+     */
+    hideCurrentScopeVariable(name: string): () => void {
+        const scope = this.scopes[this.scopes.length - 1];
+        const declared = scope?.get(name);
+        if (declared === undefined) return () => {};
+        scope.delete(name);
+        return () => scope.set(name, declared);
+    }
+
     getVariable(name: string): [string, string] {
         // If it's a loop variable, return it as is
         if (this.loopVars.has(name)) {
@@ -641,6 +665,27 @@ export class ScopeManager {
             const targetIndex = Math.min(1, this.hoistingStack.length - 1);
             this.hoistingStack[targetIndex].push(stmt);
         }
+    }
+
+    /** The body statements of the function being transformed get their hoisting frames from this depth. */
+    enterFunctionHoistingRoot(): void {
+        this.hoistingRoots.push(this.hoistingStack.length);
+    }
+
+    exitFunctionHoistingRoot(): void {
+        this.hoistingRoots.pop();
+    }
+
+    /**
+     * Hoist a statement ahead of the top-level statement of the current function body (or of the
+     * script) that contains the current statement, so it runs whenever that scope runs, even when
+     * the current statement sits in an `if` / loop / `switch` block that does not.
+     */
+    addScopeRootHoistedStatement(stmt: any): boolean {
+        if (this.hoistingStack.length === 0) return false;
+        const root = this.hoistingRoots.length > 0 ? this.hoistingRoots[this.hoistingRoots.length - 1] : 1;
+        this.hoistingStack[Math.min(root, this.hoistingStack.length - 1)].push(stmt);
+        return true;
     }
 
     getCurrentHoistingScope(): any[] | null {

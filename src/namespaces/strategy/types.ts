@@ -162,6 +162,8 @@ export interface Order {
     _deferredPastExits?: number;
     // Internal: strategy.exit trailing state of each trade it applies to, by trade id.
     _trailByTrade?: Record<string, { armed: boolean; peak: number }>;
+    // Internal: strategy.exit trail_price as passed, before the tick rounding (which follows the close).
+    _trailPriceRaw?: number;
     // Internal: the market order of a strategy.risk close-out (not checked against margin).
     _risk?: boolean;
 

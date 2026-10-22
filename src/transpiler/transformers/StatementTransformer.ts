@@ -615,6 +615,9 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
         // Transform non-context variables to use the context object
         const newName = scopeManager.addVariable(decl.id.name, varNode.kind);
         const kind = varNode.kind; // 'const', 'let', or 'var'
+        // Pine resolves a declaration's initializer before the new name exists, so
+        // `x = x + 1` in a block reads the outer `x` (TradingView shadowing).
+        const restoreDeclared = scopeManager.hideCurrentScopeVariable(decl.id.name);
 
         // Only treat as an array pattern variable when it actually has the destructured
         // MemberExpression shape (e.g. _tmp_0[0]) from the AnalysisPass rewrite.
@@ -642,6 +645,8 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                 walkInitExpression(decl.init, scopeManager);
             }
         }
+
+        restoreDeclared();
 
         // Create the target variable reference using ASTFactory
         const targetVarRef = createScopedVariableReference(decl.id.name, scopeManager);
@@ -843,31 +848,19 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
     scopeManager.setInLoopTest(true);
     // Handle initialization
     if (node.init && node.init.type === 'VariableDeclaration') {
-        // Keep the original loop variable name
-        const decl = node.init.declarations[0];
-        const originalName = decl.id.name;
-        scopeManager.addLoopVariable(originalName, originalName);
+        // Keep the original loop variable names: the loop variable and, for range
+        // loops, the direction flag fixed at loop entry.
+        const declarations = node.init.declarations.map((decl: any) => {
+            scopeManager.addLoopVariable(decl.id.name, decl.id.name);
+            return { type: 'VariableDeclarator', id: { type: 'Identifier', name: decl.id.name }, init: decl.init };
+        });
+        node.init = { type: 'VariableDeclaration', kind: node.init.kind, declarations };
 
-        // Keep the original variable declaration
-        node.init = {
-            type: 'VariableDeclaration',
-            kind: node.init.kind,
-            declarations: [
-                {
-                    type: 'VariableDeclarator',
-                    id: {
-                        type: 'Identifier',
-                        name: originalName,
-                    },
-                    init: decl.init,
-                },
-            ],
-        };
-
-        // Transform any identifiers in the init expression
+        // Transform any identifiers in the init expressions
         // Must wrap Series identifiers in $.get() so the loop variable receives
         // the concrete value, not a raw Series object (e.g. `for i = bar_index to 0`).
-        if (decl.init) {
+        for (const decl of declarations) {
+            if (!decl.init) continue;
             walk.recursive(decl.init, scopeManager, {
                 Identifier(node: any, state: ScopeManager) {
                     if (!scopeManager.isLoopVariable(node.name) && !node.computed) {
@@ -1029,8 +1022,7 @@ export function transformForStatement(node: any, scopeManager: ScopeManager, c: 
     // Clean up loop variable so it doesn't leak to outer scope
     // (prevents shadowing issues when the same name is reused later)
     if (node.init && node.init.type === 'VariableDeclaration') {
-        const decl = node.init.declarations[0];
-        scopeManager.removeLoopVariable(decl.id.name);
+        for (const decl of node.init.declarations) scopeManager.removeLoopVariable(decl.id.name);
     }
 }
 
@@ -1474,7 +1466,16 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                     // LHS as a MemberExpression — which doesn't rewrite the
                     // root identifier of an assignment LHS — and `tracker`
                     // leaks bare → "ReferenceError: tracker is not defined".
-                    AssignmentExpression(node: any, state: ScopeManager) {
+                    AssignmentExpression(node: any, state: ScopeManager, c: any) {
+                        // A local of a returned IIFE (`float s = 0.0` in a switch arm) is a plain JS
+                        // variable, as in walkInitExpression: `s += i` must not become `$.set($.let.s, …)`.
+                        if (node.left.type === 'Identifier') {
+                            const [scopedName] = state.getVariable(node.left.name);
+                            if (scopedName === node.left.name && !state.isContextBound(node.left.name)) {
+                                c(node.right, state);
+                                return;
+                            }
+                        }
                         transformAssignmentExpression(node, state);
                     },
                     // c is the callback function for recursion (acorn-walk)
@@ -1490,6 +1491,14 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                     BinaryExpression(node: any, state: any, c: any) {
                         c(node.left, state);
                         c(node.right, state);
+                    },
+                    // Loops inside a returned IIFE (a switch arm that ends in a loop): the header's
+                    // counter must stay a raw JS local (`i++`, not `$.get(i, 0)++`).
+                    ForStatement(node: any, state: ScopeManager, c: any) {
+                        transformForStatement(node, state, c);
+                    },
+                    WhileStatement(node: any, state: ScopeManager, c: any) {
+                        transformWhileStatement(node, state, c);
                     },
                     ArrowFunctionExpression(node: any, state: any, c: any) {
                         // For IIFE arrow functions, manage hoisting like BlockStatement does
@@ -1647,7 +1656,9 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
         }
 
         // Just delegate to the callback to continue the recursion
+        scopeManager.enterFunctionHoistingRoot();
         c(node.body, scopeManager);
+        scopeManager.exitFunctionHoistingRoot();
 
         // Clean up: remove function parameters from local series vars after exiting function scope
         node.params.forEach((param: any) => {
