@@ -4,7 +4,7 @@
 import { Order } from '../types';
 import { Series } from '../../../Series';
 import { parseArgsForPineParams } from '../../utils';
-import { argValue, isNaArg, floorQty } from '../utils';
+import { argValue, isNaArg, floorQty, whenBlocks } from '../utils';
 import { checkQtyPercent } from '../validation';
 
 /**
@@ -39,6 +39,7 @@ export function close(context: any) {
             throw new Error('strategy.close() called before strategy() declaration');
         }
         const parsed = parseArgsForPineParams<any>(args, CLOSE_SIGNATURES, CLOSE_ARGS_TYPES);
+        if (whenBlocks(parsed)) return;
         const targetId = argValue(parsed.id);
         // A quantity given as na is absent: the close takes the whole position.
         const qtyArg = argValue(parsed.qty);
