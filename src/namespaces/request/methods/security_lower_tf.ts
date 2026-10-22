@@ -224,7 +224,7 @@ async function buildFastBuiltinSecContext(
     // populated arrays — never call `run()`, so no transpile, no
     // iteration, no shifts, no helpers.
     const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, effectiveSDate, secEDate);
-    pineTS.markAsSecondary();
+    pineTS.markAsSecondary(context);
     await pineTS.ready();
 
     // Use the openTime/closeTime arrays already prepared by the
@@ -404,7 +404,7 @@ export function security_lower_tf(context: any) {
                 const secEDate = lastBarCloseTime || context.eDate || Date.now();
 
                 const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate);
-                pineTS.markAsSecondary();
+                pineTS.markAsSecondary(context);
 
                 // The call site's truncated slice (the prefix of statements
                 // ending at the call), else the whole script — see runSecondary.

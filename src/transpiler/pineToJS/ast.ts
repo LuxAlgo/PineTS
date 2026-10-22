@@ -51,6 +51,13 @@ export class TypeDefinition extends ASTNode {
     }
 }
 
+// `import <user>/<library>/<version> [as <alias>]`. The alias defaults to the library name.
+export class ImportDeclaration extends ASTNode {
+    constructor(public path: string, public user: string, public name: string, public version: number, public alias: string) {
+        super('ImportDeclaration');
+    }
+}
+
 export class IfStatement extends ASTNode {
     public _line: number;
     constructor(public test: any, public consequent: any, public alternate: any | null = null) {

@@ -54,10 +54,10 @@ This architecture simplifies the process by separating **syntax translation** (P
 
 ## 🛠 Internal Architecture of `pineToJS`
 
-The Stage 1 transpiler follows a standard 3-stage compiler pipeline:
+The Stage 1 transpiler follows a standard compiler pipeline, with a linking step for imported libraries:
 
 ```text
-[Pine Script Source] -> [Lexer] -> [Parser] -> [Code Generator] -> [JavaScript Code]
+[Pine Script Source] -> [Lexer] -> [Parser] -> [Linker] -> [Code Generator] -> [JavaScript Code]
 ```
 
 ### 1. Lexer (`lexer.ts`)
@@ -82,7 +82,17 @@ The Parser consumes tokens to build a custom Abstract Syntax Tree (AST).
 -   **AST Nodes**: Defined in `ast.ts`, these nodes represent Pine Script constructs (e.g., `TypeDefinition`, `SwitchExpression`, `MethodDeclaration`).
 -   **Scope Handling**: Understands Pine Script's variable declaration rules (`var`, `varip`, typed declarations).
 
-### 3. Code Generator (`codegen.ts`)
+### 3. Linker (`linker.ts`)
+
+Links the libraries the script imports (`import user/library/version as alias`) into its AST, so the code generator only sees ordinary user code.
+
+-   **Input**: `pineToJS(source, { libraries })`, where `libraries` maps import paths to library sources (collected beforehand by `resolveImports()` through an import resolver, see `src/imports/`). Without a source, an import is reported in `unresolvedImports` and left out.
+-   **Splicing**: each library is parsed, and its declarations are inserted where the `import` statements stood, its own imports before it.
+-   **Renaming**: library declarations get a `<user>$<library>$<version>$` prefix (`$` cannot appear in a Pine identifier, so nothing collides), and `alias.member` references are rewritten to the linked names. Exported methods keep their name for method-syntax dispatch; private ones are renamed.
+-   **Reachability**: only declarations the script reaches are linked, so a library's unresolved import only fails when used.
+-   `imports.ts` reads import statements (`scanImports()` from the tokens alone, for resolution before parsing).
+
+### 4. Code Generator (`codegen.ts`)
 
 The Code Generator traverses the AST and outputs valid JavaScript.
 
@@ -107,6 +117,7 @@ This transpiler is designed to feed into the PineTS Runtime (`PineTS.class.ts`).
 -   **Method Syntax**: Supports the `method` keyword and method calls (e.g., `array.new<float>()`).
 -   **Variable Persistence**: Maps `var` and `varip` keywords to appropriate JavaScript variable declarations.
 -   **Complex Expressions**: Handles nested `if` expressions and `switch` statements by normalizing them into executable JavaScript logic.
+-   **Libraries**: `import` / `export` and the `library()` declaration, with imported libraries linked into the script.
 
 ## 🚀 Usage
 

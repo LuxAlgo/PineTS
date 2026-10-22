@@ -22,6 +22,7 @@ This guide explains how to initialize PineTS and run indicators or strategies wi
 -   [Context Object](#context-object)
 -   [Return Values](#return-values)
 -   [Alerts](#alerts)
+-   [Libraries (import)](#libraries-import)
 -   [Complete Examples](#complete-examples)
 
 ---
@@ -1015,9 +1016,34 @@ For full documentation including frequency constants, alert modes, and complete 
 
 ---
 
+## Libraries (import)
+
+A script with `import <user>/<library>/<version>` statements needs an **import resolver**, which tells PineTS where library sources come from. Set it on the instance before running the script; it is used by `run()`, `stream()` and `update()`, and by `request.security()` contexts. Scripts without imports need none.
+
+```typescript
+import { PineTS, Provider, ImportResolver } from 'pinets';
+
+ImportResolver.GitHub.configure({ url: 'https://github.com/acme/pine-libraries/tree/main/libraries' });
+
+const pine = new PineTS(Provider.Binance, 'BTCUSDT', '1h', 500);
+pine.setImportResolver(ImportResolver.GitHub);
+
+const { plots } = await pine.run(`
+//@version=6
+indicator("Using a library")
+import PineCoders/AllTimeHighLow/1 as allTime
+plot(allTime.hi())
+`);
+```
+
+Resolvers follow the data provider pattern: ready instances in the `ImportResolver` registry (`GitHub`, `File`, `Url`, `Map`), or classes for direct instantiation (`new GitHubImportResolver({ url, token })`). Each library is fetched once per resolver. A plain function `(path, info) => source` also works. See the **[Libraries](../libraries/)** page for every resolver, caching, and custom resolvers.
+
+---
+
 ## Next Steps
 
 -   Check [API Coverage](../api-coverage/) to see all available technical analysis functions
 -   Explore [Language Coverage](../lang-coverage/) to understand Pine Script compatibility
+-   Run scripts that import libraries: [Libraries](../libraries/)
 -   Try our demo indicators: [WillVixFix](../indicators/willvixfix/index.html) and [Squeeze Momentum](../indicators/sqzmom/index.html)
 -   Contribute on [GitHub](https://github.com/LuxAlgo/PineTS)

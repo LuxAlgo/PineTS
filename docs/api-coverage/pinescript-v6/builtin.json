@@ -45,7 +45,7 @@
         "input()": true,
         "int()": true,
         "label()": true,
-        "library()": false,
+        "library()": true,
         "line()": true,
         "linefill()": true,
         "max_bars_back()": false,

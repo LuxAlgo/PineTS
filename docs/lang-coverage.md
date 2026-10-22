@@ -29,4 +29,4 @@ This document lists the features of the PineTS language and their status.
 | Arrays                 | done        | Check [api-coverage](api-coverage.md) for details                       |
 | Matrices               | done        | Check [api-coverage](api-coverage.md) for details                       |
 | Maps                   | done        | Check [api-coverage](api-coverage.md) for details                       |
-| Imports                | planned     |                                                                         |
+| Imports                | done        | `import` / `export` and libraries, see [Libraries](libraries.md)        |

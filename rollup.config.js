@@ -62,27 +62,42 @@ const CJSConfigDev = {
     ],
 };
 
-// Plugin to exclude MockProvider from browser builds
-function excludeMockProvider() {
+// Node.js-only modules (they use fs) and the stubs replacing them in browser builds
+const NODE_ONLY_STUBS = {
+    // Stub that implements IProvider interface but does nothing
+    'Mock/MockProvider.class': `
+        export class MockProvider {
+            async getMarketData() {
+                return [];
+            }
+        }
+    `,
+    // Stub that implements IImportResolver interface but cannot read files
+    'File/FileImportResolver.class': `
+        export class FileImportResolver {
+            configure() {}
+            async resolve() {
+                throw new Error('FileImportResolver is only available in Node.js');
+            }
+        }
+    `,
+};
+
+// Plugin to exclude Node.js-only modules (MockProvider, FileImportResolver) from browser builds
+function excludeNodeOnlyModules() {
     return {
-        name: 'exclude-mock-provider',
+        name: 'exclude-node-only-modules',
         resolveId(source) {
-            // Exclude MockProvider from browser builds
-            if (source.includes('Mock/MockProvider.class') || source.includes('Mock\\MockProvider.class')) {
-                return { id: '\0mock-provider-stub', external: false };
+            for (const path of Object.keys(NODE_ONLY_STUBS)) {
+                if (source.includes(path) || source.includes(path.replace('/', '\\'))) {
+                    return { id: `\0stub:${path}`, external: false };
+                }
             }
             return null;
         },
         load(id) {
-            // Return stub that implements IProvider interface but does nothing
-            if (id === '\0mock-provider-stub') {
-                return `
-                    export class MockProvider {
-                        async getMarketData() {
-                            return [];
-                        }
-                    }
-                `;
+            if (id.startsWith('\0stub:')) {
+                return NODE_ONLY_STUBS[id.slice('\0stub:'.length)] ?? null;
             }
             return null;
         },
@@ -102,7 +117,7 @@ const BrowserConfigDev = {
             ';var PineTS = PineTSLib.PineTS;PineTS.Provider = PineTSLib.Provider;PineTS.Context = PineTSLib.Context;',
     },
     plugins: [
-        excludeMockProvider(),
+        excludeNodeOnlyModules(),
         resolve({
             preferBuiltins: true,
             extensions: ['.js', '.ts', '.json'],
@@ -168,7 +183,7 @@ const ESBrowserConfigDev = {
         banner: LicenseHeader,
     },
     plugins: [
-        excludeMockProvider(),
+        excludeNodeOnlyModules(),
         json(),
         resolve({
             preferBuiltins: true,
@@ -238,7 +253,7 @@ const BrowserConfigProd = {
             ';var PineTS = PineTSLib.PineTS;PineTS.Provider = PineTSLib.Provider;PineTS.Context = PineTSLib.Context;',
     },
     plugins: [
-        excludeMockProvider(),
+        excludeNodeOnlyModules(),
         resolve({
             preferBuiltins: true,
             extensions: ['.js', '.ts', '.json'],
@@ -303,7 +318,7 @@ const ESBrowserConfigProd = {
         banner: LicenseHeader,
     },
     plugins: [
-        excludeMockProvider(),
+        excludeNodeOnlyModules(),
         json(),
         resolve({
             preferBuiltins: true,

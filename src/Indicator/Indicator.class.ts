@@ -9,6 +9,8 @@ import { normalizeColorToRgbaHex } from '../namespaces/color/PineColor';
 import { scanDeclaration } from './scanDeclaration';
 import { propsForDeclaration } from './propsSchema';
 import { buildPropProxy } from './propProxy';
+import { resolveImports } from '../imports/resolveImports';
+import type { IImportResolver } from '../imports/IImportResolver';
 import type { IPineInput, IPineProp, PreparedScript } from './types';
 
 /**
@@ -47,6 +49,10 @@ export class Indicator {
 
     // Lazy artifacts — populated on first prepare() call.
     private _prepared: PreparedScript | null = null;
+    // Sources of the imported libraries, keyed by import path, and the resolver
+    // they came from — set by resolveImports().
+    private _libraries: Record<string, string> | null = null;
+    private _librariesResolver: IImportResolver | null = null;
     private _inputMeta: IPineInput[] | null = null;
     private _inputValues: Record<string, unknown> = {};
     private _explicitOverrides = new Set<string>(); // canonical keys the user wrote via .input.X = ...
@@ -109,7 +115,7 @@ export class Indicator {
     public prepare(opts: { debug?: boolean; ln?: boolean } = {}): PreparedScript {
         if (this._prepared) return this._prepared;
 
-        const fn = transpile(this.source, { debug: !!opts.debug, ln: opts.ln });
+        const fn = transpile(this.source, { debug: !!opts.debug, ln: opts.ln, libraries: this._libraries ?? undefined });
 
         const usesVisibleRange = detectViewportUsage(fn);
         const ltfSlices = (fn as any)._ltfSlices;
@@ -124,6 +130,22 @@ export class Indicator {
             ltfSlices,
         };
         return this._prepared;
+    }
+
+    /**
+     * Fetch the sources of the libraries the script imports (and theirs)
+     * through `resolver`, for `prepare()` to link. `PineTS.run()` calls it with
+     * the resolver set by `setImportResolver`. Run with another resolver, the
+     * Indicator is transpiled again if that resolver serves other sources.
+     * Throws when the script imports a library the resolver does not know.
+     */
+    public async resolveImports(resolver: IImportResolver | null): Promise<void> {
+        if (typeof this.source !== 'string') return;
+        if (this._libraries && this._librariesResolver === resolver) return;
+        const libraries = await resolveImports(this.source, resolver);
+        if (this._libraries && !sameSources(this._libraries, libraries)) this._prepared = null;
+        this._libraries = libraries;
+        this._librariesResolver = resolver;
     }
 
     /** True iff the script references any built-in in `VIEWPORT_DEPENDENT_BUILTINS`. */
@@ -207,7 +229,7 @@ export class Indicator {
 
     private _ensureInputsScanned(): void {
         if (this._inputMeta) return;
-        this._inputMeta = scanInputs(this.source);
+        this._inputMeta = scanInputs(this.source, this._libraries ?? undefined);
         // Present color-input defaults in one canonical form: an 8-digit
         // RGBA hex string (#RRGGBBAA). The scanner records them verbatim —
         // `#ff0000`, a `color.red` path, `rgb(...)`, etc. — so normalize
@@ -249,6 +271,11 @@ export class Indicator {
         this._ensurePropsScanned();
         return this._propProxy!;
     }
+}
+
+function sameSources(a: Record<string, string>, b: Record<string, string>): boolean {
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
 }
 
 /**

@@ -131,9 +131,9 @@ The transpiler operates in two stages depending on input type:
 │  ──────────────────    ─────────────────────────    ─────────────────   │
 │  //@version=5          │ Lexer (tokenize)       │                       │
 │  indicator("Test")     │ Parser (build AST)     │    ($) => {           │
-│  sma = ta.sma(close,20)│ CodeGen (emit JS)      │      const {close}... │
-│  plot(sma)             └─────────────────────────┘      ...             │
-│                                                       }                 │
+│  sma = ta.sma(close,20)│ Linker (imports)       │      const {close}... │
+│  plot(sma)             │ CodeGen (emit JS)      │       ...             │
+│                        └─────────────────────────┘    }                 │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -329,7 +329,7 @@ src/
 ├── transpiler/
 │   ├── index.ts              # transpile() entry point
 │   ├── settings.ts           # NAMESPACES_LIKE, FACTORY_METHODS, known namespaces
-│   ├── pineToJS/             # Pine Script → PineTS (lexer, parser, codegen, ast, tokens)
+│   ├── pineToJS/             # Pine Script → PineTS (lexer, parser, linker for imported libraries, codegen, ast, tokens)
 │   ├── analysis/             # ScopeManager.ts, AnalysisPass.ts
 │   ├── transformers/         # Main / Expression / Statement / Wrapper / Injection / Normalization
 │   ├── slicing/              # buildLtfSlices.ts (lower-timeframe request.security slicing)
@@ -341,6 +341,9 @@ src/
 ├── marketData/               # Data providers
 │   ├── IProvider.ts BaseProvider.ts Provider.class.ts aggregation.ts
 │   └── Binance/ Mock/ Alpaca/ FMP/
+├── imports/                  # Import resolvers: library sources for `import` (same pattern as marketData/)
+│   ├── IImportResolver.ts BaseImportResolver.ts ImportResolver.class.ts resolveImports.ts
+│   └── GitHub/ File/ Url/ Map/ Chain/ Function/
 ├── core/  errors/  utils/  types/   # shared runtime helpers, error types, utilities, type defs
 └── ...                        # (chart/, editor/, pinescript/, ui/, assets/ — peripheral)
 
@@ -351,6 +354,7 @@ tests/                         # Vitest collects ONLY tests/**/*.test.ts (see vi
 ├── transpiler/     # Transpiler transformation tests
 ├── compatibility/  # Generated regression suite (.pine.ts fixtures + .expect.json + namespace runners)
 ├── marketData/     # Provider / aggregation tests
+├── imports/        # Library linking and import resolver tests
 ├── Indicator/      # Indicator-wrapper tests
 ├── automated/      # Generated test suites
 └── _local/         # Local dev tests (gitignored, excluded from coverage)
