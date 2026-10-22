@@ -832,7 +832,13 @@ export class PineTS {
         this.ohlc4[index] = (candle.high + candle.low + candle.open + candle.close) / 4;
         this.hlcc4[index] = (candle.high + candle.low + candle.close + candle.close) / 4;
         this.openTime[index] = candle.openTime;
-        this.closeTime[index] = candle.closeTime;
+        this.closeTime[index] = this._closeTimeOf(candle);
+    }
+
+    /** A candle's close time, with the same safety net as the initial load for providers
+     *  that omit it (e.g. on a still-open weekly or monthly bar). */
+    private _closeTimeOf(candle: any): number {
+        return candle.closeTime != null ? candle.closeTime : candle.openTime + getTimeframeDurationMs(this.timeframe);
     }
 
     /**
@@ -851,7 +857,7 @@ export class PineTS {
         this.ohlc4.push((candle.high + candle.low + candle.open + candle.close) / 4);
         this.hlcc4.push((candle.high + candle.low + candle.close + candle.close) / 4);
         this.openTime.push(candle.openTime);
-        this.closeTime.push(candle.closeTime);
+        this.closeTime.push(this._closeTimeOf(candle));
     }
 
     /**
