@@ -4,7 +4,7 @@ import { Series } from '../Series';
 import { parseArgsForPineParams } from './utils';
 import { parseSessionSpec, isInSessionSpec } from './sessionSpec';
 import { PineRuntimeError } from '../errors/PineRuntimeError';
-import { canonicalTimeframe, parseTimeframe, timeframeBarStart } from '../timeframe';
+import { ParsedTimeframe, canonicalTimeframe, parseTimeframe, timeframeBarEnd, timeframeBarStart } from '../timeframe';
 
 // Current values of the arguments; named arguments arrive as a trailing plain object
 // whose values may be series too (`time(tf, session = sessionInput)`).
@@ -128,6 +128,53 @@ export function getISOWeekNumber(year: number, month: number, day: number): numb
     return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
+// ── Session-anchored higher-timeframe bars ──────────────────────────
+
+/** A declared trading window in minutes of the exchange day; start >= end wraps midnight. */
+export interface SessionSpan {
+    start: number;
+    end: number;
+}
+
+/** `HHMM-HHMM` → {@link SessionSpan} (`1800-1700` is the futures trading day); null for
+ *  anything else — `24x7`, `regular`, absent — meaning "no session vocabulary". */
+export function parseSessionSpan(s: unknown): SessionSpan | null {
+    if (typeof s !== 'string') return null;
+    const m = /^(\d{2})(\d{2})-(\d{2})(\d{2})$/.exec(s);
+    if (!m) return null;
+    return { start: Number(m[1]) * 60 + Number(m[2]), end: Number(m[3]) * 60 + Number(m[4]) };
+}
+
+export function inSessionSpan(minuteOfDay: number, s: SessionSpan): boolean {
+    return s.start < s.end ? minuteOfDay >= s.start && minuteOfDay < s.end : minuteOfDay >= s.start || minuteOfDay < s.end;
+}
+
+function wallMinuteOfDay(utcMs: number, timezone: string): number {
+    const parts = getDatePartsInTimezone(utcMs, timezone);
+    return parts.hour * 60 + parts.minute;
+}
+
+/**
+ * The bar of `tf` holding a chart bar that opens at `openMs`, on a session market (TV
+ * convention): intraday bars run every N minutes FROM THE SESSION OPEN and the last one is
+ * cut at the session end; a 1D bar is the whole session — for futures 18:00 ET → 17:00 ET
+ * the next day, not the UTC calendar day. null when the open lies outside the session or
+ * `tf` is neither minutes nor 1D (the caller falls back to the UTC calendar grid).
+ * Holidays and early closes are not modelled, and the offset is read at the open, so a
+ * DST jump inside one session shifts its end by the jump.
+ */
+export function sessionTimeframeBar(openMs: number, tf: ParsedTimeframe, session: SessionSpan, timezone: string): { start: number; end: number } | null {
+    const minute = wallMinuteOfDay(openMs, timezone);
+    const length = (session.end - session.start + 1440) % 1440 || 1440;
+    const sinceOpen = (minute - session.start + 1440) % 1440;
+    if (sinceOpen >= length) return null;
+    const sessionOpen = Math.floor(openMs / 60_000) * 60_000 - sinceOpen * 60_000;
+    if (tf.unit === 'D' && tf.multiplier === 1) return { start: sessionOpen, end: sessionOpen + length * 60_000 };
+    if (tf.unit !== '' || tf.multiplier >= 1440) return null;
+    const bucket = Math.floor(sinceOpen / tf.multiplier) * tf.multiplier;
+    return { start: sessionOpen + bucket * 60_000, end: sessionOpen + Math.min(bucket + tf.multiplier, length) * 60_000 };
+}
+
 // ── TimeHelper (moved from Core.ts) ─────────────────────────────────
 
 //prettier-ignore
@@ -190,22 +237,68 @@ export class TimeHelper {
 
         // If timeframe is empty or matches the chart timeframe, return the bar's own time
         let htfBarTime: number;
+        let sessionCheckTime: number;
         if (!timeframe || canonicalTimeframe(timeframe) === canonicalTimeframe(this.context.timeframe)) {
             htfBarTime = currentTime;
+            sessionCheckTime = currentTime;
         } else {
             const tf = parseTimeframe(timeframe);
             if (!tf) throw new PineRuntimeError(`Cannot parse resolution '${timeframe}'. - Invalid format`, 'time');
-            // Open time of the bar of `timeframe` that contains this bar
-            htfBarTime = timeframeBarStart(currentTime, tf);
+            // The bar of `timeframe` that contains this bar, located by this bar's OPEN —
+            // a chart bar's close sits ON the next higher-timeframe boundary. `time` is its
+            // open, `time_close` its close (it used to be the open too, so a countdown
+            // `time_close("60") - timenow` was always negative).
+            const openTime = Series.from(this.context.data.openTime).get(barsBack);
+            const bar = this._sessionBar(openTime, tf);
+            const start = bar ? bar.start : timeframeBarStart(openTime, tf);
+            htfBarTime = this.dataField === 'closeTime' ? (bar ? bar.end : timeframeBarEnd(start, tf)) : start;
+            sessionCheckTime = start;
         }
 
         // Session filtering
         if (parsed.session !== undefined && parsed.session !== '') {
             const timezone = parsed.timezone || this.context.pine?.syminfo?.timezone || 'UTC';
-            return this._isInSession(htfBarTime, parsed.session, timezone) ? htfBarTime : NaN;
+            return this._isInSession(sessionCheckTime, parsed.session, timezone) ? htfBarTime : NaN;
         }
 
         return htfBarTime;
+    }
+
+    /** undefined = not resolved yet; null = no session vocabulary (use the UTC grid). */
+    private _activeSession: SessionSpan | null | undefined;
+
+    /**
+     * The higher-timeframe bar holding `openTime` on the symbol's declared trading session,
+     * or null to fall back to the UTC calendar grid (see {@link sessionTimeframeBar}).
+     */
+    private _sessionBar(openTime: number, tf: ParsedTimeframe): { start: number; end: number } | null {
+        if (this._activeSession === undefined) this._activeSession = this._resolveActiveSession();
+        const timezone = this.context.pine?.syminfo?.timezone;
+        if (!this._activeSession || typeof timezone !== 'string') return null;
+        return sessionTimeframeBar(openTime, tf, this._activeSession, timezone);
+    }
+
+    /**
+     * Which declared window the chart trades: `session_extended` when any chart bar opens
+     * outside the regular window but inside the extended one (the ETH tape — a futures
+     * trading day is 18:00 → 17:00 ET), else the regular `session`. Same rule as the
+     * vela-pinets kline closer, so a bar's `time_close(tf)` agrees with the closeTime the
+     * host stamped on the higher-timeframe series.
+     */
+    private _resolveActiveSession(): SessionSpan | null {
+        const syminfo = this.context.pine?.syminfo;
+        const regular = parseSessionSpan(syminfo?.session);
+        const timezone = syminfo?.timezone;
+        if (!regular || typeof timezone !== 'string') return null;
+        const extended = parseSessionSpan(syminfo?.session_extended);
+        if (!extended) return regular;
+        const md = this.context.marketData;
+        const opens: number[] = Array.isArray(md) && md.length > 0 ? md.map((k: any) => k.openTime) : Series.from(this.context.data.openTime).toArray();
+        for (const t of opens) {
+            const m = wallMinuteOfDay(t, timezone);
+            if (m != null && !inSessionSpan(m, regular) && inSessionSpan(m, extended)) return extended;
+        }
+        return regular;
     }
 
     /**
