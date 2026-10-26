@@ -1361,6 +1361,19 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
             ) {
                 transformIdentifier(node.argument.object, scopeManager);
             }
+            // Field chain: `return t.lastHigh.c`. The root identifier must be lowered
+            // like the single-hop case above; left raw it is the series wrapper (a
+            // parameter) or an unscoped name (a local or global) and the first hop
+            // reads undefined.
+            else if (!node.argument.computed && node.argument.object.type === 'MemberExpression') {
+                let root: any = node.argument.object;
+                while (root.type === 'MemberExpression' && !root.computed) {
+                    root = root.object;
+                }
+                if (root.type === 'Identifier' && !scopeManager.isContextBound(root.name) && !scopeManager.isLoopVariable(root.name)) {
+                    transformIdentifier(root, scopeManager);
+                }
+            }
             // UDT-field subscript on a function parameter: `return b.field[N]`
             // where `b` is a UDT-typed parameter. The chain's leaf must be a
             // registered UDT instance for the rewrite to fire — see
