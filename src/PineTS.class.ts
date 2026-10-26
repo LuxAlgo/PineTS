@@ -494,7 +494,18 @@ export class PineTS {
         const slices = (transpiledFn as any)._ltfSlices;
         if (slices) (context as any)._ltfTruncatedBodies = slices;
 
-        await this._executeIterations(context, transpiledFn, this.data.length - periods, this.data.length);
+        // Same split as _runComplete: a request.security secondary run from a slice is
+        // refreshed by updateTail() on live ticks, which needs a restore point before the
+        // last bar.
+        const startIdx = this.data.length - periods;
+        const endIdx = this.data.length;
+        if (endIdx - startIdx > 1) {
+            await this._executeIterations(context, transpiledFn, startIdx, endIdx - 1);
+            (context as any)._varSnapshot = this._snapshotVarState(context);
+            await this._executeIterations(context, transpiledFn, endIdx - 1, endIdx);
+        } else {
+            await this._executeIterations(context, transpiledFn, startIdx, endIdx);
+        }
 
         return context;
     }
@@ -865,8 +876,8 @@ export class PineTS {
      *
      * Uses snapshot-restore for reliable var state rollback, matching the
      * approach used by _runPaginated. The pop-based _removeLastResult is
-     * only used as a fallback for contexts that have no snapshot (e.g. those
-     * produced by runPretranspiled, which skips the split-execute pattern).
+     * only used as a fallback for contexts that have no snapshot (a run
+     * that executed a single bar).
      *
      * After restoring state and re-executing, a fresh snapshot is taken before
      * the last bar so that subsequent updateTail() calls also have a valid
@@ -888,38 +899,14 @@ export class PineTS {
         const snapshot = (context as any)._varSnapshot;
         if (snapshot) {
             this._restoreVarState(context, snapshot);
+            // _restoreVarState handles var/let/const/params Series but does NOT
+            // cover result arrays or the market data series on context.data.
+            this._popLastBar(context);
         } else {
-            // No snapshot available (context from runPretranspiled or single-bar
-            // _runComplete) — fall back to pop-based rollback.
+            // No snapshot available (single-bar run) — fall back to pop-based
+            // rollback, which pops the result and market-data series itself.
             this._removeLastResult(context);
         }
-
-        // Pop result + market-data series.
-        // _restoreVarState handles var/let/const/params Series but does NOT
-        // cover result arrays or the market data series on context.data —
-        // those must be popped explicitly here.
-        if (Array.isArray(context.result)) {
-            context.result.pop();
-        } else if (typeof context.result === 'object' && context.result !== null) {
-            for (let key in context.result) {
-                if (Array.isArray(context.result[key])) {
-                    context.result[key].pop();
-                }
-            }
-        }
-
-        context.data.close.data.pop();
-        context.data.open.data.pop();
-        context.data.high.data.pop();
-        context.data.low.data.pop();
-        context.data.volume.data.pop();
-        context.data.hl2.data.pop();
-        context.data.hlc3.data.pop();
-        context.data.ohlc4.data.pop();
-        context.data.hlcc4.data.pop();
-        context.data.openTime.data.pop();
-        if (context.data.closeTime) context.data.closeTime.data.pop();
-        context.data.bar_index.data.pop();
 
         context.dataVersion = (context.dataVersion || 0) + 1;
         context.length = this.data.length;
@@ -946,10 +933,11 @@ export class PineTS {
     }
 
     /**
-     * Remove the last result from context (for updating an open candle)
+     * Pop the last bar's entry from the result and from the market-data
+     * series on context.data.
      * @private
      */
-    private _removeLastResult(context: Context): void {
+    private _popLastBar(context: Context): void {
         if (Array.isArray(context.result)) {
             context.result.pop();
         } else if (typeof context.result === 'object' && context.result !== null) {
@@ -960,7 +948,7 @@ export class PineTS {
             }
         }
 
-        // Also remove from context.data arrays (last element = most recent in forward array)
+        // Last element = most recent in forward array
         context.data.close.data.pop();
         context.data.open.data.pop();
         context.data.high.data.pop();
@@ -975,6 +963,14 @@ export class PineTS {
             context.data.closeTime.data.pop();
         }
         context.data.bar_index.data.pop();
+    }
+
+    /**
+     * Remove the last result from context (for updating an open candle)
+     * @private
+     */
+    private _removeLastResult(context: Context): void {
+        this._popLastBar(context);
 
         // Fix: Rollback context variables (let, var, const, params)
         const contextVarNames = ['const', 'var', 'let', 'params'];
