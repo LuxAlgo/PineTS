@@ -1149,10 +1149,19 @@ export function transformExpression(node: any, scopeManager: ScopeManager): void
 }
 
 export function transformIfStatement(node: any, scopeManager: ScopeManager, c: any): void {
+    // The frame of the first `if` of an `else if` chain: history series in any of the chain's
+    // conditions are recorded there (see `ScopeManager.setChainHoistFrame`).
+    const chainFrame = node._chainHoistFrame ?? scopeManager.getCurrentHoistingScope();
+
     // Transform the test condition
     if (node.test) {
         scopeManager.pushScope('if');
-        transformExpression(node.test, scopeManager);
+        const prev = node._chainHoistFrame ? scopeManager.setChainHoistFrame(node._chainHoistFrame) : undefined;
+        try {
+            transformExpression(node.test, scopeManager);
+        } finally {
+            if (node._chainHoistFrame) scopeManager.restoreChainHoistFrame(prev ?? null);
+        }
         scopeManager.popScope();
     }
 
@@ -1167,6 +1176,7 @@ export function transformIfStatement(node: any, scopeManager: ScopeManager, c: a
         if (node.alternate.type === 'IfStatement') {
             // An `else if` condition runs only when the earlier branches were not taken, so the
             // calls hoisted out of it must land inside the else branch, not before the whole `if`.
+            if (chainFrame) node.alternate._chainHoistFrame = chainFrame;
             const block = { type: 'BlockStatement', body: [node.alternate] };
             c(block, scopeManager);
             node.alternate = block.body.length === 1 && block.body[0].type === 'IfStatement' ? block.body[0] : block;
