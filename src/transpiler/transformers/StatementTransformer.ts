@@ -733,6 +733,11 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                     isArrayInit ? decl.init.property : undefined
                 );
             }
+        } else if (kind !== 'var') {
+            // `let x;` is what codegen emits for an `if` used as a value whose branches hold
+            // statements: the branches then assign it with `$.set`, which only writes into a
+            // Series. Start the bar's value as na in the variable's series instead of dropping it.
+            rightSide = ASTFactory.createInitCall(targetVarRef, ASTFactory.createIdentifier('NaN'));
         } else {
             rightSide = ASTFactory.createIdentifier('undefined');
         }
