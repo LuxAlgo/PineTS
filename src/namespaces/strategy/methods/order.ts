@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 LuxAlgo
 
-import { calculateOrderQty, parseDirection, sizingPrice, roundOrderLevel, brokerPrice, placeOrder } from '../utils';
+import { calculateOrderQty, parseDirection, sizingPrice, roundOrderLevel, brokerPrice, placeOrder, whenBlocks } from '../utils';
 import { Order } from '../types';
 import { Series } from '../../../Series';
 import { parseArgsForPineParams } from '../../utils';
@@ -53,6 +53,7 @@ export function order(context: any) {
         }
 
         const parsed = parseArgsForPineParams<any>(args, ORDER_SIGNATURES, ORDER_ARGS_TYPES);
+        if (whenBlocks(parsed)) return;
 
         // The transpiler may have already unwrapped Series via strategy.param,
         // but defensive extraction handles wrappers from any caller (e.g. when
