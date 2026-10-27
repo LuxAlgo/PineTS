@@ -104,6 +104,12 @@ export class Str {
         const input = this.bounded(value, 'str.tonumber');
         this.context.executionBudget?.chargeWork(input.length, 'str.tonumber');
         const s = input.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
+        // A run of digits and dots is read up to its second dot: "1.2.3" is 1.2 and "1..2" is 1.
+        if (/^[+-]?[\d.]+$/.test(s)) {
+            const second = s.indexOf('.', s.indexOf('.') + 1);
+            const head = second < 0 ? s : s.slice(0, second);
+            return DECIMAL_NUMBER.test(head) ? Number(head) : NaN;
+        }
         return DECIMAL_NUMBER.test(s) ? Number(s) : NaN;
     }
     lower(value: string) {
@@ -157,7 +163,14 @@ export class Str {
         const repl = this.bounded(replacement, 'str.replace');
         const occ = Math.floor(Number(occurrence)) || 0;
 
-        if (tgt === '') return str;
+        // The empty target occurs before every character: ("abc", "", "X", 0) is "Xabc".
+        if (tgt === '') {
+            if (occ < 0 || occ > str.length) return str;
+            const size = str.length + repl.length;
+            assertStringLength(size, 'str.replace');
+            this.charge(size, size * 2, 'str.replace');
+            return str.slice(0, occ) + repl + str.slice(occ);
+        }
 
         let pos = 0;
         let found = 0;
@@ -174,7 +187,8 @@ export class Str {
             }
 
             found++;
-            pos = idx + tgt.length;
+            // Occurrences may overlap: the second "aa" of "aaaa" starts at index 1.
+            pos = idx + 1;
         }
     }
 
@@ -220,7 +234,8 @@ export class Str {
         }
         assertElementCount(count, 'str.split');
         this.charge(src.length + count, src.length * 2 + count * 32, 'str.split');
-        const parts = src.split(sep, MAX_COLLECTION_ELEMENTS);
+        // An empty source always gives one empty element, even with an empty separator.
+        const parts = src === '' ? [''] : src.split(sep, MAX_COLLECTION_ELEMENTS);
         return new PineArrayObject(parts, PineArrayType.string, this.context);
     }
     substring(source: string, begin_pos: number, end_pos: number) {
