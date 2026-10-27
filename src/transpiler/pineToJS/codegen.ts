@@ -1041,6 +1041,15 @@ export class CodeGenerator {
             this.write('\n');
             return;
         }
+        // A `break`/`continue` in an arm targets the enclosing loop, which neither the IIFE nor a JS
+        // `switch` (which would catch the `break`) preserves. Pine arms never fall through, so an
+        // if/else chain on the once-evaluated discriminant is equivalent.
+        if (node.expression.type === 'SwitchExpression' && node.expression.cases.some((c) => this.armHasLoopJump(c))) {
+            this.write(this.indentStr.repeat(this.indent));
+            this.generateSwitchStatementWithLoopJumps(node.expression);
+            this.write('\n');
+            return;
+        }
         this.write(this.indentStr.repeat(this.indent));
         this.generateExpression(node.expression);
         this.write(';\n');
@@ -2462,6 +2471,73 @@ export class CodeGenerator {
         });
         this.write(this.indentStr.repeat(this.indent));
         this.write(stringArms ? 'return "";\n' : 'return na;\n');
+    }
+
+    private isLoopJump(stmt: any): boolean {
+        return stmt?.type === 'ExpressionStatement' && stmt.expression?.type === 'Identifier' &&
+            (stmt.expression.name === 'break' || stmt.expression.name === 'continue');
+    }
+
+    /** True when an arm can reach a `break`/`continue` of the loop around the switch (not of a loop inside the arm). */
+    private armHasLoopJump(arm: any): boolean {
+        const visit = (stmt: any): boolean => {
+            if (!stmt || typeof stmt !== 'object') return false;
+            if (this.isLoopJump(stmt)) return true;
+            switch (stmt.type) {
+                case 'BlockStatement':
+                    return stmt.body.some(visit);
+                case 'IfStatement':
+                    return visit(stmt.consequent) || visit(stmt.alternate);
+                case 'ExpressionStatement':
+                    return stmt.expression?.type === 'SwitchExpression' && stmt.expression.cases.some((c: any) => this.armHasLoopJump(c));
+                default:
+                    return false;
+            }
+        };
+        return (arm.statements ?? []).some(visit);
+    }
+
+    private switchTempCounter = 0;
+
+    // Switch statement whose arms break/continue the enclosing loop: an if/else chain on the discriminant.
+    generateSwitchStatementWithLoopJumps(node) {
+        const temp = `__switch${this.switchTempCounter++}`;
+        this.write('{\n');
+        this.indent++;
+        this.write(this.indentStr.repeat(this.indent));
+        this.write(`const ${temp} = `);
+        this.generateExpression(node.discriminant);
+        this.write(';\n');
+        this.write(this.indentStr.repeat(this.indent));
+        for (let i = 0; i < node.cases.length; i++) {
+            const c = node.cases[i];
+            if (c.test) {
+                this.write(i === 0 ? 'if (' : ' else if (');
+                this.write(`${temp} == `);
+                this.generateExpression(c.test);
+                this.write(') {\n');
+            } else {
+                this.write(i === 0 ? '{\n' : ' else {\n');
+            }
+            this.indent++;
+            if (c.statements && c.statements.length > 0) {
+                for (const stmt of c.statements) {
+                    this.write(this.indentStr.repeat(this.indent));
+                    this.generateStatement(stmt);
+                }
+            } else {
+                this.write(this.indentStr.repeat(this.indent));
+                this.generateExpression(c.consequent);
+                this.write(';\n');
+            }
+            this.indent--;
+            this.write(this.indentStr.repeat(this.indent));
+            this.write('}');
+        }
+        this.write('\n');
+        this.indent--;
+        this.write(this.indentStr.repeat(this.indent));
+        this.write('}');
     }
 
     // Generate switch without discriminant as if/else if/else chain (for statement context)
