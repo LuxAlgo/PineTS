@@ -218,9 +218,9 @@ export function tsi(context: any) {
             return NaN;
         }
 
-        // Avoid division by zero
+        // No movement at all is 0 / 0: na on TradingView.
         if (ema2AbsValue === 0) {
-            return context.precision(0);
+            return NaN;
         }
 
         // Calculate TSI
