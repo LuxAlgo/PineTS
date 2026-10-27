@@ -487,6 +487,8 @@ export class Core {
     bool(series: any) {
         const val = Series.from(series).get(0);
         if (typeof val === 'boolean') return val;
+        // A v5 bool can be na, so bool(na) stays na there; v6 bools are never na.
+        if ((val === null || val === undefined || (typeof val === 'number' && isNaN(val))) && this.context?.pineVersion < 6) return NaN;
         return val !== null && val !== undefined && !isNaN(val) && val !== 0;
     }
     int(series: any) {
