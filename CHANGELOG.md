@@ -1,5 +1,36 @@
 # Change Log
 
+## [0.13.1] - 2026-10-27 - Transpiler, Live Update & Performance Fixes
+
+This release fixes a set of transpiler parity bugs, live updates of the forming bar, daily / weekly / monthly periods on session markets and the v5 `when` argument of the order commands, and removes two per-bar costs from the generated code.
+
+### Changed
+
+- **Generated code no longer grows with every user function** (#468). All `param` calls shared one `undefined` index node, which got wrapped in one more `$.get(…, 0)` for each function returning a ternary or another complex expression, so the generated code grew quadratically and, because the node was shared across calls, every later transpile in the same process produced bigger, slower code. A 4,400-line indicator goes from 3.86 MB of generated code to 683 KB. Output is unchanged. Test: `tests/transpiler/undefined-param-index.test.ts`.
+- **`input.*` options are parsed once per call site** (#469) instead of on every bar, for the inputs whose arguments are const (`bool`, `color`, `enum`, `float`, `int`, `price`, `session`, `string`, `symbol`, `text_area`, `time`, `timeframe`). `input.source` and `input()` still parse on every bar, and overrides still apply on every bar. Test: `tests/namespaces/input-options-per-call-site.test.ts`.
+
+### Fixed
+
+#### Language and transpiler
+
+- **A user function returning a field chain** (`step(ZZ t) => t.lastHigh.c`) threw a `TypeError`, or `Undeclared identifier` when the chain started at a local or a global (#479). The chain's root is now read like in every other position. Test: `tests/transpiler/return-member-chain.test.ts`.
+- **A history series in an `else if` condition** (`else if low < ta.lowest(low, 10)[1]`) is recorded on every bar the `if` statement runs, as on TradingView, instead of only on the bars that reach the `else if`, where `[1]` read a stale value (#480). A history series passed as a function argument (`math.max(ta.cum(1)[1], 0)`) is recorded eagerly too. Plain calls in an `else if` condition stay lazy. Test: `tests/transpiler/else-if-history.test.ts`.
+- **A `(` that opens a new line after a `switch` or `if` used as a value** starts a new statement instead of being parsed as a call on the block (#465), which failed with `Undeclared identifier`. Test: `tests/transpiler/paren-on-new-line.test.ts`.
+- **An `if` used as a value whose branch declares a local** kept no value: the plot was missing, and inside a function the result was na (#466). Test: `tests/transpiler/block-expression-with-local-declaration.test.ts`.
+
+#### Time
+
+- **`timeframe.change("D" / "W" / "M")` and `time("D" / "W" / "M")` follow the symbol's trading calendar** (#474). On a market whose trading day opens the evening before (CME futures, session `1700-1600` in `America/Chicago`), periods changed at 00:00 UTC instead of at the session open. Test: `tests/namespaces/trading-calendar-periods.test.ts`.
+
+#### Live updates
+
+- **A forming bar without a close time** gets `openTime` + the timeframe's duration on live ticks, as on the initial load (#471). `time_close` was na after the first tick, and `request.security` could not align a still-open higher-timeframe bar. Test: `tests/core/live-candle-closetime.test.ts`.
+- **`updateTail()` on a `runPretranspiled()` context** (how `request.security` runs its secondaries) removed the last bar twice on each tick, so the secondary lost one bar of history per tick (#472). Test: `tests/core/updateTail-pretranspiled.test.ts`.
+
+#### Strategy
+
+- **The v5 `when` argument of `strategy.entry`, `order`, `exit`, `close`, `close_all`, `cancel` and `cancel_all`** was ignored, so the command ran on every bar (#475). A false or na `when` now places nothing and keeps any order already placed under the same id. Test: `tests/namespaces/strategy/when-argument.test.ts`.
+
 ## [0.13.0] - 2026-10-22 - Libraries & Named Arguments for Every Built-in
 
 This release adds Pine Script libraries (`import` / `export`) with pluggable import resolvers, and makes named arguments work for every built-in function and method.
