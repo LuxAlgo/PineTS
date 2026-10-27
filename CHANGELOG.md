@@ -27,6 +27,13 @@ This update closes documented host-access and resource-exhaustion paths in untru
 
 The Node child is not a complete OS sandbox. Deployments accepting hostile scripts still need a restricted account or container, denied egress, and host-level CPU, memory and process limits.
 
+### TradingView parity
+
+- **Fractional pivot strengths.** `ta.pivothigh` / `ta.pivotlow` truncate `series int/float` strengths, as TradingView does (`(2.9, 1.9)` behaves as `(2, 1)`), instead of rejecting them.
+- **Named colors follow the script version.** `color.red`, `color.teal` and `color.yellow` are `#FF5252`, `#00897B` and `#FFEB3B` in scripts before v6, and `#F23645`, `#089981` and `#FDD835` in v6, including color input defaults.
+- **Control flow.** `break` / `continue` in a `switch` arm act on the enclosing loop; a loop's value comes from its last completed iteration and from a trailing nested loop; the counter of a loop used as a value indexes history correctly; a mutating `var` initializer such as `array.concat` runs on the first bar only; parentheses around a same-precedence right operand are kept (`a == (b == c)`, `close * (1 / 2)`); `and` / `or` always give a bool, an na operand counting as false; an enum member can be a parameter default.
+- **Built-ins.** `bool(na)` stays na in v5; `fixnan` carries the last value seen at its own call site; `ta.change` on a bool returns whether it changed; `ta.cross` is a change of `a > b`; `ta.cmo` / `ta.tsi` are na for 0/0; `ta.obv` / `ta.pvt` are na on the first bar, the bare `ta.tr` is `ta.tr(false)`, and `ta.supertrend` follows TradingView's warm-up; `str.replace` counts overlapping occurrences and handles an empty target, `str.split("", "")` has one element, `str.tonumber` reads digits and dots up to the second dot; `matrix.submatrix` bounds default to the whole matrix and `matrix.concat` returns the first matrix; a built-in variable such as `ta.obv` works as a `request.security` expression (#257).
+
 ## [0.13.1] - 2026-10-27 - Transpiler, Live Update & Performance Fixes
 
 This release fixes a set of transpiler parity bugs, live updates of the forming bar, daily / weekly / monthly periods on session markets and the v5 `when` argument of the order commands, and removes two per-bar costs from the generated code.
