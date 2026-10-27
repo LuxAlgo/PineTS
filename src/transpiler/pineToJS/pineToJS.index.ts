@@ -43,7 +43,7 @@ export function pineToJS(sourceCode: string, options: any = {}) {
         const tokens = lexer.tokenize();
 
         // Step 2: Parse to AST
-        const parser = new Parser(tokens);
+        const parser = new Parser(tokens, { version });
         const ast = parser.parse();
 
         // Step 2a: Link imported libraries

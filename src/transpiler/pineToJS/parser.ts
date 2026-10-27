@@ -71,9 +71,12 @@ export class Parser {
     private tupleLiteralStart: WeakMap<object, Token> = new WeakMap();
     // Numbers each range loop's direction variable.
     private forLoopCount = 0;
-    constructor(tokens: Token[]) {
+    // Pine version of the source (`//@version=N`); null when unknown.
+    private version: number | null;
+    constructor(tokens: Token[], options: { version?: number | null } = {}) {
         this.tokens = tokens;
         this.pos = 0;
+        this.version = options.version ?? null;
     }
 
     // Utility methods
@@ -1723,19 +1726,32 @@ export class Parser {
             // Build for loop with runtime direction detection.
             // Pine Script: `for i = start to end [by step]`
             // Direction is fixed when the loop starts (start <= end → increment, else
-            // decrement); `end` is re-read each iteration. Re-reading `start` for the
-            // direction would flip `for i = array.size(a) - 1 to 0` once the body
-            // removes an element.
-            // Generated: for (let i = start, up = i <= end; up ? i <= end : i >= end; up ? i++ : i--)
-            const directionCheck = new Identifier(`__for_up${this.forLoopCount++}`);
-            const init = new VariableDeclaration(
-                [new VariableDeclarator(loopVar, start), new VariableDeclarator(directionCheck, new BinaryExpression('<=', loopVar, end))],
-                VariableDeclarationKind.LET
-            );
+            // decrement). Re-reading `start` for the direction would flip
+            // `for i = array.size(a) - 1 to 0` once the body removes an element.
+            // TradingView reads `step` once at loop entry. `end` is read once too up to
+            // v5; from v6 on it is re-read before every iteration, so assigning the bound
+            // variable in the body changes how many iterations run.
+            // Generated (v5): for (let i = start, end_ = end, up = i <= end_, step_ = step;
+            //                      up ? i <= end_ : i >= end_; up ? i += step_ : i -= step_)
+            const loopId = this.forLoopCount++;
+            const directionCheck = new Identifier(`__for_up${loopId}`);
+            const declarators = [new VariableDeclarator(loopVar, start)];
+            let bound = end;
+            if (this.version !== null && this.version < 6) {
+                bound = new Identifier(`__for_end${loopId}`);
+                declarators.push(new VariableDeclarator(bound, end));
+            }
+            declarators.push(new VariableDeclarator(directionCheck, new BinaryExpression('<=', loopVar, bound)));
+            let stepValue = step;
+            if (step) {
+                stepValue = new Identifier(`__for_step${loopId}`);
+                declarators.push(new VariableDeclarator(stepValue, step));
+            }
+            const init = new VariableDeclaration(declarators, VariableDeclarationKind.LET);
             const test = new ConditionalExpression(
                 directionCheck,
-                new BinaryExpression('<=', loopVar, end),
-                new BinaryExpression('>=', loopVar, end)
+                new BinaryExpression('<=', loopVar, bound),
+                new BinaryExpression('>=', loopVar, bound)
             );
 
             let update;
@@ -1743,8 +1759,8 @@ export class Parser {
                 // with step: start <= end ? i += step : i -= step
                 update = new ConditionalExpression(
                     directionCheck,
-                    new AssignmentExpression('+=', loopVar, step),
-                    new AssignmentExpression('-=', loopVar, step)
+                    new AssignmentExpression('+=', loopVar, stepValue),
+                    new AssignmentExpression('-=', loopVar, stepValue)
                 );
             } else {
                 // no step: start <= end ? i++ : i--

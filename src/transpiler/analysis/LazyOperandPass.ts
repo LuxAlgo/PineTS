@@ -32,9 +32,9 @@
  *
  * Two refinements, both verified against TradingView output:
  *   - `request.*` calls are never lazy (see `isRequestCall` below).
- *   - For Pine v5 sources, an `and` / `or` sitting inside a lazy operand is
- *     tagged `_strictLogical` so that both of its operands still run when the
- *     branch is taken (v5 `and`/`or` are strict in every position).
+ *   - For Pine v5 sources, every `and` / `or` is tagged `_strictLogical` so
+ *     that both of its operands run (v5 `and`/`or` are strict in every
+ *     position), including user function calls that are never hoisted.
  */
 export interface LazyOperandOptions {
     /** Treat the right operand of `&&` / `||` / `??` as lazy. */
@@ -98,14 +98,14 @@ function visit(node: any, lazy: boolean, opts: LazyOperandOptions): void {
             visit(node.right, true, opts);
             return;
         }
-        // Pine v5: `and` / `or` evaluate BOTH operands. In an eager position the
-        // right operand's calls are hoisted ahead of the statement, which is
-        // strict by construction. Inside a lazy operand hoisting is suppressed
-        // and native `&&` / `||` would short-circuit, so the expression is
-        // rewritten to `$.pine.math.__and/__or(left, right)` afterwards
-        // (transformStrictLogicalOperators): both operands run, but only when
-        // the enclosing branch does.
-        if (lazy && node.operator !== '??') node._strictLogical = true;
+        // Pine v5: `and` / `or` evaluate BOTH operands. Hoisting moves the right
+        // operand's namespace calls ahead of the statement, but not user function
+        // calls (`cond and f()` must still run `f`'s `ta.*` state on every bar), and
+        // inside a lazy operand hoisting is suppressed altogether. So the
+        // expression is rewritten to `$.pine.math.__and/__or(left, right)`
+        // afterwards (transformStrictLogicalOperators): both operands run, but
+        // only when the enclosing branch does.
+        if (node.operator !== '??') node._strictLogical = true;
     }
 
     for (const key of Object.keys(node)) {

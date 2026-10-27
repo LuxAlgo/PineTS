@@ -51,9 +51,10 @@ f(bool a = false, bool b = false) =>
 f(false, false)
 `;
         const js = transpile(code).toString();
-        expect(js).toContain('!$.get(a, 0) && !$.get(b, 0)');
+        // v5 `and` evaluates both operands: $.pine.math.__and(left, right)
+        expect(js).toContain('__and(!$.get(a, 0), !$.get(b, 0))');
         // Defensive: must NOT emit the bare-identifier form.
-        expect(js).not.toMatch(/\$\.init\([^,]+,\s*!a\s*&&\s*!b\)/);
+        expect(js).not.toMatch(/__and\(\s*!a\s*,\s*!b\s*\)/);
     });
 
     it('unwraps both operands of `not a and not b` inside an if-test in a fn body', () => {
@@ -68,8 +69,8 @@ f(bool a = false, bool b = false) =>
 f(false, false)
 `;
         const js = transpile(code).toString();
-        expect(js).toContain('if (!$.get(a, 0) && !$.get(b, 0))');
-        expect(js).not.toMatch(/if\s*\(\s*!a\s*&&\s*!b\s*\)/);
+        expect(js).toContain('if ($.pine.math.__and(!$.get(a, 0), !$.get(b, 0)))');
+        expect(js).not.toMatch(/__and\(\s*!a\s*,\s*!b\s*\)/);
     });
 
     it('unwraps both operands of `not a or not b` (or-form)', () => {
@@ -82,7 +83,7 @@ f(bool a = false, bool b = false) =>
 f(false, true)
 `;
         const js = transpile(code).toString();
-        expect(js).toContain('!$.get(a, 0) || !$.get(b, 0)');
+        expect(js).toContain('__or(!$.get(a, 0), !$.get(b, 0))');
     });
 
     // ─────────────────────────────────────────────────────────────────────

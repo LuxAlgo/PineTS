@@ -816,7 +816,7 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                 },
                 SwitchStatement(node: any, state: ScopeManager, c: any) {
                     node.discriminant.parent = node;
-                    c(node.discriminant, state);
+                    transformSwitchDiscriminant(node, state);
                     node.cases.forEach((caseNode: any) => {
                         caseNode.parent = node;
                         c(caseNode, state);
@@ -1160,6 +1160,20 @@ export function transformExpression(node: any, scopeManager: ScopeManager): void
             }
         },
     });
+}
+
+/**
+ * Lowers a `switch` statement's discriminant like an `if` test: a built-in series in it
+ * (`switch bar_index % 5`) is read at the current bar; walked as a plain expression it stayed a
+ * Series object and no case ever matched.
+ */
+export function transformSwitchDiscriminant(node: any, scopeManager: ScopeManager): void {
+    scopeManager.pushScope('if');
+    try {
+        transformExpression(node.discriminant, scopeManager);
+    } finally {
+        scopeManager.popScope();
+    }
 }
 
 export function transformIfStatement(node: any, scopeManager: ScopeManager, c: any): void {
@@ -1571,7 +1585,7 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                     },
                     SwitchStatement(node: any, state: ScopeManager, c: any) {
                         node.discriminant.parent = node;
-                        c(node.discriminant, state);
+                        transformSwitchDiscriminant(node, state);
                         node.cases.forEach((caseNode: any) => {
                             caseNode.parent = node;
                             c(caseNode, state);
