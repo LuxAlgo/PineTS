@@ -20,8 +20,11 @@ const LENGTH_ARGS: Record<string, readonly number[]> = {
 const ALLOW_ZERO = new Set(['change', 'mom', 'roc', 'pivothigh', 'pivotlow']);
 const OPTIONAL_SOURCE = new Set(['highest', 'highestbars', 'lowest', 'lowestbars']);
 
-function checkLength(value: unknown, method: string, allowZero: boolean): void {
-    const length = Series.from(value).get(0);
+/** Pivot strengths are `series int/float`; TradingView truncates fractional ones toward zero. */
+export const pivotStrength = (value: unknown): number => Math.trunc(Series.from(value).get(0));
+
+function checkLength(value: unknown, method: string, allowZero: boolean, truncate = false): void {
+    const length = truncate ? pivotStrength(value) : Series.from(value).get(0);
     if (allowZero && length === 0) return;
     assertTaLength(length, method);
 }
@@ -35,9 +38,9 @@ export function wrapTaLengthPolicy<T extends (...args: any[]) => any>(name: stri
         if (name === 'pivothigh' || name === 'pivotlow') {
             // The source argument is optional; the transpiler then places its call ID in slot 2.
             const indices = args.length === 2 || typeof args[2] === 'string' ? [0, 1] : [1, 2];
-            for (const i of indices) checkLength(args[i], label, true);
-            const left = Series.from(args[indices[0]]).get(0);
-            const right = Series.from(args[indices[1]]).get(0);
+            for (const i of indices) checkLength(args[i], label, true, true);
+            const left = pivotStrength(args[indices[0]]);
+            const right = pivotStrength(args[indices[1]]);
             assertTaLength(left + right + 1, label);
         } else if (OPTIONAL_SOURCE.has(name) && (args.length === 1 || typeof args[1] === 'string')) {
             checkLength(args[0], label, false);
