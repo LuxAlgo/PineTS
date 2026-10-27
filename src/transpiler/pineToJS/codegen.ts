@@ -2634,7 +2634,13 @@ export class CodeGenerator {
         if (body && body.body && body.body.length > 0) {
             const lastIdx = body.body.length - 1;
             const lastStmt = body.body[lastIdx];
-            if (lastStmt.type === 'ExpressionStatement') {
+            // A trailing nested loop gives its own value: for i … / for j … / i * 10 + j.
+            const value = lastStmt.type === 'ExpressionStatement'
+                ? lastStmt.expression
+                : lastStmt.type === 'ForStatement' || lastStmt.type === 'WhileStatement'
+                    ? lastStmt
+                    : null;
+            if (value && !this.isLoopJump(lastStmt)) {
                 // Replace last expression with __result = expression
                 body.body[lastIdx] = {
                     type: 'ExpressionStatement',
@@ -2642,7 +2648,7 @@ export class CodeGenerator {
                         type: 'AssignmentExpression',
                         operator: '=',
                         left: { type: 'Identifier', name: '__result' },
-                        right: lastStmt.expression,
+                        right: value,
                     },
                     _line: lastStmt._line,
                 };
