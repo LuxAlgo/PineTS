@@ -1630,6 +1630,18 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
         // Inject the _callId declaration at the start of the body
         node.body.body.unshift(callIdDecl);
 
+        // A default naming a script-declared value (an enum member such as `Sig.dn`) is resolved in
+        // the enclosing scope, like the same expression at a call site. Built-in defaults such as
+        // `close` stay raw so the parameter keeps the series' history.
+        for (const param of node.params) {
+            const value = param.type === 'AssignmentPattern' ? param.right : null;
+            let root = value;
+            while (root?.type === 'MemberExpression') root = root.object;
+            if (value?.type === 'MemberExpression' && root?.type === 'Identifier' && !scopeManager.isContextBound(root.name)) {
+                c(value, scopeManager);
+            }
+        }
+
         scopeManager.pushScope('fn');
 
         // Register function parameters as local series variables
