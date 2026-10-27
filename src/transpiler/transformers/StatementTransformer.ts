@@ -773,6 +773,11 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                     isArrayInit ? decl.init.property : undefined
                 );
             }
+        } else if (kind !== 'var') {
+            // `let x;` is what codegen emits for an `if` used as a value whose branches hold
+            // statements: the branches then assign it with `$.set`, which only writes into a
+            // Series. Start the bar's value as na in the variable's series instead of dropping it.
+            rightSide = ASTFactory.createInitCall(targetVarRef, ASTFactory.createIdentifier('NaN'));
         } else {
             rightSide = ASTFactory.createIdentifier('undefined');
         }
@@ -1189,10 +1194,19 @@ export function transformExpression(node: any, scopeManager: ScopeManager): void
 }
 
 export function transformIfStatement(node: any, scopeManager: ScopeManager, c: any): void {
+    // The frame of the first `if` of an `else if` chain: history series in any of the chain's
+    // conditions are recorded there (see `ScopeManager.setChainHoistFrame`).
+    const chainFrame = node._chainHoistFrame ?? scopeManager.getCurrentHoistingScope();
+
     // Transform the test condition
     if (node.test) {
         scopeManager.pushScope('if');
-        transformExpression(node.test, scopeManager);
+        const prev = node._chainHoistFrame ? scopeManager.setChainHoistFrame(node._chainHoistFrame) : undefined;
+        try {
+            transformExpression(node.test, scopeManager);
+        } finally {
+            if (node._chainHoistFrame) scopeManager.restoreChainHoistFrame(prev ?? null);
+        }
         scopeManager.popScope();
     }
 
@@ -1207,6 +1221,7 @@ export function transformIfStatement(node: any, scopeManager: ScopeManager, c: a
         if (node.alternate.type === 'IfStatement') {
             // An `else if` condition runs only when the earlier branches were not taken, so the
             // calls hoisted out of it must land inside the else branch, not before the whole `if`.
+            if (chainFrame) node.alternate._chainHoistFrame = chainFrame;
             const block = { type: 'BlockStatement', body: [node.alternate] };
             c(block, scopeManager);
             node.alternate = block.body.length === 1 && block.body[0].type === 'IfStatement' ? block.body[0] : block;
@@ -1400,6 +1415,19 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                 !(node.argument.computed && scopeManager.isLocalSeriesVar(node.argument.object.name))
             ) {
                 transformIdentifier(node.argument.object, scopeManager);
+            }
+            // Field chain: `return t.lastHigh.c`. The root identifier must be lowered
+            // like the single-hop case above; left raw it is the series wrapper (a
+            // parameter) or an unscoped name (a local or global) and the first hop
+            // reads undefined.
+            else if (!node.argument.computed && node.argument.object.type === 'MemberExpression') {
+                let root: any = node.argument.object;
+                while (root.type === 'MemberExpression' && !root.computed) {
+                    root = root.object;
+                }
+                if (root.type === 'Identifier' && !scopeManager.isContextBound(root.name) && !scopeManager.isLoopVariable(root.name)) {
+                    transformIdentifier(root, scopeManager);
+                }
             }
             // UDT-field subscript on a function parameter: `return b.field[N]`
             // where `b` is a UDT-typed parameter. The chain's leaf must be a

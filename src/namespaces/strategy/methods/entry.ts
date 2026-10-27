@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 LuxAlgo
 
-import { calculateOrderQty, parseDirection, wouldExceedPyramiding, roundOrderLevel, sizingPrice, isMarketCloseOrder, partialCloseQty, brokerPrice, placeOrder } from '../utils';
+import { calculateOrderQty, parseDirection, wouldExceedPyramiding, roundOrderLevel, sizingPrice, isMarketCloseOrder, partialCloseQty, brokerPrice, placeOrder, whenBlocks } from '../utils';
 import { Order } from '../types';
 import { Series } from '../../../Series';
 import { parseArgsForPineParams } from '../../utils';
@@ -41,6 +41,7 @@ export function entry(context: any) {
             throw new Error('strategy.entry() called before strategy() declaration');
         }
         const parsed = parseArgsForPineParams<any>(args, ENTRY_SIGNATURES, ENTRY_ARGS_TYPES);
+        if (whenBlocks(parsed)) return;
 
         const extractValue = (val: any) => {
             if (val === undefined || val === null) return val;

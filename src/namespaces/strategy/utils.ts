@@ -308,6 +308,16 @@ export function isNaArg(v: any): boolean {
 }
 
 /**
+ * Pine v5's `when` argument of the order commands (deprecated in v5, removed in v6): on a bar where
+ * it is false or na the call does nothing, and an order already placed under the same id stays.
+ */
+export function whenBlocks(parsed: { when?: any }): boolean {
+    if (parsed.when === undefined) return false;
+    const v = argValue(parsed.when);
+    return !v || isNaArg(v);
+}
+
+/**
  * The smallest tradable quantity: `syminfo.mincontract` (0.00001 for BINANCE:BTCUSDT), or
  * 0.000001 when the provider does not report one.
  */

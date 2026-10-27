@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { parseInputOptions, resolveInput } from '../utils';
+import { parseInputOptionsCached, resolveInput } from '../utils';
 
 export function bool(context: any) {
     return (...args: any[]) => {
-        const options = parseInputOptions(args);
+        const options = parseInputOptionsCached(context, args);
         return resolveInput(context, options, 'bool');
     };
 }
