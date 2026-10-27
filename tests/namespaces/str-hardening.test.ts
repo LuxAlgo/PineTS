@@ -40,10 +40,14 @@ describe('bounded str operations', () => {
         expect(() => bounded.replace_all('aa', 'a', 'bbbb')).toThrow(PineRuntimeError);
     });
 
-    it('rejects backtracking-prone regex features before invoking RegExp', () => {
-        for (const pattern of ['(a+)+$', 'a+a+$', 'a*a*a*$', '(a|aa)+$', '(?=a)a', '(a)\\1']) {
-            expect(() => str.match('aaaa!', pattern), pattern).toThrow(PineRuntimeError);
+    it('runs backtracking-prone patterns that TradingView accepts, within a step bound', () => {
+        // TradingView compiles all of these; none matches "aaaa!" except the last two.
+        for (const pattern of ['(a+)+$', 'a+a+$', 'a*a*a*$', '(a|aa)+$']) {
+            expect(str.match('aaaa!', pattern), pattern).toBe('');
         }
+        expect(str.match('aaaa!', '(?=a)a')).toBe('a');
+        expect(str.match('aaaa!', '(a)\\1')).toBe('aa');
+        expect(() => str.match('a'.repeat(40) + '!', '(a|aa)+$')).toThrow(PineRuntimeError);
         expect(str.match('hello 123', '\\d+')).toBe('123');
         expect(str.match('abc{close[9]}def', '\\{\\w+\\[\\s*\\d+\\s*\\]\\}')).toBe('{close[9]}');
     });

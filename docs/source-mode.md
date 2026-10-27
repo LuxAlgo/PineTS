@@ -21,7 +21,7 @@ The lower-level `transpile()` function follows the same default: markerless Java
 
 Compilation now enforces structural ceilings before and after transformation: 262,144 input code units (at most 524,288 UTF-8 bytes), 10,000 lines, 16,384 code units per line, 50,000 Pine tokens, 256 nesting levels, 100,000 AST nodes, and 2,000,000 generated code units. The 10-second phase check is cooperative; it cannot interrupt a parser already blocked inside one synchronous call.
 
-`str.match` uses a deliberately restricted regex dialect because JavaScript's regex engine is synchronous. Patterns are limited to 256 code units and subjects to 4,096; groups, alternatives, lookarounds, backreferences, brace ranges, optional quantifiers, and overlapping quantified atoms are rejected. Accepted character escapes include `\d`, `\w`, `\s`, and escaped punctuation. Callers needing richer regular expressions must perform that work outside the untrusted Pine runtime.
+`str.match` does not use JavaScript's `RegExp`, which is synchronous and cannot be interrupted. Patterns run on PineTS's own backtracking matcher, which follows TradingView's Java regex flavor (inline flags, lookarounds, atomic groups and possessive quantifiers, backreferences, class intersections, `\p{…}`, `\Q…\E`). Every matching step is charged to the run's work budget, so a pattern that backtracks catastrophically stops with a `RESOURCE_LIMIT` error instead of hanging. Patterns are limited to 256 code units and subjects to 4,096.
 
 Source mode is an input classification and compiler check. Applications running community scripts still need a separately terminable, capability-limited execution unit and resource limits for CPU, memory, and provider work.
 

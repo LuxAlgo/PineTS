@@ -7,7 +7,7 @@ import { boundedArrayText } from './array/format';
 import { formatFloat, formatNumberPattern, formatVolume } from './numberFormat';
 import { assertElementCount, assertStringLength, MAX_COLLECTION_ELEMENTS, MAX_STRING_CODE_UNITS } from './limits';
 import { PineRuntimeError } from '../errors/PineRuntimeError';
-import { assertBoundedRegex } from './regexPolicy';
+import { javaRegexFind } from './javaRegex';
 import { DEFAULT_TIME_FORMAT, formatTime, resolveTimeZone } from './formatTime';
 
 const FORMAT_TIME_PARAMS = ['time', 'format', 'timezone'];
@@ -198,12 +198,11 @@ export class Str {
         // Pine returns the matched substring, or "" when nothing matches.
         const src = this.bounded(source, 'str.match');
         const expression = this.bounded(pattern, 'str.match');
-        assertBoundedRegex(expression, src);
-        // Unanchored matching may retry from each starting position. Charge a
-        // conservative worst-case bound so repeated calls share one quota.
-        this.charge(src.length * src.length + expression.length, src.length * 2, 'str.match');
-        const m = src.match(new RegExp(expression));
-        return m ? m[0] : '';
+        const budget = this.context?.executionBudget;
+        const found = javaRegexFind(expression, src, budget ? (steps) => budget.chargeWork(steps, 'str.match') : undefined);
+        if (found === null) return '';
+        this.charge(found.length, found.length * 2, 'str.match');
+        return found;
     }
 
     split(source: string, separator: string) {

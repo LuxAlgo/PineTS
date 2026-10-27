@@ -7,7 +7,7 @@ This update closes documented host-access and resource-exhaustion paths in untru
 ### Changed
 
 - **Breaking: versioned Pine is required by default.** `PineTS.run()`, `stream()`, `update()`, `Indicator.prepare()` and `transpile()` reject markerless code and JavaScript functions unless the caller explicitly selects `sourceMode: 'trustedJavaScript'`. Prepared artifacts are keyed by mode and policy version; `runPretranspiled()` accepts only compiler-produced artifacts with matching provenance. See [Source modes](docs/source-mode.md).
-- **`str.match` accepts a bounded regex dialect.** Patterns and subjects have length limits, and constructs that can trigger catastrophic backtracking are rejected. Scripts relying on richer JavaScript regex syntax must handle that matching outside the untrusted Pine runtime.
+- **`str.match` runs on a step-bounded matcher.** Patterns follow TradingView's Java regex flavor and every backtracking step is charged to the run's work budget, so a catastrophic pattern stops with a runtime error instead of hanging. Patterns and subjects have length limits.
 
 ### Added
 
