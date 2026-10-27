@@ -309,7 +309,7 @@ Each entry carries everything the scanner harvested — **`id`**, **`name`**, `t
 **Color defaults are normalized.** `color`-typed inputs report `defval` as a canonical **8-digit RGBA hex string `#RRGGBBAA`** (uppercase; `FF` = fully opaque), regardless of how the source wrote it:
 
 - `#RRGGBB` / `#RRGGBBAA` hex literals
-- a named constant — `color.red` → `#F23645FF`
+- a named constant — `color.red` → `#F23645FF` in a v6 script. As on TradingView, scripts before v6 use the earlier values of `color.red`, `color.teal` and `color.yellow` (`#FF5252`, `#00897B`, `#FFEB3B`), so `color.red` → `#FF5252FF` there
 - the constructor calls `color.new(col, transp)` and `color.rgb(r, g, b, transp?)`, statically evaluated (Pine's `transp` is 0–100 transparency, so `color.new(#26a69a, 50)` → `#26A69A80`, `color.rgb(6, 162, 47)` → `#06A22FFF`)
 
 Reading the same key back via `.input['Line']` returns the identical normalized string. This gives UI color pickers a single, parseable format to bind to. (The normalization is presentational — it doesn't affect what the running script computes when the input isn't overridden.) A color default that can't be resolved statically — e.g. one built from a runtime variable or `color.from_gradient(...)` — is reported as `undefined`.
