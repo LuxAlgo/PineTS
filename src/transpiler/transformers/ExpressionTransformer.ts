@@ -1529,9 +1529,24 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             const variableDecl = ASTFactory.createVariableDeclaration(tempVarName, callExpr);
             scopeManager.addOuterHoistedStatement(variableDecl);
 
-            // Replace the argument with a reference to the hoisted variable
-            Object.assign(arg, ASTFactory.createIdentifier(tempVarName));
-            return arg;
+            // request.security finds its expression by the param name of its argument, so the value
+            // must arrive through `request.param` like every other operand (issue #257).
+            if (namespace !== 'request') {
+                Object.assign(arg, ASTFactory.createIdentifier(tempVarName));
+                return arg;
+            }
+            const paramId = scopeManager.generateParamId();
+            const paramCall = {
+                type: 'CallExpression',
+                callee: ASTFactory.createMemberExpression(ASTFactory.createIdentifier(namespace), ASTFactory.createIdentifier('param')),
+                arguments: [ASTFactory.createIdentifier(tempVarName), undefinedArg(), makeParamNameArg(scopeManager, paramId)],
+                _transformed: true,
+                _isParamCall: true,
+            };
+            if (scopeManager.shouldSuppressHoisting()) return paramCall;
+            scopeManager.addLocalSeriesVar(paramId);
+            scopeManager.addHoistedStatement(ASTFactory.createVariableDeclaration(paramId, paramCall));
+            return ASTFactory.createIdentifier(paramId);
         }
 
         // Handle property access like trade.entry
