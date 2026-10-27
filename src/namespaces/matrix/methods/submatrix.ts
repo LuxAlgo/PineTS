@@ -5,9 +5,14 @@ import { Context } from '../../../Context.class';
 import { assertMatrixIndex } from '../indexValidation';
 
 export function submatrix(context: Context) {
-    return (id: PineMatrixObject, from_row: number, to_row: number, from_col: number, to_col: number) => {
+    return (id: PineMatrixObject, from_row?: number, to_row?: number, from_col?: number, to_col?: number) => {
         const sourceRows = id.matrix.length;
         const sourceCols = sourceRows > 0 ? id.matrix[0].length : 0;
+        // Every bound is optional: the default range is the whole matrix.
+        from_row ??= 0;
+        to_row ??= sourceRows;
+        from_col ??= 0;
+        to_col ??= sourceCols;
         assertMatrixIndex(from_row, sourceRows, 'row', 'matrix.submatrix', true);
         assertMatrixIndex(to_row, sourceRows, 'row', 'matrix.submatrix', true);
         assertMatrixIndex(from_col, sourceCols, 'column', 'matrix.submatrix', true);

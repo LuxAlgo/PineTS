@@ -24,9 +24,11 @@ export function concat(context: Context) {
             // But concat appends rows usually? Or does it append columns?
             // "The number of columns in both matrices must be identical." -> Vertical concatenation (append rows)
             for (const row of copiedRows) id.matrix.push(row);
-            return;
+            return id;
         }
         for (const row of copiedRows) id.matrix.push(row);
+        // TradingView returns the first matrix itself, so the result aliases id1.
+        return id;
     };
 }
 
