@@ -4,7 +4,7 @@
 import * as walk from 'acorn-walk';
 import ScopeManager from '../analysis/ScopeManager';
 import { ASTFactory, CONTEXT_NAME } from '../utils/ASTFactory';
-import { NAMESPACES_LIKE, FACTORY_METHODS } from '../settings';
+import { NAMESPACES_LIKE, FACTORY_METHODS, VAR_INIT_MUTATING_METHODS } from '../settings';
 import {
     transformIdentifier,
     transformCallExpression,
@@ -697,7 +697,8 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
 
                         if (namespaceName && methodName) {
                             const methodPath = `${namespaceName}.${methodName}`;
-                            if (FACTORY_METHODS.includes(methodPath)) {
+                            const isWholeInitializer = decl.init?.type === 'Identifier' && decl.init.name === d.id?.name;
+                            if (FACTORY_METHODS.includes(methodPath) || (isWholeInitializer && VAR_INIT_MUTATING_METHODS.includes(methodPath))) {
                                 // Wrap: `const temp = call(...)` → `const temp = () => call(...)`
                                 d.init = {
                                     type: 'ArrowFunctionExpression',
