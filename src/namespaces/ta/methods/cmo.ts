@@ -61,8 +61,9 @@ export function cmo(context: any) {
         // Calculate CMO
         const denominator = gains.sum + losses.sum;
 
+        // No movement at all is 0 / 0: na on TradingView.
         if (denominator === 0) {
-            return context.precision(0);
+            return NaN;
         }
 
         const cmo = (100 * (gains.sum - losses.sum)) / denominator;
