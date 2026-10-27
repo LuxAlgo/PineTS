@@ -42,10 +42,12 @@ function receiverTypeCompatible(receiverType: string | undefined, declaredType: 
     return receiverType === declaredType || (receiverType === 'int' && declaredType === 'float');
 }
 
-const UNDEFINED_ARG = {
+// A fresh node per use: transformers rewrite nodes in place (Object.assign), so one
+// shared node would be re-wrapped once per reference — `$.get($.get(…undefined…))`.
+const undefinedArg = () => ({
     type: 'Identifier',
     name: 'undefined',
-};
+});
 
 /**
  * Build the third argument to a `*.param(value, idx, name)` call. The
@@ -244,7 +246,7 @@ function udtFieldHistory(chain: any, baseName: string, baseRef: any, index: any,
     const paramCall = {
         type: 'CallExpression',
         callee: ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('param')),
-        arguments: [chain, UNDEFINED_ARG, makeParamNameArg(scopeManager, paramId)],
+        arguments: [chain, undefinedArg(), makeParamNameArg(scopeManager, paramId)],
         _transformed: true,
         _isParamCall: true,
     };
@@ -556,7 +558,7 @@ function namespaceVariableHistory(variable: any, offset: any, scopeManager: Scop
     const record = {
         type: 'CallExpression',
         callee: ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('param')),
-        arguments: [call, UNDEFINED_ARG, { type: 'Identifier', name: `'${seriesName}'` }],
+        arguments: [call, undefinedArg(), { type: 'Identifier', name: `'${seriesName}'` }],
         _transformed: true,
         _isParamCall: true,
     };
@@ -601,7 +603,12 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
         HISTORY_VALUE_OBJECT_TYPES.includes(memberNode.object.type) &&
         !memberNode._historyTransformed
     ) {
-        memberNode.object = transformHistoryValueObject(memberNode.object, scopeManager);
+        scopeManager.enterHistoryRecord();
+        try {
+            memberNode.object = transformHistoryValueObject(memberNode.object, scopeManager);
+        } finally {
+            scopeManager.exitHistoryRecord();
+        }
         memberNode.property = lowerHistoryOffset(memberNode.property, scopeManager);
         const paramId = scopeManager.generateParamId();
         const paramCall = {
@@ -610,7 +617,7 @@ export function transformMemberExpression(memberNode: any, originalParamName: st
                 ASTFactory.createContextIdentifier(),
                 ASTFactory.createIdentifier('param'),
             ),
-            arguments: [memberNode.object, UNDEFINED_ARG, makeParamNameArg(scopeManager, paramId)],
+            arguments: [memberNode.object, undefinedArg(), makeParamNameArg(scopeManager, paramId)],
             _transformed: true,
             _isParamCall: true,
         };
@@ -1056,7 +1063,7 @@ function getParamFromConditionalExpression(node: any, scopeManager: ScopeManager
     const paramCall = {
         type: 'CallExpression',
         callee: memberExpr,
-        arguments: [node, UNDEFINED_ARG, makeParamNameArg(scopeManager, nextParamId)],
+        arguments: [node, undefinedArg(), makeParamNameArg(scopeManager, nextParamId)],
         _transformed: true,
         _isParamCall: true,
     };
@@ -1382,7 +1389,12 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
 
         // Ensure complex objects are transformed before being used as array source
         if (holdsValue) {
-            arg.object = transformHistoryValueObject(arg.object, scopeManager);
+            scopeManager.enterHistoryRecord();
+            try {
+                arg.object = transformHistoryValueObject(arg.object, scopeManager);
+            } finally {
+                scopeManager.exitHistoryRecord();
+            }
         } else if (arg.object.type === 'MemberExpression') {
             // `strategy.position_size`-style getters become calls here.
             transformMemberExpression(arg.object, '', scopeManager);
@@ -1440,14 +1452,22 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             const historyParam = {
                 type: 'CallExpression',
                 callee: ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('param')),
-                arguments: [arg.object, UNDEFINED_ARG, makeParamNameArg(scopeManager, historyParamId)],
+                arguments: [arg.object, undefinedArg(), makeParamNameArg(scopeManager, historyParamId)],
                 _transformed: true,
                 _isParamCall: true,
             };
-            source = ASTFactory.createGetCall(historyParam, transformedProperty);
+            // Recorded ahead of the statement, as in the expression form: a lazy operand or an
+            // `else if` condition would otherwise skip bars and `[n]` would read a stale one.
+            let series: any = historyParam;
+            if (scopeManager.addEagerHoistedStatement(ASTFactory.createVariableDeclaration(historyParamId, historyParam))) {
+                series = ASTFactory.createIdentifier(historyParamId);
+                series._skipTransformation = true;
+                series._arrayAccessed = true;
+            }
+            source = ASTFactory.createGetCall(series, transformedProperty);
             source._transformed = true;
             source._historyTransformed = true;
-            offset = UNDEFINED_ARG;
+            offset = undefinedArg();
         }
 
         const memberExpr = ASTFactory.createMemberExpression(ASTFactory.createIdentifier(namespace), ASTFactory.createIdentifier('param'));
@@ -1618,7 +1638,7 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             const paramCall = {
                 type: 'CallExpression',
                 callee: memberExpr,
-                arguments: [arg, UNDEFINED_ARG, makeParamNameArg(scopeManager, nextParamId)],
+                arguments: [arg, undefinedArg(), makeParamNameArg(scopeManager, nextParamId)],
                 _transformed: true,
                 _isParamCall: true,
             };
@@ -1649,7 +1669,7 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
     const paramCall = {
         type: 'CallExpression',
         callee: memberExpr,
-        arguments: [transformedArg, UNDEFINED_ARG, makeParamNameArg(scopeManager, nextParamId)],
+        arguments: [transformedArg, undefinedArg(), makeParamNameArg(scopeManager, nextParamId)],
         _transformed: true,
         _isParamCall: true,
     };

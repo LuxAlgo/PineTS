@@ -89,6 +89,8 @@ export class ScopeManager {
     private hoistingRoots: number[] = [];
     private suppressHoisting: boolean = false;
     private inLoopTest: boolean = false;
+    private chainHoist: { frame: any[]; depth: number } | null = null;
+    private historyRecordDepth: number = 0;
     private reservedNames: Set<string> = new Set();
     private userFunctions: Set<string> = new Set();
     private userMethods: Set<string> = new Set();
@@ -639,8 +641,39 @@ export class ScopeManager {
 
     addHoistedStatement(stmt: any): void {
         if (this.hoistingStack.length > 0 && !this.suppressHoisting) {
-            this.hoistingStack[this.hoistingStack.length - 1].push(stmt);
+            const chainFrame = this.historyRecordDepth > 0 ? this.activeChainFrame() : null;
+            (chainFrame ?? this.hoistingStack[this.hoistingStack.length - 1]).push(stmt);
         }
+    }
+
+    /**
+     * While an `else if` condition is transformed: the hoisting frame of the first `if` of the chain.
+     * TradingView records a history series in an `else if` condition (`f()[1]`) on every bar the whole
+     * `if` statement runs, like one in a lazy `?:` / `and` operand, while a plain call there stays lazy.
+     * Returns the previous value so nested chains can restore it.
+     */
+    setChainHoistFrame(frame: any[] | null): { frame: any[]; depth: number } | null {
+        const prev = this.chainHoist;
+        this.chainHoist = frame ? { frame, depth: this.hoistingStack.length } : null;
+        return prev;
+    }
+
+    restoreChainHoistFrame(prev: { frame: any[]; depth: number } | null): void {
+        this.chainHoist = prev;
+    }
+
+    /** Brackets the lowering of the expression a history series records (the `f()` of `f()[1]`). */
+    enterHistoryRecord(): void {
+        this.historyRecordDepth++;
+    }
+
+    exitHistoryRecord(): void {
+        this.historyRecordDepth--;
+    }
+
+    // Only for statements of the condition itself, not of a block nested in it (an IIFE body).
+    private activeChainFrame(): any[] | null {
+        return this.chainHoist && this.chainHoist.depth === this.hoistingStack.length ? this.chainHoist.frame : null;
     }
 
     /**
@@ -709,7 +742,7 @@ export class ScopeManager {
      */
     addEagerHoistedStatement(stmt: any): boolean {
         if (this.hoistingStack.length === 0 || this.inLoopTest) return false;
-        this.hoistingStack[this.hoistingStack.length - 1].push(stmt);
+        (this.activeChainFrame() ?? this.hoistingStack[this.hoistingStack.length - 1]).push(stmt);
         return true;
     }
 

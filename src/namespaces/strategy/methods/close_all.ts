@@ -4,7 +4,7 @@
 import { Order } from '../types';
 import { Series } from '../../../Series';
 import { parseArgsForPineParams } from '../../utils';
-import { argValue } from '../utils';
+import { argValue, whenBlocks } from '../utils';
 
 /**
  * Close ALL open positions at market, regardless of which entry opened them.
@@ -26,6 +26,7 @@ export function close_all(context: any) {
             throw new Error('strategy.close_all() called before strategy() declaration');
         }
         const parsed = parseArgsForPineParams<any>(args, CLOSE_ALL_SIGNATURES, CLOSE_ALL_ARGS_TYPES);
+        if (whenBlocks(parsed)) return;
 
         // TV semantic: strategy.close_all() called with no open positions is
         // a no-op. Without this guard, the queued order survives to the next

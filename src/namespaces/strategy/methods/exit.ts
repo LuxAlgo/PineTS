@@ -4,7 +4,7 @@
 import { Order } from '../types';
 import { Series } from '../../../Series';
 import { parseArgsForPineParams, extractCallsiteId } from '../../utils';
-import { roundToMintick, roundOrderLevel, parseDirection, placeOrder, floorQty, trailArmPrice } from '../utils';
+import { roundToMintick, roundOrderLevel, parseDirection, placeOrder, floorQty, trailArmPrice, whenBlocks } from '../utils';
 import { checkExitLegs, checkQtyPercent } from '../validation';
 
 /**
@@ -59,6 +59,7 @@ export function exit(context: any) {
         extractCallsiteId(args);
 
         const parsed = parseArgsForPineParams<any>(args, EXIT_SIGNATURES, EXIT_ARGS_TYPES);
+        if (whenBlocks(parsed)) return;
         checkExitLegs(parsed);
 
         const extractValue = (val: any) => {

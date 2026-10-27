@@ -1,6 +1,7 @@
 import { Series } from '../Series';
 import { PineRuntimeError } from '../errors/PineRuntimeError';
-import { ParsedTimeframe, formatTimeframe, parseTimeframe, timeframeBarStart, timeframeFromSeconds, timeframeSeconds } from '../timeframe';
+import { ParsedTimeframe, formatTimeframe, parseTimeframe, timeframeFromSeconds, timeframeSeconds } from '../timeframe';
+import { tradingPeriodKey } from './tradingPeriod';
 
 const unwrap = (v: any) => (typeof v === 'function' ? v() : v instanceof Series ? v.get(0) : v);
 
@@ -90,7 +91,9 @@ export class Timeframe {
 
         if (isNaN(currentTime) || isNaN(prevTime)) return false;
 
-        return timeframeBarStart(currentTime, tf) !== timeframeBarStart(prevTime, tf);
+        const syminfo = this.context.pine?.syminfo;
+        const timezone = syminfo?.timezone || 'UTC';
+        return tradingPeriodKey(currentTime, tf, timezone, syminfo?.session) !== tradingPeriodKey(prevTime, tf, timezone, syminfo?.session);
     }
 
     public from_seconds(seconds: any) {
