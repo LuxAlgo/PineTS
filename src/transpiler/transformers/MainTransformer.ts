@@ -15,7 +15,35 @@ import {
     transformFunctionDeclaration,
     createLoopGuardNodes,
     instrumentLoopBudget,
+    transformSwitchDiscriminant,
 } from './StatementTransformer';
+
+/**
+ * Post-pass: `var x = <loop, if or switch used as a value>` compiles to `$.initVar(x, (() => {...})())`.
+ * TradingView evaluates a `var` initializer on the first bar only, so the function itself is passed and
+ * `initVar` calls it on that bar; otherwise its side effects (`array.push`, `ta.*` state) ran on every bar.
+ * An async function (awaiting `request.*`) is left alone: as a thunk it would hand `initVar` a Promise.
+ */
+export function deferVarInitializerFunctions(ast: any): void {
+    const baseVisitor = { ...walk.base, LineComment: () => {} };
+    walk.simple(
+        ast,
+        {
+            CallExpression(node: any) {
+                const callee = node.callee;
+                if (callee?.type !== 'MemberExpression' || callee.object?.type !== 'Identifier' || callee.object.name !== '$') return;
+                if (callee.property?.name !== 'initVar') return;
+                const init = node.arguments[1];
+                if (init?.type !== 'CallExpression' || init.arguments.length !== 0) return;
+                const fn = init.callee;
+                if (fn?.type !== 'ArrowFunctionExpression' && fn?.type !== 'FunctionExpression') return;
+                if (fn.async || fn.params.length) return;
+                node.arguments[1] = fn;
+            },
+        },
+        baseVisitor
+    );
+}
 
 /**
  * Post-pass: propagate async/await through user-defined function call chains.
@@ -615,7 +643,7 @@ export function runTransformationPass(
         },
         SwitchStatement(node: any, state: ScopeManager, c: any) {
             node.discriminant.parent = node;
-            c(node.discriminant, state);
+            transformSwitchDiscriminant(node, state);
             node.cases.forEach((caseNode: any) => {
                 caseNode.parent = node;
                 c(caseNode, state);

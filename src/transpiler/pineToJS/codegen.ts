@@ -6,6 +6,7 @@
 
 import { CONTEXT_PINE_VARS, NAMESPACE_COLLISION_NAMES, JS_RESERVED_WORDS, BUILTIN_METHOD_NAMES } from '../settings';
 import { BUILTIN_PARAMS } from './builtinParams';
+import { resolveFunctionOverloads } from './overloads';
 
 // Set of names that conflict with Pine context variables/namespaces.
 // Function parameters with these names must be renamed to avoid Phase 2
@@ -125,6 +126,7 @@ export class CodeGenerator {
     // Renaming runs first so the parameter map is keyed by the same (possibly
     // renamed) function name that call-site callees carry after the pass.
     private preProcessAST(ast: any) {
+        resolveFunctionOverloads(ast);
         this.renameConflictingVariables(ast);
         this.renameFunctionsSharingTypeNames(ast);
         this.collectFunctionParams(ast);
@@ -998,6 +1000,8 @@ export class CodeGenerator {
 
             if (decl.init) {
                 this.write(' = ');
+                // TradingView runs a loop that initializes a `var` for one iteration only (v5 and v6).
+                if (kind === 'var' && (decl.init.type === 'ForStatement' || decl.init.type === 'WhileStatement')) decl.init._singleIteration = true;
                 if (isString && isNaIdentifier(decl.init)) this.write('""');
                 else this.generateExpression(decl.init);
             }
@@ -2653,6 +2657,7 @@ export class CodeGenerator {
                     _line: lastStmt._line,
                 };
             }
+            if (node._singleIteration) body.body.push({ type: 'ExpressionStatement', expression: { type: 'Identifier', name: 'break' } });
         }
 
         // Generate the loop statement

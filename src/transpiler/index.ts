@@ -61,6 +61,7 @@ import {
     transformStrictLogicalOperators,
     transformDisplayArithmetic,
     propagateAsyncAwait,
+    deferVarInitializerFunctions,
 } from './transformers/MainTransformer';
 import { extractPineScriptVersion, pineToJS } from './pineToJS/pineToJS.index';
 import { buildLtfSlices } from './slicing/buildLtfSlices';
@@ -240,6 +241,7 @@ export function transpile(
     // Functions containing await (e.g., from request.security) must be async,
     // and their callers (via $.call) must await them.
     propagateAsyncAwait(ast);
+    if (pineVersion !== null) deferVarInitializerFunctions(ast);
     assertCompilerAstBudget(ast);
     assertCompilerElapsed(compilationStartedAt);
 
