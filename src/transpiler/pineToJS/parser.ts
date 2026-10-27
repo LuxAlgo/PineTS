@@ -1401,22 +1401,28 @@ export class Parser {
     }
 
     /**
-     * Give a trailing loop a value: Pine yields whatever the loop body's last statement
-     * produced on its final iteration, or na when the body never ran (or the final
-     * iteration skipped it). Captures that into a temp reset at the top of each iteration
-     * and returns the temp's name, or null when the loop body has no value.
+     * Give a trailing loop a value: Pine yields what the body's last statement produced on the
+     * last iteration that reached the end of the body (na if none did). An iteration cut short
+     * by `break` / `continue` keeps the previous value: `for i = 0 to 10` / `if i == 3 => break` /
+     * `i * 100.0` is 200. Each iteration writes its own temp, copied to the loop's value as the
+     * body's final statement, which an early exit skips. Returns the value's name, or null when
+     * the loop body has no value.
      */
     private _captureLoopValue(statements: any[]): string | null {
         const loop = statements[statements.length - 1];
         if (loop.body?.type !== 'BlockStatement' || loop.body.body.length === 0) return null;
 
-        const tmp = `__loopValue_${this.loopValueCounter++}`;
+        const n = this.loopValueCounter++;
+        const tmp = `__loopValue_${n}`;
+        const iter = `__loopIter_${n}`;
         const na = () => new Identifier('na');
-        const assignTmp = (value: any) => new ExpressionStatement(new AssignmentExpression('=', new Identifier(tmp), value));
+        const assign = (name: string) => (value: any) => new ExpressionStatement(new AssignmentExpression('=', new Identifier(name), value));
 
-        if (!this._emitLastValue(loop.body.body, assignTmp)) return null;
-        loop.body.body.unshift(assignTmp(na()));
-        statements.splice(statements.length - 1, 0, new VariableDeclaration([new VariableDeclarator(new Identifier(tmp), na())], VariableDeclarationKind.LET));
+        if (!this._emitLastValue(loop.body.body, assign(iter))) return null;
+        loop.body.body.unshift(assign(iter)(na()));
+        loop.body.body.push(assign(tmp)(new Identifier(iter)));
+        const declare = (name: string) => new VariableDeclaration([new VariableDeclarator(new Identifier(name), na())], VariableDeclarationKind.LET);
+        statements.splice(statements.length - 1, 0, declare(tmp), declare(iter));
         return tmp;
     }
 
