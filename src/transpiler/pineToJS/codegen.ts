@@ -1585,13 +1585,13 @@ export class CodeGenerator {
         this.write(' ');
 
         // Right child
-        // JS binary operators are left-associative, so a same-precedence right operand of a
-        // non-associative operator keeps its parentheses: a == (b == c), a < (b < c), a - (b - c).
-        // TradingView itself evaluates `+` and `*` chains left to right (1 + (big - big) is 0 at 1e16),
-        // so those stay flat.
+        // JS binary operators are left-associative, so a same-precedence right operand keeps its
+        // parentheses: a == (b == c), a - (b - c), close * (1 / 2) (v5 int division first).
+        // TradingView itself evaluates an additive chain left to right (1 + (big - big) is 0 at 1e16),
+        // so the right operand of `+` stays flat.
         const rightPrecedence = this.getPrecedence(node.right);
         const needsRightParens =
-            rightPrecedence < currentPrecedence || (rightPrecedence === currentPrecedence && !['+', '*', '&&', '||'].includes(op));
+            rightPrecedence < currentPrecedence || (rightPrecedence === currentPrecedence && !['+', '&&', '||'].includes(op));
 
         if (needsRightParens) {
             this.write('(');
