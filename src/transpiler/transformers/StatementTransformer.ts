@@ -543,6 +543,14 @@ export function walkInitExpression(expr: any, scopeManager: ScopeManager): void 
                     node.consequent = newConsequent;
                 }
             },
+            // A loop used as a value (`x = for i = 0 to 4 … close[i]`) lives in an IIFE: its counter
+            // must be registered as a loop variable, or `close[i]` reads a global `i` instead.
+            ForStatement(node: any, state: any, c: any) {
+                transformForStatement(node, scopeManager, (n: any) => c(n, { parent: node, insideIIFE: state.insideIIFE }));
+            },
+            WhileStatement(node: any, state: any, c: any) {
+                transformWhileStatement(node, scopeManager, (n: any) => c(n, { parent: node, insideIIFE: state.insideIIFE }));
+            },
             AssignmentExpression(node: any, state: any, c: any) {
                 // Only transform assignment expressions inside IIFEs (e.g., while/for-as-expression)
                 // Don't transform assignments used as sub-expressions in normal initializers
