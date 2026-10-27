@@ -36,8 +36,16 @@ const TYPE_CHECK = {
     // objects — never arrays. Excluding arrays here lets functions like
     // request.security accept tuple expressions (e.g. `[o, c]`) as a positional
     // arg without misinterpreting them as the options bag.
+    // Named arguments arrive as an object literal; a matrix, map or UDT instance passed as a value is not one.
     remaining_options: (arg) =>
-        arg !== null && typeof arg === 'object' && !Array.isArray(arg) && !(arg instanceof Series) && !(arg instanceof ChartPointObject) && !isPlot(arg) && !isScalarHelper(arg),
+        arg !== null &&
+        typeof arg === 'object' &&
+        !Array.isArray(arg) &&
+        (Object.getPrototypeOf(arg) === Object.prototype || Object.getPrototypeOf(arg) === null) &&
+        !(arg instanceof Series) &&
+        !(arg instanceof ChartPointObject) &&
+        !isPlot(arg) &&
+        !isScalarHelper(arg),
 };
 
 export type PineTypeMap<T> = {

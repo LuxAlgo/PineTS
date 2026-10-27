@@ -9,6 +9,7 @@ import { PineArrayObject, PineArrayType } from '../../array/PineArrayObject';
 import { PineTypeObject } from '../../PineTypeObject';
 import { parseArgsForPineParams } from '../../utils';
 import { trackRequestContext, MAX_CALC_BARS } from '../../limits';
+import { PineRuntimeError } from '../../../errors/PineRuntimeError';
 
 // Pine signature (v5/v6):
 //   request.security_lower_tf(symbol, timeframe, expression, ignore_invalid_symbol, currency, ignore_invalid_timeframe, calc_bars_count)
@@ -369,51 +370,64 @@ export function security_lower_tf(context: any) {
             // (fast or slow path, each is a provider fetch on the host's key) so an
             // uncapped fan-out cannot drain the host operator's provider quota.
             trackRequestContext(context, 'request.security_lower_tf');
-            if (builtinExpr !== null) {
-                // ── Fast path ────────────────────────────────────────
-                const fastSecContext = await buildFastBuiltinSecContext(
-                    context, _symbol, _timeframe, _calc_bars_count,
-                    builtinExpr, _expression_name,
-                );
-                context.cache[cacheKey] = {
-                    pineTS: null,
-                    context: fastSecContext,
-                    dataVersion: context.dataVersion,
-                    _fastPath: true,
-                    _fastPathArgs: { builtinExpr },
-                };
-            } else {
-                // ── Slow path: run the user script in a secondary ──
-                // For request.security_lower_tf the secondary's data window
-                // is bounded by the chart's own window — every LTF bar that
-                // contributes to a chart bar falls inside that chart bar's
-                // [openTime, closeTime]. Adding a fixed historical buffer
-                // (the way security.ts does for higher-timeframe warmup)
-                // blows up bar counts dramatically: a 30-day buffer at 1-
-                // minute LTF forces the secondary to iterate ~43,200 extra
-                // bars before the main loop can advance past bar 0, which
-                // manifests as a multi-minute hang on small charts (e.g.
-                // 50 bars on 5m). Use the chart's earliest openTime.
-                const effectiveSDate = context.sDate
-                    || (context.marketData?.length > 0 ? context.marketData[0].openTime : undefined);
-                const adjustedSDate = effectiveSDate;
+            try {
+                if (builtinExpr !== null) {
+                    // ── Fast path ────────────────────────────────────────
+                    const fastSecContext = await buildFastBuiltinSecContext(
+                        context, _symbol, _timeframe, _calc_bars_count,
+                        builtinExpr, _expression_name,
+                    );
+                    context.cache[cacheKey] = {
+                        pineTS: null,
+                        context: fastSecContext,
+                        dataVersion: context.dataVersion,
+                        _fastPath: true,
+                        _fastPathArgs: { builtinExpr },
+                    };
+                } else {
+                    // ── Slow path: run the user script in a secondary ──
+                    // For request.security_lower_tf the secondary's data window
+                    // is bounded by the chart's own window — every LTF bar that
+                    // contributes to a chart bar falls inside that chart bar's
+                    // [openTime, closeTime]. Adding a fixed historical buffer
+                    // (the way security.ts does for higher-timeframe warmup)
+                    // blows up bar counts dramatically: a 30-day buffer at 1-
+                    // minute LTF forces the secondary to iterate ~43,200 extra
+                    // bars before the main loop can advance past bar 0, which
+                    // manifests as a multi-minute hang on small charts (e.g.
+                    // 50 bars on 5m). Use the chart's earliest openTime.
+                    const effectiveSDate = context.sDate
+                        || (context.marketData?.length > 0 ? context.marketData[0].openTime : undefined);
+                    const adjustedSDate = effectiveSDate;
 
-                const lastBarCloseTime = context.marketData?.length > 0
-                    ? context.marketData[context.marketData.length - 1].closeTime
-                    : 0;
-                const secEDate = lastBarCloseTime || context.eDate || Date.now();
+                    const lastBarCloseTime = context.marketData?.length > 0
+                        ? context.marketData[context.marketData.length - 1].closeTime
+                        : 0;
+                    const secEDate = lastBarCloseTime || context.eDate || Date.now();
 
-                const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate);
-                pineTS.markAsSecondary(context);
+                    const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate);
+                    pineTS.markAsSecondary(context);
 
-                // The call site's truncated slice (the prefix of statements
-                // ending at the call), else the whole script — see runSecondary.
-                const secContext = await runSecondary(context, pineTS, _expression_name);
-                context.cache[cacheKey] = { pineTS, context: secContext, dataVersion: context.dataVersion };
+                    // The call site's truncated slice (the prefix of statements
+                    // ending at the call), else the whole script — see runSecondary.
+                    const secContext = await runSecondary(context, pineTS, _expression_name);
+                    context.cache[cacheKey] = { pineTS, context: secContext, dataVersion: context.dataVersion };
+                }
+                if (_ignore_invalid_symbol === true && !(context.cache[cacheKey].context?.data?.openTime?.data?.length > 0)) {
+                    throw new Error(`no data for ${_symbol}`);
+                }
+            } catch (error) {
+                if (error instanceof PineRuntimeError) throw error;
+                // As in request.security: with ignore_invalid_symbol = true a symbol the data source
+                // can't serve gives na (the array id), not an empty array.
+                if (_ignore_invalid_symbol !== true) throw error;
+                context.cache[cacheKey] = { failed: true };
+                context.warn(`request.security_lower_tf(${_symbol}, ${_timeframe}) returns na: ${(error as any)?.message ?? error}`, 'request.security_lower_tf');
             }
         }
 
         const cached = context.cache[cacheKey];
+        if (cached.failed) return NaN;
 
         // Refresh secondary context when main context's data has changed (streaming mode)
         if (context.dataVersion > cached.dataVersion) {
