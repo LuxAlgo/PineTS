@@ -269,7 +269,22 @@ export class Core {
         const rep = Series.from(replacement).get(0);
         return (val === null || val === undefined || (typeof val === 'number' && isNaN(val))) ? rep : val;
     }
-    fixnan(series: any) {
+    fixnan(series: any, callsite?: string) {
+        // fixnan carries the last non-na value seen by its own call site, so a call inside a
+        // conditional block only knows the bars on which the block ran.
+        if (typeof callsite === 'string') {
+            const val = Series.from(series).get(0);
+            const isNa = val === null || val === undefined || (typeof val === 'number' && isNaN(val));
+            const taState = (this.context.taState ??= {});
+            const key = `fixnan:${this.context.peekId?.() ?? ''}|${callsite}`;
+            const state = (taState[key] ??= { idx: -1, committed: NaN, current: NaN });
+            if (this.context.idx > state.idx) {
+                state.committed = state.current;
+                state.idx = this.context.idx;
+            }
+            state.current = isNa ? state.committed : val;
+            return state.current;
+        }
         const _s = Series.from(series);
         for (let i = 0; i < _s.length; i++) {
             const val = _s.get(i);

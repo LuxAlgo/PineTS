@@ -2046,6 +2046,11 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
             });
         }
 
+        // fixnan keeps the last non-na value it saw at its call site, so it needs its own key.
+        if (node.callee.name === 'fixnan' && scopeManager.isContextBound('fixnan')) {
+            node.arguments.push(scopeManager.getNextBareCallsiteId('fixnan'));
+        }
+
         // Inject unique call ID for the function call only if it is a user-defined function
         // Built-in functions (like na, nz, bool) are context-bound and should not receive a call ID
         if (!scopeManager.isContextBound(node.callee.name)) {
