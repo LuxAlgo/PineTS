@@ -10,8 +10,8 @@ export function tr(context: Context) {
         // handle_na: if true, returns high - low when close[1] is NaN (default behavior)
         //            if false, returns NaN when close[1] is NaN
 
-        // Default to true to maintain backward compatibility with the getter behavior
-        let handleNa = true;
+        // The bare `ta.tr` variable is ta.tr(false): na on a bar without a previous close.
+        let handleNa = false;
         if (typeof handle_na === 'string') {
             _callId = handle_na;
         } else if (handle_na !== undefined) {

@@ -123,39 +123,15 @@ export function supertrend(context: any) {
         state.currentTrSum = trSum;
         state.currentAtrValue = atrValue;
 
-        // Not enough data for ATR yet
-        if (isNaN(atr)) {
-            return [[NaN, NaN]];
-        }
-
-        // Calculate bands
+        // TradingView's formula as written, na comparisons being false: before the ATR exists a band
+        // falls back to nz() of the previous one, so the first bar reads 0 with direction 1 and the
+        // following warm-up bars read na.
         let upperBand = hl2 + factor * atr;
         let lowerBand = hl2 - factor * atr;
-
-        // Get previous bands (use 0 if NaN - nz() behavior)
-        // Use committed previous bands
         const prevLowerBand = isNaN(state.prevLowerBand) ? 0 : state.prevLowerBand;
         const prevUpperBand = isNaN(state.prevUpperBand) ? 0 : state.prevUpperBand;
-
-        // Adjust lowerBand: keep previous if price didn't break below
-        // lowerBand := lowerBand > prevLowerBand or close[1] < prevLowerBand ? lowerBand : prevLowerBand
-        if (!isNaN(state.prevLowerBand)) {
-            if (lowerBand > prevLowerBand || prevClose < prevLowerBand) {
-                // Keep new lowerBand
-            } else {
-                lowerBand = prevLowerBand;
-            }
-        }
-
-        // Adjust upperBand: keep previous if price didn't break above
-        // upperBand := upperBand < prevUpperBand or close[1] > prevUpperBand ? upperBand : prevUpperBand
-        if (!isNaN(state.prevUpperBand)) {
-            if (upperBand < prevUpperBand || prevClose > prevUpperBand) {
-                // Keep new upperBand
-            } else {
-                upperBand = prevUpperBand;
-            }
-        }
+        lowerBand = lowerBand > prevLowerBand || prevClose < prevLowerBand ? lowerBand : prevLowerBand;
+        upperBand = upperBand < prevUpperBand || prevClose > prevUpperBand ? upperBand : prevUpperBand;
 
         // Determine direction
         let direction: number;
@@ -163,10 +139,10 @@ export function supertrend(context: any) {
 
         const prevSuperTrend = state.prevSuperTrend;
 
-        if (atrCount === atrPeriod) {
-            // First bar with ATR - initialize direction
+        if (isNaN(state.prevAtrValue)) {
+            // na(atr[1])
             direction = 1;
-        } else if (prevSuperTrend === state.prevUpperBand) {
+        } else if (prevSuperTrend === prevUpperBand) {
             // Previous supertrend was upper band (bearish)
             direction = close > upperBand ? -1 : 1;
         } else {

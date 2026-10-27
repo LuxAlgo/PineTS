@@ -52,6 +52,8 @@ export function pvt(context: any) {
         // Update tentative state
         state.currentCumulativeSum = currentSum;
 
+        // Before any previous close the change is na, so the cumulative sum is too.
+        if (isNaN(prevClose) && context.idx === 0) return NaN;
         return context.precision(currentSum);
     };
 }
