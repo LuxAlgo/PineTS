@@ -6,6 +6,7 @@ import { PineArrayObject, PineArrayType } from './array/PineArrayObject';
 import { joinElements } from './array/format';
 import { formatFloat, formatNumberPattern, formatVolume } from './numberFormat';
 import { assertElementCount } from './limits';
+import { javaRegexFind } from './javaRegex';
 import { DEFAULT_TIME_FORMAT, formatTime, resolveTimeZone } from './formatTime';
 
 const FORMAT_TIME_PARAMS = ['time', 'format', 'timezone'];
@@ -153,8 +154,9 @@ export class Str {
     }
     match(source: string, pattern: string) {
         // Pine returns the matched substring, or "" when nothing matches.
-        const m = text(source).match(new RegExp(text(pattern)));
-        return m ? m[0] : '';
+        // Java's regex flavor, as on TradingView (`(?i)`, possessive quantifiers, ...).
+        const found = javaRegexFind(text(pattern), text(source));
+        return found === null ? '' : found;
     }
 
     split(source: string, separator: string) {
