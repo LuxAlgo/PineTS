@@ -1562,6 +1562,10 @@ export class CodeGenerator {
 
     // Generate BinaryExpression
     generateBinaryExpression(node) {
+        if (node.operator === 'and' || node.operator === 'or' || node.operator === '&&' || node.operator === '||') {
+            this.generateLogicalOperands(node);
+            return;
+        }
         const currentPrecedence = this.getPrecedence(node);
 
         // Left child
@@ -1600,6 +1604,33 @@ export class CodeGenerator {
         } else {
             this.generateExpression(node.right);
         }
+    }
+
+    // `and` / `or` always give a bool on TradingView: an na operand counts as false, so
+    // `naBool and true` is false (not na) and `false or naBool` is false. JS && / || would return
+    // the NaN operand itself, so each operand is coerced; short-circuiting is unchanged.
+    generateLogicalOperands(node) {
+        const isBool = (child) =>
+            (child.type === 'Literal' && typeof child.value === 'boolean') ||
+            (child.type === 'UnaryExpression' && (child.operator === '!' || child.operator === 'not')) ||
+            ['and', 'or', '&&', '||'].includes(child.operator);
+        const operand = (child) => {
+            // Comparisons are coerced too: with an na operand they return na.
+            if (isBool(child)) {
+                // A nested and/or keeps its parentheses: a and (b or c).
+                const nested = ['and', 'or', '&&', '||'].includes(child.operator);
+                if (nested) this.write('(');
+                this.generateExpression(child);
+                if (nested) this.write(')');
+                return;
+            }
+            this.write('!!(');
+            this.generateExpression(child);
+            this.write(')');
+        };
+        operand(node.left);
+        this.write(node.operator === 'and' || node.operator === '&&' ? ' && ' : ' || ');
+        operand(node.right);
     }
 
     // Generate UnaryExpression
