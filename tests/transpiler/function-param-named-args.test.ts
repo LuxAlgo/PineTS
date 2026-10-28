@@ -96,7 +96,7 @@ if barstate.islast
         // The line created on the last bar should have the red color
         const activeLine = lines.find((l: any) => l.x1 !== null);
         expect(activeLine).toBeDefined();
-        expect(activeLine.color).toBe('#F23645');
+        expect(activeLine.color).toBe('#FF5252'); // color.red in a v5 script on TradingView
     });
 
     it('should pass color through nested function calls (runtime)', async () => {

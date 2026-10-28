@@ -10,7 +10,8 @@ import { Barstate } from './namespaces/Barstate';
 import { Session } from './namespaces/Session';
 import { Core, NAHelper, AlertHelper } from './namespaces/Core';
 import { PineColor } from './namespaces/color/PineColor';
-import { TimeHelper, TimeComponentHelper, EXTRACTORS, getDatePartsInTimezone } from './namespaces/Time';
+import { TimeHelper, TimeComponentHelper, EXTRACTORS } from './namespaces/Time';
+import { tradingDayOf } from './namespaces/tradingPeriod';
 import { Input } from './namespaces/input/input.index';
 import PineMath from './namespaces/math/math.index';
 import { PineRequest } from './namespaces/request/request.index';
@@ -300,14 +301,12 @@ export class Context {
                 return NaN;
             },
             get time_tradingday() {
-                // TradingView returns 00:00 UTC of the trading day the bar belongs to.
-                // For daily+ timeframes on 24/7 markets, this equals the bar's close date
-                // (i.e. the date the bar settles / completes).
+                // 00:00 UTC of the trading day holding the bar's last moment: the bar's own day on
+                // intraday and daily bars, the last day of the week on a weekly bar.
                 const closeTime = Series.from(_this.data.closeTime).get(0);
                 if (isNaN(closeTime)) return NaN;
-                const timezone = _this.pine?.syminfo?.timezone || 'UTC';
-                const parts = getDatePartsInTimezone(closeTime, timezone);
-                return Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0);
+                const syminfo = _this.pine?.syminfo;
+                return tradingDayOf(closeTime - 1, syminfo?.timezone || 'UTC', syminfo?.session);
             },
             get inputs() {
                 return _this.inputs;
@@ -823,7 +822,8 @@ export class Context {
      * @returns the current value of the param
      */
     param(source, index, name?: string) {
-        if (typeof source === 'string') return source;
+        // A named param records a history series: `str.tostring(close)[1]` is the previous bar's string.
+        if (typeof source === 'string' && name === undefined) return source;
         if (source instanceof Series) {
             if (index) {
                 const view = new Series(source.data, source.offset + index);
@@ -849,6 +849,31 @@ export class Context {
             return this.typedSeries(this.params[name], source, index || 0);
         }
     }
+
+    /**
+     * A function parameter whose history the body reads (`s[1]`), as its own series at the call site
+     * (`key`): one value per bar the function runs, so `s[1]` is the value of the previous call. A
+     * second call on the same bar (a loop, a live bar computed again) replaces that bar's value.
+     * Collections and objects keep their reference.
+     */
+    callParam(value: any, key: string) {
+        const v = value instanceof Series ? value.get(0) : value;
+        if (v !== null && typeof v === 'object') return value;
+        let state = this.callParams.get(key);
+        if (!state) {
+            state = { idx: -1, data: [] };
+            this.callParams.set(key, state);
+        }
+        if (this.idx !== state.idx) {
+            state.data.push(v);
+            state.idx = this.idx;
+        } else state.data[state.data.length - 1] = v;
+        const series = this.typedSeries(state.data, v);
+        if (value instanceof Series && value.beforeStart !== undefined) series.beforeStart = value.beforeStart;
+        return series;
+    }
+
+    private callParams = new Map<string, { idx: number; data: any[] }>();
 
     /**
      * Access a series value with Pine Script semantics (reverse order)

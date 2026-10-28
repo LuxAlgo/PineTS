@@ -1,7 +1,7 @@
 /**
  * Tests for timezone-related fixes:
  * - Fix 1: closeTime normalization (provider-level + PineTS safety-net)
- * - Fix 2: time_tradingday uses closeTime instead of openTime
+ * - Fix 2: time_tradingday is the trading day of the bar's last moment (closeTime - 1 ms)
  * - Fix 3: setTimezone() is display-only (does not affect computation)
  */
 import { describe, it, expect } from 'vitest';
@@ -121,13 +121,13 @@ describe('closeTime normalization — PineTS safety-net (array-based data)', () 
     });
 });
 
-// ── Fix 2: time_tradingday uses closeTime ──────────────────────────────
+// ── Fix 2: time_tradingday is the day of the bar's last moment ─────────
 
-describe('time_tradingday — uses close date (TV-compatible)', () => {
+describe('time_tradingday — trading day of the bar\'s last moment (TV-compatible)', () => {
     const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'W', null,
         new Date('2019-01-01').getTime(), new Date('2019-03-01').getTime());
 
-    it('returns midnight UTC of the close date, not open date', async () => {
+    it('returns midnight UTC of the weekly bar\'s last day, not its open date', async () => {
         const sourceCode = `
 //@version=6
 indicator("TradingDay Test")
@@ -138,14 +138,13 @@ plot(time_tradingday, "td")
         const _time = plots['time']?.data;
         const _td = plots['td']?.data;
 
-        // First bar opens 2019-01-07, closes 2019-01-14
-        // time_tradingday should be midnight of 2019-01-14
-        expect(_td[0].value).toBe(Date.UTC(2019, 0, 14, 0, 0, 0));
+        // First bar opens 2019-01-07, closes 2019-01-14: its last day is Sunday 2019-01-13
+        expect(_td[0].value).toBe(Date.UTC(2019, 0, 13, 0, 0, 0));
         // NOT the open date
         expect(_td[0].value).not.toBe(_time[0].value);
     });
 
-    it('time_tradingday equals midnight of closeTime date for each bar', async () => {
+    it('time_tradingday equals midnight of the date of closeTime - 1 ms for each bar', async () => {
         const sourceCode = `
 //@version=6
 indicator("TradingDay All Bars")
@@ -157,8 +156,8 @@ plot(time_tradingday, "td")
         const _td = plots['td']?.data;
 
         for (let i = 0; i < _tc.length; i++) {
-            // closeTime → get date → midnight of that date
-            const closeDate = new Date(_tc[i].value);
+            // the bar's last moment → its date → midnight of that date
+            const closeDate = new Date(_tc[i].value - 1);
             const expectedTD = Date.UTC(closeDate.getUTCFullYear(), closeDate.getUTCMonth(), closeDate.getUTCDate(), 0, 0, 0);
             expect(_td[i].value).toBe(expectedTD);
         }
@@ -173,15 +172,30 @@ plot(time_tradingday, "td")
         const { plots } = await pineTS.run(sourceCode);
         const tdData = plots['td']?.data;
 
-        // TV expected values for BTCUSDC Weekly, chart timezone UTC:
-        // Bar opens 2019-01-07 → time_tradingday = 2019-01-14 00:00 UTC = 1547424000000
-        // Bar opens 2019-01-14 → time_tradingday = 2019-01-21 00:00 UTC = 1548028800000
-        // Bar opens 2019-01-21 → time_tradingday = 2019-01-28 00:00 UTC = 1548633600000
-        // Bar opens 2019-01-28 → time_tradingday = 2019-02-04 00:00 UTC = 1549238400000
-        expect(tdData[0].value).toBe(1547424000000);
-        expect(tdData[1].value).toBe(1548028800000);
-        expect(tdData[2].value).toBe(1548633600000);
-        expect(tdData[3].value).toBe(1549238400000);
+        // TV values for BTCUSDC Weekly (the bar's Sunday; TV gives time_tradingday - time = 6 days):
+        // Bar opens 2019-01-07 → time_tradingday = 2019-01-13 00:00 UTC = 1547337600000
+        // Bar opens 2019-01-14 → time_tradingday = 2019-01-20 00:00 UTC = 1547942400000
+        // Bar opens 2019-01-21 → time_tradingday = 2019-01-27 00:00 UTC = 1548547200000
+        // Bar opens 2019-01-28 → time_tradingday = 2019-02-03 00:00 UTC = 1549152000000
+        expect(tdData[0].value).toBe(1547337600000);
+        expect(tdData[1].value).toBe(1547942400000);
+        expect(tdData[2].value).toBe(1548547200000);
+        expect(tdData[3].value).toBe(1549152000000);
+    });
+
+    it('is the bar\'s own day on a daily chart (TV: time_tradingday == time on 1D)', async () => {
+        const daily = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null,
+            new Date('2019-01-01').getTime(), new Date('2019-01-20').getTime());
+        const { plots } = await daily.run(`
+//@version=6
+indicator("TD daily")
+plot(time, "time")
+plot(time_tradingday, "td")
+`);
+        const _time = plots['time'].data;
+        const _td = plots['td'].data;
+        expect(_td.length).toBeGreaterThan(5);
+        for (let i = 0; i < _td.length; i++) expect(_td[i].value).toBe(_time[i].value);
     });
 });
 
@@ -243,8 +257,8 @@ plot(time_tradingday, "td")
 `;
         const { plots } = await pineTS.run(sourceCode);
         // time_tradingday uses syminfo.timezone (UTC), not chart timezone
-        // First bar opens 2019-01-07, closes 2019-01-14 → TD = midnight Jan 14
-        expect(plots['td'].data[0].value).toBe(Date.UTC(2019, 0, 14, 0, 0, 0));
+        // First bar opens 2019-01-07, closes 2019-01-14 → TD = midnight Jan 13 (its last day)
+        expect(plots['td'].data[0].value).toBe(Date.UTC(2019, 0, 13, 0, 0, 0));
     });
 
     it('weekofyear, month, year unchanged by setTimezone()', async () => {
@@ -286,23 +300,23 @@ plot(time_tradingday, "td")
         const _tc = plots['tc']?.data;
         const _td = plots['td']?.data;
 
-        // TV-validated values (BTCUSDC Weekly, UTC):
-        // Bar 2019-01-07: time=1546819200000, time_close=1547424000000, time_tradingday=1547424000000
-        // Bar 2019-01-14: time=1547424000000, time_close=1548028800000, time_tradingday=1548028800000
-        // Bar 2019-01-21: time=1548028800000, time_close=1548633600000, time_tradingday=1548633600000
+        // TV values (BTCUSDC Weekly, UTC); time_tradingday is the bar's last day, time_close - 1 day:
+        // Bar 2019-01-07: time=1546819200000, time_close=1547424000000, time_tradingday=1547337600000
+        // Bar 2019-01-14: time=1547424000000, time_close=1548028800000, time_tradingday=1547942400000
+        // Bar 2019-01-21: time=1548028800000, time_close=1548633600000, time_tradingday=1548547200000
         const expectedBars = [
-            { time: 1546819200000, tc: 1547424000000, td: 1547424000000 },
-            { time: 1547424000000, tc: 1548028800000, td: 1548028800000 },
-            { time: 1548028800000, tc: 1548633600000, td: 1548633600000 },
-            { time: 1548633600000, tc: 1549238400000, td: 1549238400000 },
-            { time: 1549238400000, tc: 1549843200000, td: 1549843200000 },
-            { time: 1549843200000, tc: 1550448000000, td: 1550448000000 },
-            { time: 1550448000000, tc: 1551052800000, td: 1551052800000 },
-            { time: 1551052800000, tc: 1551657600000, td: 1551657600000 },
-            { time: 1551657600000, tc: 1552262400000, td: 1552262400000 },
-            { time: 1552262400000, tc: 1552867200000, td: 1552867200000 },
-            { time: 1552867200000, tc: 1553472000000, td: 1553472000000 },
-            { time: 1553472000000, tc: 1554076800000, td: 1554076800000 },
+            { time: 1546819200000, tc: 1547424000000, td: 1547337600000 },
+            { time: 1547424000000, tc: 1548028800000, td: 1547942400000 },
+            { time: 1548028800000, tc: 1548633600000, td: 1548547200000 },
+            { time: 1548633600000, tc: 1549238400000, td: 1549152000000 },
+            { time: 1549238400000, tc: 1549843200000, td: 1549756800000 },
+            { time: 1549843200000, tc: 1550448000000, td: 1550361600000 },
+            { time: 1550448000000, tc: 1551052800000, td: 1550966400000 },
+            { time: 1551052800000, tc: 1551657600000, td: 1551571200000 },
+            { time: 1551657600000, tc: 1552262400000, td: 1552176000000 },
+            { time: 1552262400000, tc: 1552867200000, td: 1552780800000 },
+            { time: 1552867200000, tc: 1553472000000, td: 1553385600000 },
+            { time: 1553472000000, tc: 1554076800000, td: 1553990400000 },
         ];
 
         for (let i = 0; i < expectedBars.length; i++) {

@@ -546,7 +546,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const temp_3 = ta.pivothigh(p4, p5, "_ta2");
   const p6 = $.param(temp_3, undefined, 'p6');
   const p7 = $.param($.get(p6, 1), undefined, 'p7');
-  $.let.glb1_highUsePivot = $.init($.let.glb1_highUsePivot, fixnan(p7));
+  $.let.glb1_highUsePivot = $.init($.let.glb1_highUsePivot, fixnan(p7, "fixnan#0"));
 }`;
 
         expect(result).toBe(expected_code);
@@ -1036,6 +1036,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   $.const.glb1_aa = $.init($.const.glb1_aa, 1);
   function angle(src) {
     const $$ = $.peekCtx();
+    src = $.callParam(src, $$.id + "_cp_src");
     $$.const.fn1_rad2degree = $.init($$.const.fn1_rad2degree, 180 / Math.PI);
     const p0 = ta.param(14, undefined, $$.id + 'p0');
     const temp_1 = ta.atr(p0, $$.id + "_ta0");
@@ -1046,6 +1047,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   }
   function get_average(avg_src, avg_len) {
     const $$ = $.peekCtx();
+    avg_src = $.callParam(avg_src, $$.id + "_cp_avg_src");
     $$.let.fn2_bb = $.init($$.let.fn2_bb, 1);
     $$.let.fn2_cc = $.init($$.let.fn2_cc, close);
     $.set($$.let.fn2_cc, $.get(close, 1));
@@ -1246,6 +1248,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   $.const.glb1_aa = $.init($.const.glb1_aa, 1);
   function get_average(avg_src, avg_len) {
     const $$ = $.peekCtx();
+    avg_src = $.callParam(avg_src, $$.id + "_cp_avg_src");
     $$.let.fn1_bb = $.init($$.let.fn1_bb, 1);
     $$.let.fn1_cc = $.init($$.let.fn1_cc, close);
     $.set($$.let.fn1_cc, $.get(close, 1));

@@ -10,13 +10,8 @@ class RankRing {
     vals: number[] = [];
     slots: number[] = [];
 
-    constructor(
-        readonly length: number,
-        idx: number,
-        series: Series,
-    ) {
+    constructor(readonly length: number) {
         this.ring = new BarRing(length);
-        this.ring.prefill(idx, series);
         for (let s = 0; s < this.ring.size; s++) this.insert(this.ring.valueOf(s), s);
     }
 
@@ -43,32 +38,6 @@ class RankRing {
     }
 }
 
-/** Pearson correlation (x 100) between the bar order 1..n and the average ranks of `values` (oldest first). */
-function rankCorrelation(values: number[], length: number): number {
-    const order = values.map((_, i) => i).sort((a, b) => values[a] - values[b]);
-    const ranks = new Array(length);
-    for (let i = 0; i < length;) {
-        let j = i;
-        while (j + 1 < length && values[order[j + 1]] === values[order[i]]) j++;
-        const rank = (i + j) / 2 + 1;
-        for (let k = i; k <= j; k++) ranks[order[k]] = rank;
-        i = j + 1;
-    }
-    const mean = (length + 1) / 2;
-    let cov = 0;
-    let varX = 0;
-    let varY = 0;
-    for (let i = 0; i < length; i++) {
-        const dx = i + 1 - mean;
-        const dy = ranks[i] - mean;
-        cov += dx * dy;
-        varX += dx * dx;
-        varY += dy * dy;
-    }
-    if (varY === 0) return NaN;
-    return (cov / Math.sqrt(varX * varY)) * 100;
-}
-
 /**
  * Rank Correlation Index: Spearman's rank correlation between the last `length` values of `source`
  * and their bar order, scaled to -100..100 (100 = rose on every bar).
@@ -91,32 +60,24 @@ export function rci(context: any) {
         const stateKey = _callId || `rci_${length}`;
         const series = Series.from(source);
         let win: RankRing = context.taState[stateKey];
-        if (!win || win.length !== length) win = context.taState[stateKey] = new RankRing(length, context.idx, series);
+        if (!win || win.length !== length) win = context.taState[stateKey] = new RankRing(length);
 
         const idx = context.idx;
         const currentValue = series.get(0);
         win.write(idx, currentValue == null ? NaN : currentValue);
 
         // TradingView's first value comes one bar after the window is full (bar_index = length); a first
-        // call after that reads the bars before it (backfill)
+        // call after that reads 0 for the slots before it
         if (length < 2 || idx < length) return NaN;
 
         // slot s holds bar idx - d(s); d = length is the bar that left the window
         const ring = win.ring;
         const size = ring.size;
         const cur = ring.slot(idx);
-        let sortPath = false;
         for (let d = 0; d < length; d++) {
             const s = (cur - d + size) % size;
             const v = ring.readSlot(s, idx - d);
             if (Number.isNaN(v) || idx - d < 0) return NaN;
-            if (ring.stalePrefill(s, idx - d)) sortPath = true;
-        }
-        if (sortPath) {
-            const oldestFirst: number[] = [];
-            for (let d = length - 1; d >= 0; d--) oldestFirst.push(ring.read(idx - d));
-            const r = rankCorrelation(oldestFirst, length);
-            return Number.isNaN(r) ? NaN : context.precision(r);
         }
 
         const out = (cur + 1) % size;

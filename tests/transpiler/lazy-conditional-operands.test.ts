@@ -223,9 +223,10 @@ plot(array.size(arr), "n")`;
         const src6 = transpile(pine(6, POP_AND)).toString();
         expect(src5).toMatch(/\$\.pine\.math\.__and\(/);
         expect(src6).not.toMatch(/__and\(/);
-        // eager position (not inside a branch) keeps hoisting in both versions
+        // eager position (not inside a branch) keeps hoisting; v5 still evaluates both operands
+        // through __and, so a user function call on the right runs too
         const eager5 = transpile(pine(5, 'y = bar_index < 0 and ta.cum(1) > 0\nplot(y ? 1 : 0, "y")')).toString();
-        expect(eager5).not.toMatch(/__and\(/);
+        expect(eager5).toMatch(/\$\.pine\.math\.__and\(/);
         expect(eager5).toMatch(/const temp_\d+ = ta\.cum\(/);
     });
 });

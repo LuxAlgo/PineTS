@@ -6,6 +6,7 @@ import { PineArrayObject, PineArrayType } from './array/PineArrayObject';
 import { joinElements } from './array/format';
 import { formatFloat, formatNumberPattern, formatVolume } from './numberFormat';
 import { assertElementCount } from './limits';
+import { javaRegexFind } from './javaRegex';
 import { DEFAULT_TIME_FORMAT, formatTime, resolveTimeZone } from './formatTime';
 
 const FORMAT_TIME_PARAMS = ['time', 'format', 'timezone'];
@@ -77,6 +78,12 @@ export class Str {
     }
     tonumber(value: any) {
         const s = text(value).replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
+        // A run of digits and dots is read up to its second dot: "1.2.3" is 1.2 and "1..2" is 1.
+        if (/^[+-]?[\d.]+$/.test(s)) {
+            const second = s.indexOf('.', s.indexOf('.') + 1);
+            const head = second < 0 ? s : s.slice(0, second);
+            return DECIMAL_NUMBER.test(head) ? Number(head) : NaN;
+        }
         return DECIMAL_NUMBER.test(s) ? Number(s) : NaN;
     }
     lower(value: string) {
@@ -106,7 +113,11 @@ export class Str {
         const repl = text(replacement);
         const occ = Math.floor(Number(occurrence)) || 0;
 
-        if (tgt === '') return str;
+        // The empty target occurs before every character: ("abc", "", "X", 0) is "Xabc".
+        if (tgt === '') {
+            if (occ < 0 || occ > str.length) return str;
+            return str.slice(0, occ) + repl + str.slice(occ);
+        }
 
         let pos = 0;
         let found = 0;
@@ -120,7 +131,8 @@ export class Str {
             }
 
             found++;
-            pos = idx + tgt.length;
+            // Occurrences may overlap: the second "aa" of "aaaa" starts at index 1.
+            pos = idx + 1;
         }
     }
 
@@ -142,12 +154,16 @@ export class Str {
     }
     match(source: string, pattern: string) {
         // Pine returns the matched substring, or "" when nothing matches.
-        const m = text(source).match(new RegExp(text(pattern)));
-        return m ? m[0] : '';
+        // Java's regex flavor, as on TradingView (`(?i)`, possessive quantifiers, ...).
+        const found = javaRegexFind(text(pattern), text(source));
+        return found === null ? '' : found;
     }
 
     split(source: string, separator: string) {
-        return new PineArrayObject(text(source).split(text(separator)), PineArrayType.string, this.context);
+        const src = text(source);
+        // An empty source always gives one empty element, even with an empty separator.
+        const parts = src === '' ? [''] : src.split(text(separator));
+        return new PineArrayObject(parts, PineArrayType.string, this.context);
     }
     substring(source: string, begin_pos: number, end_pos: number) {
         return text(source).substring(begin_pos, end_pos);

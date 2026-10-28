@@ -232,11 +232,17 @@ if barstate.islast
         expect(linefills[0].color).toBe('#ff5733');
     });
 
-    it('linefill.new with color(na) via named arg preserves null as the na marker', async () => {
+    // color(na) is na in v6, so it round-trips as `null` and renderers skip painting the element (used as
+    // an invisible positional anchor in some published scripts; regression guard for commit 804b45f). In
+    // v5 TradingView makes color(na) transparent black, which is just as invisible.
+    it.each([
+        [6, null],
+        [5, '#00000000'],
+    ])('linefill.new with color(na) via named arg is invisible (v%i)', async (version, expected) => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, sDate, eDate);
 
         const code = `
-//@version=5
+//@version=${version}
 indicator("Linefill Na Color", overlay=true)
 var line l1 = na
 var line l2 = na
@@ -253,10 +259,6 @@ if barstate.islast
         expect(linefills.length).toBeGreaterThan(0);
 
         const lf = linefills[linefills.length - 1];
-        // color(na) must round-trip as `null` so renderers can detect
-        // "no color requested" and skip painting the element (used as an
-        // invisible positional anchor in some published scripts).
-        // Regression guard for commit 804b45f.
-        expect(lf.color).toBeNull();
+        expect(lf.color).toBe(expected);
     });
 });

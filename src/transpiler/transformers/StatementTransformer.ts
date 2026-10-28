@@ -4,7 +4,7 @@
 import * as walk from 'acorn-walk';
 import ScopeManager from '../analysis/ScopeManager';
 import { ASTFactory, CONTEXT_NAME } from '../utils/ASTFactory';
-import { NAMESPACES_LIKE, FACTORY_METHODS } from '../settings';
+import { NAMESPACES_LIKE, FACTORY_METHODS, VAR_INIT_MUTATING_METHODS } from '../settings';
 import {
     transformIdentifier,
     transformCallExpression,
@@ -503,6 +503,14 @@ export function walkInitExpression(expr: any, scopeManager: ScopeManager): void 
                     node.consequent = newConsequent;
                 }
             },
+            // A loop used as a value (`x = for i = 0 to 4 … close[i]`) lives in an IIFE: its counter
+            // must be registered as a loop variable, or `close[i]` reads a global `i` instead.
+            ForStatement(node: any, state: any, c: any) {
+                transformForStatement(node, scopeManager, (n: any) => c(n, { parent: node, insideIIFE: state.insideIIFE }));
+            },
+            WhileStatement(node: any, state: any, c: any) {
+                transformWhileStatement(node, scopeManager, (n: any) => c(n, { parent: node, insideIIFE: state.insideIIFE }));
+            },
             AssignmentExpression(node: any, state: any, c: any) {
                 // Only transform assignment expressions inside IIFEs (e.g., while/for-as-expression)
                 // Don't transform assignments used as sub-expressions in normal initializers
@@ -697,7 +705,8 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
 
                         if (namespaceName && methodName) {
                             const methodPath = `${namespaceName}.${methodName}`;
-                            if (FACTORY_METHODS.includes(methodPath)) {
+                            const isWholeInitializer = decl.init?.type === 'Identifier' && decl.init.name === d.id?.name;
+                            if (FACTORY_METHODS.includes(methodPath) || (isWholeInitializer && VAR_INIT_MUTATING_METHODS.includes(methodPath))) {
                                 // Wrap: `const temp = call(...)` → `const temp = () => call(...)`
                                 d.init = {
                                     type: 'ArrowFunctionExpression',
@@ -807,7 +816,7 @@ export function transformVariableDeclaration(varNode: any, scopeManager: ScopeMa
                 },
                 SwitchStatement(node: any, state: ScopeManager, c: any) {
                     node.discriminant.parent = node;
-                    c(node.discriminant, state);
+                    transformSwitchDiscriminant(node, state);
                     node.cases.forEach((caseNode: any) => {
                         caseNode.parent = node;
                         c(caseNode, state);
@@ -1151,6 +1160,20 @@ export function transformExpression(node: any, scopeManager: ScopeManager): void
             }
         },
     });
+}
+
+/**
+ * Lowers a `switch` statement's discriminant like an `if` test: a built-in series in it
+ * (`switch bar_index % 5`) is read at the current bar; walked as a plain expression it stayed a
+ * Series object and no case ever matched.
+ */
+export function transformSwitchDiscriminant(node: any, scopeManager: ScopeManager): void {
+    scopeManager.pushScope('if');
+    try {
+        transformExpression(node.discriminant, scopeManager);
+    } finally {
+        scopeManager.popScope();
+    }
 }
 
 export function transformIfStatement(node: any, scopeManager: ScopeManager, c: any): void {
@@ -1562,7 +1585,7 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
                     },
                     SwitchStatement(node: any, state: ScopeManager, c: any) {
                         node.discriminant.parent = node;
-                        c(node.discriminant, state);
+                        transformSwitchDiscriminant(node, state);
                         node.cases.forEach((caseNode: any) => {
                             caseNode.parent = node;
                             c(caseNode, state);
@@ -1606,6 +1629,71 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
     }
 }
 
+/**
+ * A parameter whose history the (transformed) body reads, `$.get(s, k)` with `k` other than 0, gets its
+ * own series at the call site, advanced on each bar the function runs: TradingView reads `s[1]` as the
+ * value of the previous call (a function called on even bars only reads close[2] there).
+ */
+function localizeParamHistory(node: any): void {
+    const params: string[] = node.params
+        .map((p: any) => (p.type === 'AssignmentPattern' ? p.left?.name : p.type === 'Identifier' ? p.name : undefined))
+        .filter((n: any) => typeof n === 'string');
+    if (!params.length) return;
+    const names = new Set(params);
+    const read = new Set<string>();
+    // transformed nodes may point back to their parent
+    const seen = new Set<any>();
+    const visit = (n: any): void => {
+        if (!n || typeof n !== 'object' || seen.has(n)) return;
+        seen.add(n);
+        if (Array.isArray(n)) {
+            n.forEach(visit);
+            return;
+        }
+        if (
+            n.type === 'CallExpression' &&
+            n.callee?.type === 'MemberExpression' &&
+            n.callee.object?.type === 'Identifier' &&
+            n.callee.object.name === CONTEXT_NAME &&
+            n.callee.property?.name === 'get' &&
+            n.arguments[0]?.type === 'Identifier' &&
+            names.has(n.arguments[0].name) &&
+            !(n.arguments[1]?.type === 'Literal' && n.arguments[1].value === 0)
+        ) {
+            read.add(n.arguments[0].name);
+        }
+        for (const key of Object.keys(n)) if (key !== 'parent' && key !== 'loc') visit(n[key]);
+    };
+    visit(node.body.body);
+    if (!read.size) return;
+    const rebinds = params
+        .filter((name) => read.has(name))
+        .map((name) => {
+            const key = {
+                type: 'BinaryExpression',
+                operator: '+',
+                left: ASTFactory.createMemberExpression(ASTFactory.createIdentifier('$$'), ASTFactory.createIdentifier('id')),
+                right: { type: 'Literal', value: `_cp_${name}`, raw: JSON.stringify(`_cp_${name}`) },
+            };
+            const stmt: any = {
+                type: 'ExpressionStatement',
+                expression: {
+                    type: 'AssignmentExpression',
+                    operator: '=',
+                    left: ASTFactory.createIdentifier(name),
+                    right: ASTFactory.createCallExpression(
+                        ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('callParam')),
+                        [ASTFactory.createIdentifier(name), key],
+                    ),
+                },
+            };
+            stmt._skipTransformation = true;
+            return stmt;
+        });
+    // after `const $$ = $.peekCtx()`
+    node.body.body.splice(1, 0, ...rebinds);
+}
+
 export function transformFunctionDeclaration(node: any, scopeManager: ScopeManager, c: any): void {
     // Note: We don't register parameters here anymore, that's done in the AnalysisPass.
 
@@ -1629,6 +1717,18 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
     if (node.body && node.body.type === 'BlockStatement') {
         // Inject the _callId declaration at the start of the body
         node.body.body.unshift(callIdDecl);
+
+        // A default naming a script-declared value (an enum member such as `Sig.dn`) is resolved in
+        // the enclosing scope, like the same expression at a call site. Built-in defaults such as
+        // `close` stay raw so the parameter keeps the series' history.
+        for (const param of node.params) {
+            const value = param.type === 'AssignmentPattern' ? param.right : null;
+            let root = value;
+            while (root?.type === 'MemberExpression') root = root.object;
+            if (value?.type === 'MemberExpression' && root?.type === 'Identifier' && !scopeManager.isContextBound(root.name)) {
+                c(value, scopeManager);
+            }
+        }
 
         scopeManager.pushScope('fn');
 
@@ -1687,6 +1787,7 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
         scopeManager.enterFunctionHoistingRoot();
         c(node.body, scopeManager);
         scopeManager.exitFunctionHoistingRoot();
+        localizeParamHistory(node);
 
         // Clean up: remove function parameters from local series vars after exiting function scope
         node.params.forEach((param: any) => {

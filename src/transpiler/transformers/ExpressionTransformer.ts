@@ -239,7 +239,11 @@ function udtFieldHistory(chain: any, baseName: string, baseRef: any, index: any,
     const [scopedName, kind] = scopeManager.getVariable(baseName);
     if (!isParam && kind !== 'var' && kind !== 'varip') {
         cursor.object = ASTFactory.createGetCall(baseRef, index);
-        return chain;
+        if (cursor === chain) return chain;
+        // Before the instance's first bar `$.get(<base>, N)` is na: a nested field of it is na too
+        // (`f.inner.px[1]` on the first bar), not a TypeError on `undefined.px`.
+        for (let hop: any = chain; hop !== cursor; hop = hop.object) hop.optional = true;
+        return { type: 'LogicalExpression', operator: '??', left: { type: 'ChainExpression', expression: chain }, right: ASTFactory.createIdentifier('NaN') };
     }
     cursor.object = ASTFactory.createGetCall(baseRef, 0);
     const paramId = scopeManager.generateParamId();
@@ -480,13 +484,16 @@ export function transformIdentifier(node: any, scopeManager: ScopeManager): void
 // Objects of `[]` that evaluate to a per-bar value rather than a series.
 export const HISTORY_VALUE_OBJECT_TYPES = ['CallExpression', 'BinaryExpression', 'LogicalExpression', 'ConditionalExpression', 'UnaryExpression'];
 
-/** A built-in variable implemented as a namespace function: `ta.nvi`, `strategy.closedtrades`. */
+/**
+ * A built-in variable implemented as a namespace function (`ta.nvi`, `strategy.closedtrades`)
+ * or as a getter (`barstate.isconfirmed`).
+ */
 export function isNamespaceVariable(node: any, scopeManager: ScopeManager): boolean {
     return (
         node?.type === 'MemberExpression' &&
         !node.computed &&
         node.object?.type === 'Identifier' &&
-        KNOWN_NAMESPACES.includes(node.object.name) &&
+        (KNOWN_NAMESPACES.includes(node.object.name) || node.object.name === 'barstate') &&
         scopeManager.isContextBound(node.object.name)
     );
 }
@@ -548,12 +555,16 @@ function lowerHistoryOffset(offset: any, scopeManager: ScopeManager): any {
  */
 function namespaceVariableHistory(variable: any, offset: any, scopeManager: ScopeManager): any {
     const ns = variable.object.name;
-    const call: any = {
-        type: 'CallExpression',
-        callee: ASTFactory.createMemberExpression(ASTFactory.createIdentifier(ns), ASTFactory.createIdentifier(variable.property.name)),
-        arguments: ns === 'ta' ? [scopeManager.getNextTACallId()] : [],
-        _transformed: true,
-    };
+    const member = ASTFactory.createMemberExpression(ASTFactory.createIdentifier(ns), ASTFactory.createIdentifier(variable.property.name));
+    const call: any =
+        ns === 'barstate'
+            ? member
+            : {
+                  type: 'CallExpression',
+                  callee: member,
+                  arguments: ns === 'ta' ? [scopeManager.getNextTACallId()] : [],
+                  _transformed: true,
+              };
     const seriesName = scopeManager.generateParamId();
     const record = {
         type: 'CallExpression',
@@ -1073,7 +1084,7 @@ function getParamFromConditionalExpression(node: any, scopeManager: ScopeManager
         scopeManager.addLocalSeriesVar(tempVarName);
         const variableDecl = ASTFactory.createVariableDeclaration(tempVarName, paramCall);
         scopeManager.addHoistedStatement(variableDecl);
-        return ASTFactory.createIdentifier(tempVarName);
+        return hoistedArgRef(tempVarName);
     }
 
     return paramCall;
@@ -1257,6 +1268,18 @@ function scopeMemberChainBase(member: any, scopeManager: ScopeManager): void {
 }
 
 const isUndefinedArg = (arg: any) => arg?.type === 'Identifier' && arg.name === 'undefined';
+
+/**
+ * Reference to a hoisted argument series (`p1`). It is passed as the series itself: walkers that revisit
+ * call arguments (a function's return expression) must not unwrap it to `$.get(p1, 0)`, or the callee's
+ * `s[1]` reads the current value.
+ */
+function hoistedArgRef(name: string): any {
+    const ref = ASTFactory.createIdentifier(name);
+    ref._skipTransformation = true;
+    ref._arrayAccessed = true;
+    return ref;
+}
 
 export function transformFunctionArgument(arg: any, namespace: string, scopeManager: ScopeManager): any {
     // Handle binary expressions (arithmetic operations)
@@ -1486,7 +1509,7 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             scopeManager.addLocalSeriesVar(tempVarName); // Mark as local series
             const variableDecl = ASTFactory.createVariableDeclaration(tempVarName, paramCall);
             scopeManager.addHoistedStatement(variableDecl);
-            return ASTFactory.createIdentifier(tempVarName);
+            return hoistedArgRef(tempVarName);
         }
 
         return paramCall;
@@ -1529,9 +1552,24 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
             const variableDecl = ASTFactory.createVariableDeclaration(tempVarName, callExpr);
             scopeManager.addOuterHoistedStatement(variableDecl);
 
-            // Replace the argument with a reference to the hoisted variable
-            Object.assign(arg, ASTFactory.createIdentifier(tempVarName));
-            return arg;
+            // request.security finds its expression by the param name of its argument, so the value
+            // must arrive through `request.param` like every other operand (issue #257).
+            if (namespace !== 'request') {
+                Object.assign(arg, ASTFactory.createIdentifier(tempVarName));
+                return arg;
+            }
+            const paramId = scopeManager.generateParamId();
+            const paramCall = {
+                type: 'CallExpression',
+                callee: ASTFactory.createMemberExpression(ASTFactory.createIdentifier(namespace), ASTFactory.createIdentifier('param')),
+                arguments: [ASTFactory.createIdentifier(tempVarName), undefinedArg(), makeParamNameArg(scopeManager, paramId)],
+                _transformed: true,
+                _isParamCall: true,
+            };
+            if (scopeManager.shouldSuppressHoisting()) return paramCall;
+            scopeManager.addLocalSeriesVar(paramId);
+            scopeManager.addHoistedStatement(ASTFactory.createVariableDeclaration(paramId, paramCall));
+            return hoistedArgRef(paramId);
         }
 
         // Handle property access like trade.entry
@@ -1648,7 +1686,7 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                 scopeManager.addLocalSeriesVar(tempVarName); // Prevent transformation to $.let.pX
                 const variableDecl = ASTFactory.createVariableDeclaration(tempVarName, paramCall);
                 scopeManager.addHoistedStatement(variableDecl);
-                return ASTFactory.createIdentifier(tempVarName);
+                return hoistedArgRef(tempVarName);
             }
 
             return paramCall;
@@ -1679,7 +1717,7 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
         scopeManager.addLocalSeriesVar(tempVarName);
         const variableDecl = ASTFactory.createVariableDeclaration(tempVarName, paramCall);
         scopeManager.addHoistedStatement(variableDecl);
-        return ASTFactory.createIdentifier(tempVarName);
+        return hoistedArgRef(tempVarName);
     }
 
     return paramCall;
@@ -2031,6 +2069,11 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
             });
         }
 
+        // fixnan keeps the last non-na value it saw at its call site, so it needs its own key.
+        if (node.callee.name === 'fixnan' && scopeManager.isContextBound('fixnan')) {
+            node.arguments.push(scopeManager.getNextBareCallsiteId('fixnan'));
+        }
+
         // Inject unique call ID for the function call only if it is a user-defined function
         // Built-in functions (like na, nz, bool) are context-bound and should not receive a call ID
         if (!scopeManager.isContextBound(node.callee.name)) {
@@ -2161,10 +2204,13 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
         // statically, and the name either collides with a built-in member or has several
         // overloads. Decide from the receiver's runtime type: a user method whose declared
         // receiver type matches wins, anything else keeps the built-in behaviour.
+        // Static types stop at the base (`array`), so overloads on `array<float>` and `array<int>` both
+        // match statically; the array's element type decides at run time.
+        const sameBaseArrayOverloads =
+            staticReceiverType === 'array' && candidateJsNames.filter((js) => receiverTypeCompatible(staticReceiverType, declaredReceiverTypeOf(js))).length > 1;
         const dispatchAtRuntime =
-            staticReceiverType === undefined &&
-            !isReceiverUdtInstance &&
-            (BUILTIN_METHOD_NAMES.has(methodName) || candidateJsNames.length > 1);
+            (staticReceiverType === undefined && !isReceiverUdtInstance && (BUILTIN_METHOD_NAMES.has(methodName) || candidateJsNames.length > 1)) ||
+            sameBaseArrayOverloads;
 
         if (
             isUserFunction &&

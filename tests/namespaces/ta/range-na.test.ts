@@ -158,9 +158,11 @@ describe('ta.range skips na (TradingView parity)', () => {
         expect(hl5[POS_PERIOD + 5]).toBe(values('r5')[POS_PERIOD + 5]);
     });
 
-    it('backfills from the source history when first called late (barstate.islast)', async () => {
+    it('has no history before its first call (barstate.islast): na after one call', async () => {
+        // TradingView: ta.range(close, 5) first called on bar 9 is na until its fifth call (bar 13)
         const { values } = await run();
         const last = values('last5').length - 1;
-        expect(values('last5')[last]).toBe(values('r5')[last]);
+        expect(Number.isNaN(values('last5')[last])).toBe(true);
+        expect(Number.isNaN(values('r5')[last])).toBe(false);
     });
 });

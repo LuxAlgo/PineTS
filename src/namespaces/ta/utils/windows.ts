@@ -225,11 +225,10 @@ export const BACKFILL_FROM_SOURCE: PushOptions = {
  * committed on the previous bar is never copied; the current call's value is kept aside and only added
  * when the next bar starts, so a bar evaluated again (live bar) starts from the same window.
  *
- * `push` adds a value and drops the oldest beyond `cap`. A window still short of `cap` values, on a call
- * made once the function has been called `cap` times or the chart has `cap` bars, is completed by
- * `backfill` (reading the source history): a function called inside an `if` or only on the last bar
- * needs that. Such a call, like one with a `cap` smaller than the window, rebuilds the window
- * (O(cap)); every other call is O(1).
+ * `push` adds a value and drops the oldest beyond `cap`. A window still short of `cap` values once the
+ * function has been called `cap` times (its length grew) is completed by `backfill` (reading the source
+ * history). Such a call, like one with a `cap` smaller than the window, rebuilds the window (O(cap));
+ * every other call is O(1).
  *
  * With `carry`, the window holds one value per bar rather than per call: a bar on which the function
  * was not called (the call is in a local block that did not run) repeats the value of the last call.
@@ -294,7 +293,9 @@ export class CallWindow {
         const calls = this.calls + 1;
         this.tCalls = calls;
         const n = this.ring.size;
-        const fill = !!opts.backfill && Math.min(n + 1, cap) < cap && (calls >= cap || idx >= cap - 1);
+        // Only a window that held its calls and is now too short (a series length that grew) reads the
+        // source; a function first called on a later bar starts from its calls alone, as on TradingView.
+        const fill = !!opts.backfill && Math.min(n + 1, cap) < cap && calls >= cap;
         if (n <= cap && !fill) {
             const evict = n + 1 > cap;
             if (evict && opts.dropped) opts.dropped(this.ring.oldest(), this);

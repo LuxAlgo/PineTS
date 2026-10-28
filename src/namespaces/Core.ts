@@ -269,7 +269,22 @@ export class Core {
         const rep = Series.from(replacement).get(0);
         return (val === null || val === undefined || (typeof val === 'number' && isNaN(val))) ? rep : val;
     }
-    fixnan(series: any) {
+    fixnan(series: any, callsite?: string) {
+        // fixnan carries the last non-na value seen by its own call site, so a call inside a
+        // conditional block only knows the bars on which the block ran.
+        if (typeof callsite === 'string') {
+            const val = Series.from(series).get(0);
+            const isNa = val === null || val === undefined || (typeof val === 'number' && isNaN(val));
+            const taState = (this.context.taState ??= {});
+            const key = `fixnan:${this.context.peekId?.() ?? ''}|${callsite}`;
+            const state = (taState[key] ??= { idx: -1, committed: NaN, current: NaN });
+            if (this.context.idx > state.idx) {
+                state.committed = state.current;
+                state.idx = this.context.idx;
+            }
+            state.current = isNa ? state.committed : val;
+            return state.current;
+        }
         const _s = Series.from(series);
         for (let i = 0; i < _s.length; i++) {
             const val = _s.get(i);
@@ -364,11 +379,14 @@ export class Core {
         // Overload 1: timestamp(dateString)
         // Parse in exchange timezone (not system local time) to match TradingView behaviour.
         if (parsed.dateString !== undefined) {
-            const ds = parsed.dateString.trim();
+            let ds = parsed.dateString.trim();
             // If the string already carries explicit timezone info, honour it
             if (/[Zz]$/.test(ds) || /[+-]\d{2}:?\d{2}$/.test(ds)) {
                 return new Date(ds).getTime();
             }
+            // A `GMT+5` / `UTC-3:30` suffix: the date before it is in that zone.
+            const zoneSuffix = ds.match(/\s+((?:GMT|UTC)[+-]\d{1,2}(?::?\d{2})?)$/i);
+            if (zoneSuffix) ds = ds.slice(0, zoneSuffix.index).trim();
             // Force UTC parse (normalize "YYYY-MM-DD HH:MM" → "YYYY-MM-DDTHH:MMZ")
             // then extract UTC components and reinterpret in exchange timezone.
             const isoStr = ds.includes('T') ? ds + 'Z' : ds.replace(/\s+/, 'T') + 'Z';
@@ -376,7 +394,7 @@ export class Core {
             // Non-ISO formats ("04 Mar 2024 00:00"): read the components as UTC, not machine-local time.
             if (isNaN(utcDate.getTime())) utcDate = new Date(`${ds} UTC`);
             if (!isNaN(utcDate.getTime())) {
-                const timezone = this.context.pine?.syminfo?.timezone || 'UTC';
+                const timezone = zoneSuffix ? zoneSuffix[1] : this.context.pine?.syminfo?.timezone || 'UTC';
                 return this._timestampFromComponents(
                     timezone,
                     utcDate.getUTCFullYear(),
@@ -423,7 +441,7 @@ export class Core {
         }
 
         // Try parsing as UTC/GMT offset: "UTC+5", "UTC-03:30", "GMT+5:30"
-        const offsetMatch = tzNorm.match(/^(?:UTC|GMT)([+-])(\d{1,2})(?::(\d{2}))?$/i);
+        const offsetMatch = tzNorm.match(/^(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?$/i);
         if (offsetMatch) {
             const sign = offsetMatch[1] === '+' ? 1 : -1;
             const offsetHours = parseInt(offsetMatch[2], 10);
@@ -487,6 +505,8 @@ export class Core {
     bool(series: any) {
         const val = Series.from(series).get(0);
         if (typeof val === 'boolean') return val;
+        // A v5 bool can be na, so bool(na) stays na there; v6 bools are never na.
+        if ((val === null || val === undefined || (typeof val === 'number' && isNaN(val))) && this.context?.pineVersion < 6) return NaN;
         return val !== null && val !== undefined && !isNaN(val) && val !== 0;
     }
     int(series: any) {

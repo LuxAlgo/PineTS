@@ -151,7 +151,8 @@ plot(prevTr(), "fnPrevTr")
 plot(ta.tr[n] + 0, "varOffset")`);
         const tr = (k: number) => trueRange(bars, k);
         expectSeries(get('trPrev2x'), (k) => 2 * tr(k - 1), 2);
-        expectSeries(get('obvDiff'), (k) => Math.sign(bars[k].close - bars[k - 1].close) * bars[k].volume, 1);
+        // ta.obv is na on the first bar (its first change is na), so the difference starts on bar 2.
+        expectSeries(get('obvDiff'), (k) => Math.sign(bars[k].close - bars[k - 1].close) * bars[k].volume, 2);
         expectSeries(get('trUp'), (k) => (tr(k) > tr(k - 1) ? 1 : 0), 2);
         expectSeries(get('fnPrevTr'), (k) => tr(k - 1), 2);
         expectSeries(get('varOffset'), (k) => tr(k - 2), 3);

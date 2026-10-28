@@ -332,7 +332,8 @@ export class LineHelper {
         if (!id || id._deleted) return NaN;
         if (id.xloc !== 'bi') return NaN;
         const dx = id.x2 - id.x1;
-        if (dx === 0) return id.y1;
+        // A vertical (or single-point) line has no price at any x (TV: na, even at its own x).
+        if (dx === 0) return NaN;
         // Linear interpolation/extrapolation (line treated as extend.both per Pine docs)
         return id.y1 + ((x - id.x1) / dx) * (id.y2 - id.y1);
     }

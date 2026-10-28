@@ -14,7 +14,7 @@ export function concat(context: Context) {
             for (let i = 0; i < rows2; i++) {
                 id.matrix.push([...id2.matrix[i]]);
             }
-            return;
+            return id;
         }
         
         // If cols match, append rows
@@ -24,12 +24,13 @@ export function concat(context: Context) {
         if (cols1 !== cols2 && rows2 > 0) {
             // Error or ignore? Pine script throws runtime error.
             console.error(`matrix.concat: Column count mismatch ${cols1} vs ${cols2}`);
-            return;
+            return id;
         }
 
         for (let i = 0; i < rows2; i++) {
             id.matrix.push([...id2.matrix[i]]);
         }
+        // TradingView returns the first matrix itself, so the result aliases id1.
+        return id;
     };
 }
-
