@@ -85,6 +85,29 @@ plot(close)
         expect(all.filter((a) => a.bar === 10).map((a) => a.type)).toEqual(['alert', 'alertcondition']);
     });
 
+    // TradingView (live, process_orders_on_close): the fill and its alert come at the bar close (+60 s), not on the
+    // bar's first tick; a strategy without calc_on_every_tick runs on the live bar only when it closes.
+    it('process_orders_on_close fills a live bar order at its close, not on its ticks', async () => {
+        const pine = new PineTS(liveProvider() as any, 'TEST', '1');
+        await pine.ready();
+        const ctx: any = await pine.run(`//@version=6
+strategy("poc", process_orders_on_close = true, initial_capital = 1000000)
+//@strategy_alert_message {{strategy.order.action}} {{strategy.order.price}} {{strategy.order.alert_message}}
+if bar_index == 9
+    strategy.entry("L", strategy.long, qty = 1, alert_message = "in")
+`);
+        const fills = () => brief(ctx.alerts.filter((a: any) => a.type === 'order_fill'));
+        expect(fills()).toEqual([]);
+        expect(ctx.strategy.opentrades.length).toBe(0);
+        expect(await pine.updateTail(ctx)).toBe(true); // tick on the forming bar
+        expect(fills()).toEqual([]);
+        expect(ctx.strategy.opentrades.length).toBe(0);
+        expect(await pine.updateTail(ctx)).toBe(true); // the bar closes
+        expect(fills()).toEqual([{ type: 'order_fill', message: 'buy 111 in', bar: 9 }]);
+        expect(ctx.strategy.opentrades.length).toBe(1);
+        expect(ctx.strategy.opentrades[0].entry_price).toBe(111);
+    });
+
     it('historical bars still fire nothing in realtime mode', async () => {
         const { all } = await runWithUpdates(`//@version=6
 indicator("history")
