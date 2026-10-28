@@ -17,7 +17,7 @@ export function change(context: any) {
         // The value `length` bars back (in a local block, a skipped bar repeating the last call's value)
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `change_${length}`;
-        const carry: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, true, context.executionBudget));
+        const carry: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, context.executionBudget));
         const series = Series.from(source);
         const currentValue = series.get(0);
         carry.push(context.idx, currentValue, length, series, context.executionBudget);

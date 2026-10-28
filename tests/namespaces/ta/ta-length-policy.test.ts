@@ -109,27 +109,28 @@ describe('ta length resource policy', () => {
         expect(() => ta.pivothigh(source, 1, 0)).toThrow(PineRuntimeError);
     });
 
-    it('charges completed-window scans, sorted backfills, and percentile rebuilds', () => {
-        const source = Array.from({ length: 201 }, (_, i) => 201 - i);
-        const makeTa = (limit: number) => {
-            const ctx = context(new ExecutionBudget(500_000, { maxWorkUnits: limit }));
-            ctx.idx = 200;
-            return new TechnicalAnalysis(ctx);
-        };
+    // A window holds only the function's own calls, so it is filled by calling the function on every bar.
+    const everyBar = (bars: number, limit: number, call: (ta: TechnicalAnalysis, source: Series) => any) => {
+        const source = Array.from({ length: bars }, (_, i) => bars - i);
+        const ctx = context(new ExecutionBudget(500_000, { maxWorkUnits: limit }));
+        const ta = new TechnicalAnalysis(ctx);
+        for (let i = 0; i < bars; i++) {
+            ctx.idx = i;
+            call(ta, new Series(source.slice(0, i + 1)));
+        }
+        return { ctx, ta, source };
+    };
 
-        expect(() => makeTa(300).bb(source, 100, 2)).toThrow(PineRuntimeError);
-        expect(() => makeTa(2_000).median(source, 100)).toThrow(PineRuntimeError);
-        expect(() => makeTa(2_000).percentile_linear_interpolation(source, 100, 50)).toThrow(PineRuntimeError);
+    it('charges completed-window scans, sorted-window updates, and percentile rebuilds', () => {
+        expect(() => everyBar(201, 10_000, (ta, s) => ta.bb(s, 100, 2))).toThrow(PineRuntimeError);
+        expect(() => everyBar(201, 10_000, (ta, s) => ta.median(s, 100))).toThrow(PineRuntimeError);
+        expect(() => everyBar(201, 10_000, (ta, s) => ta.percentile_linear_interpolation(s, 100, 50))).toThrow(PineRuntimeError);
     });
 
     it('charges a repeated same-bar sorted-window rollback', () => {
-        const source = Array.from({ length: 101 }, (_, i) => 101 - i);
-        const ctx = context(new ExecutionBudget(500_000, { maxWorkUnits: 10_000 }));
-        ctx.idx = 100;
-        const ta = new TechnicalAnalysis(ctx);
-        ta.median(source, 50, 'same-bar');
+        const { ctx, ta, source } = everyBar(101, 100_000, (t, s) => t.median(s, 50, 'same-bar'));
         const first = ctx.executionBudget.workUnits;
-        ta.median(source, 50, 'same-bar');
+        ta.median(new Series(source), 50, 'same-bar');
         expect(ctx.executionBudget.workUnits).toBeGreaterThan(first);
     });
 

@@ -16,7 +16,7 @@ export function dev(context: any) {
         // gives na.
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `dev_${length}`;
-        const bars: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, true, context.executionBudget));
+        const bars: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, context.executionBudget));
         bars.push(context.idx, series.get(0), length, series, context.executionBudget);
         const sma = nonNaWindow(context, `${stateKey}_mean`, series, length);
 

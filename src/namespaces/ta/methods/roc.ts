@@ -11,7 +11,7 @@ export function roc(context: any) {
         // a skipped bar repeating the last call's value)
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `roc_${length}`;
-        const carry: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, true, context.executionBudget));
+        const carry: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, context.executionBudget));
         const series = Series.from(source);
         const currentValue = series.get(0);
         carry.push(context.idx, currentValue, length, series, context.executionBudget);

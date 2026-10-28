@@ -40,7 +40,7 @@ export function alma(context: any) {
 
         if (!context.taState[stateKey]) {
             context.taState[stateKey] = {
-                carry: new CarryHistory(0, undefined, true, context.executionBudget),
+                carry: new CarryHistory(0, undefined, context.executionBudget),
                 // Weights for `weightsKey`; a series length recomputes them
                 weightsKey: '',
                 weights: [],

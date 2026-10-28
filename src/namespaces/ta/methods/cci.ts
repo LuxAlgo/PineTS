@@ -12,7 +12,7 @@ export function cci(context: any) {
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `cci_${length}`;
-        const bars: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, true, context.executionBudget));
+        const bars: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, context.executionBudget));
 
         const currentValue = series.get(0);
         bars.push(context.idx, currentValue, length, series, context.executionBudget);

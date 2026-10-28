@@ -20,11 +20,21 @@ function baseType(pineType: string): string {
     return parts.length ? parts[parts.length - 1] : '';
 }
 
+/** Element type of an array type string: `array<int>` / `int[]` -> `int`; undefined without one. */
+function arrayElementType(pineType: string): string | undefined {
+    const s = pineType.trim();
+    if (s.endsWith('[]')) return baseType(s.slice(0, -2));
+    const m = /^(?:\S+\s+)?array\s*<\s*(.+)\s*>$/.exec(s);
+    return m ? baseType(m[1]) : undefined;
+}
+
+const PRIMITIVE_ELEMENT_TYPES = new Set(['int', 'float', 'bool', 'string', 'color']);
+
 /**
  * Whether a user `method` declared on `fn.__pineReceiverType__` applies to `recv`, judged from the
  * runtime value. `udtName` is set when the declared receiver is a user type (the transpiler passes
- * it), which is how two user types with the same method name are told apart.
- * `int[]` and `float[]` cannot be told apart at runtime; both are just arrays.
+ * it), which is how two user types with the same method name are told apart. An array tells
+ * `array<int>` from `array<float>` by the element type it was created with (when it has one).
  */
 export function receiverMatchesMethod(fn: any, udtName: string | null, recv: any): boolean {
     if (udtName) return recv instanceof PineTypeObject && recv._udt?.__name__ === udtName;
@@ -43,8 +53,13 @@ export function receiverMatchesMethod(fn: any, udtName: string | null, recv: any
             return recv instanceof LinefillObject;
         case 'table':
             return recv instanceof TableObject;
-        case 'array':
-            return recv instanceof PineArrayObject || Array.isArray(recv);
+        case 'array': {
+            if (Array.isArray(recv)) return true;
+            if (!(recv instanceof PineArrayObject)) return false;
+            const want = arrayElementType(declared);
+            const have = recv.type as string;
+            return !want || !PRIMITIVE_ELEMENT_TYPES.has(want) || !PRIMITIVE_ELEMENT_TYPES.has(have) || want === have;
+        }
         case 'map':
             return recv instanceof PineMapObject;
         case 'matrix':

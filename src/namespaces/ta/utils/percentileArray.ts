@@ -36,7 +36,7 @@ export class PercentileArray {
     private lastTick: unknown = undefined;
 
     constructor(private readonly budget?: ExecutionBudget) {
-        this.carry = new CarryHistory(0, undefined, true, budget);
+        this.carry = new CarryHistory(0, undefined, budget);
     }
 
     /**

@@ -2220,10 +2220,13 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
         // statically, and the name either collides with a built-in member or has several
         // overloads. Decide from the receiver's runtime type: a user method whose declared
         // receiver type matches wins, anything else keeps the built-in behaviour.
+        // Static types stop at the base (`array`), so overloads on `array<float>` and `array<int>` both
+        // match statically; the array's element type decides at run time.
+        const sameBaseArrayOverloads =
+            staticReceiverType === 'array' && candidateJsNames.filter((js) => receiverTypeCompatible(staticReceiverType, declaredReceiverTypeOf(js))).length > 1;
         const dispatchAtRuntime =
-            staticReceiverType === undefined &&
-            !isReceiverUdtInstance &&
-            (BUILTIN_METHOD_NAMES.has(methodName) || candidateJsNames.length > 1);
+            (staticReceiverType === undefined && !isReceiverUdtInstance && (BUILTIN_METHOD_NAMES.has(methodName) || candidateJsNames.length > 1)) ||
+            sameBaseArrayOverloads;
 
         if (
             isUserFunction &&

@@ -27,7 +27,7 @@ export function percentrank(context: any) {
         let count = 0;
         if (_callId) {
             if (!context.taState) context.taState = {};
-            const state = (context.taState[_callId] ??= { carry: new CarryHistory(0, undefined, true, context.executionBudget), prev: new SortedTail(context.executionBudget) });
+            const state = (context.taState[_callId] ??= { carry: new CarryHistory(0, undefined, context.executionBudget), prev: new SortedTail(context.executionBudget) });
             const carry: CarryHistory = state.carry;
             const prev: SortedTail = state.prev;
             carry.push(context.idx, currentValue, length, series, context.executionBudget);

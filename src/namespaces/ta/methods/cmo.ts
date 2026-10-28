@@ -4,15 +4,8 @@ import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
 import { CallWindow } from '../utils/windows';
 
-/** Gains (or losses) of the bar history of `series`, read by a backfill. */
-class MomentumHistory {
-    series: any;
-    constructor(private readonly up: boolean) {}
-    get(k: number): number {
-        const m = this.series.get(k) - this.series.get(k + 1);
-        return this.up ? (m >= 0 ? m : 0) : m >= 0 ? 0 : -m;
-    }
-}
+// The windows only hold the calls' values (passed as `current`): there is no source to read back.
+const NO_SOURCE = { get: () => NaN };
 
 /**
  * Chande Momentum Oscillator (CMO)
@@ -40,20 +33,19 @@ export function cmo(context: any) {
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `cmo_${length}`;
-        if (!context.taState[stateKey]) context.taState[stateKey] = { prev: new CallWindow(), up: new MomentumHistory(true), down: new MomentumHistory(false) };
+        if (!context.taState[stateKey]) context.taState[stateKey] = { prev: new CallWindow() };
         const state = context.taState[stateKey];
         const prev: CallWindow = state.prev;
         prev.begin(context.idx);
-        state.up.series = state.down.series = series;
 
-        // the source of the previous call; before the first call, of the previous bar
+        // the source of the previous call; na on the first call (TV: first called on bar 9, na until bar 14)
         const currentValue = series.get(0);
-        const previousValue = prev.ring.size ? prev.ring.at(0) : series.get(1);
+        const previousValue = prev.ring.size ? prev.ring.at(0) : NaN;
         prev.push(context.idx, currentValue, 1, undefined, context.executionBudget);
 
         const mom = currentValue - previousValue;
-        const gains = nonNaWindow(context, `${stateKey}_up`, state.up, length, false, mom >= 0 ? mom : 0);
-        const losses = nonNaWindow(context, `${stateKey}_down`, state.down, length, false, mom >= 0 ? 0 : -mom);
+        const gains = nonNaWindow(context, `${stateKey}_up`, NO_SOURCE, length, false, mom >= 0 ? mom : 0);
+        const losses = nonNaWindow(context, `${stateKey}_down`, NO_SOURCE, length, false, mom >= 0 ? 0 : -mom);
         if (!gains || !losses) {
             return NaN;
         }

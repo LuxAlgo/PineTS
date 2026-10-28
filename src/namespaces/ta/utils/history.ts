@@ -405,9 +405,10 @@ export class ExtremeTail {
 
 /**
  * The history of `source[i]` inside a function called in a local block, as TradingView keeps it: one
- * entry per bar, a bar on which the function was not called repeating the last call's value, and the
- * bars before the first call read from the source (PineTS's backfill). `fill` (when given) replaces the
- * value written for a bar from the previous entry (e.g. na filled forward).
+ * entry per bar from the first call on, a bar on which the function was not called repeating the last
+ * call's value. Nothing before the first call is in it (TV: `ta.change(close, 3)` first called on bar 9
+ * is na until bar 12). `fill` (when given) replaces the value written for a bar from the previous entry
+ * (e.g. na filled forward).
  */
 export class CarryHistory {
     readonly h: History;
@@ -419,7 +420,6 @@ export class CarryHistory {
     constructor(
         sums: 0 | 1 | 2 = 0,
         private readonly fill?: (x: number, prev: number) => number,
-        private readonly backfill = true,
         budget?: ExecutionBudget,
     ) {
         this.h = new History(sums, budget);
@@ -430,28 +430,20 @@ export class CarryHistory {
         h.push(this.fill ? this.fill(x, h.size ? h.at(0) : NaN) : x);
     }
 
-    /** Adds the value `x` of the call on bar `idx` (`series`: the source, for the first call's backfill). */
-    push(idx: number, x: any, length: number, series?: { get(k: number): any }, budget?: ExecutionBudget): void {
-        this.visit(idx, length, series, budget);
+    /** Adds the value `x` of the call on bar `idx`. */
+    push(idx: number, x: any, length: number, _series?: { get(k: number): any }, budget?: ExecutionBudget): void {
+        this.visit(idx, length, _series, budget);
         this.write(x == null ? NaN : Number(x));
     }
 
     /** Starts the call on bar `idx` without adding a value (the bar is then not in the history). */
-    visit(idx: number, length: number, series?: { get(k: number): any }, budget?: ExecutionBudget): void {
+    visit(idx: number, length: number, _series?: { get(k: number): any }, budget?: ExecutionBudget): void {
         if (length !== 0) assertTaLength(length, 'ta.history');
         const h = this.h;
         h.keepFor(length + 1);
         if (idx !== this.lastIdx) {
             this.newBar = true;
-            if (this.lastIdx < 0) {
-                if (this.backfill && series) {
-                    budget?.chargeWork(Math.min(idx, Math.max(MIN_KEEP, 2 * (length + 1))), 'ta.history');
-                    for (let b = Math.max(0, idx - Math.max(MIN_KEEP, 2 * (length + 1))); b < idx; b++) {
-                        const s = series.get(idx - b);
-                        this.write(s == null ? NaN : Number(s));
-                    }
-                }
-            } else {
+            if (this.lastIdx >= 0) {
                 h.compact();
                 const skipped = Math.min(idx - this.lastIdx - 1, Math.max(MIN_KEEP, 2 * (length + 1)));
                 budget?.chargeWork(skipped, 'ta.history');

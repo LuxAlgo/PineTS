@@ -34,7 +34,7 @@ export function cog(context: any) {
         let num = 0;
         if (_callId && length >= 1) {
             if (!context.taState) context.taState = {};
-            const bars: CarryHistory = (context.taState[_callId] ??= new CarryHistory(2, undefined, true, context.executionBudget));
+            const bars: CarryHistory = (context.taState[_callId] ??= new CarryHistory(2, undefined, context.executionBudget));
             bars.push(context.idx, sourceSeries.get(0), length, sourceSeries, context.executionBudget);
             const calls = nonNaWindow(context, `${_callId}_sum`, sourceSeries, length);
             // S and N weighing the newest value `length`: Σ x_i * (i + 1) = (length + 1) * S - N

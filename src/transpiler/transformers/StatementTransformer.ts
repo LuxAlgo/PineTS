@@ -1669,6 +1669,71 @@ export function transformReturnStatement(node: any, scopeManager: ScopeManager):
     }
 }
 
+/**
+ * A parameter whose history the (transformed) body reads, `$.get(s, k)` with `k` other than 0, gets its
+ * own series at the call site, advanced on each bar the function runs: TradingView reads `s[1]` as the
+ * value of the previous call (a function called on even bars only reads close[2] there).
+ */
+function localizeParamHistory(node: any): void {
+    const params: string[] = node.params
+        .map((p: any) => (p.type === 'AssignmentPattern' ? p.left?.name : p.type === 'Identifier' ? p.name : undefined))
+        .filter((n: any) => typeof n === 'string');
+    if (!params.length) return;
+    const names = new Set(params);
+    const read = new Set<string>();
+    // transformed nodes may point back to their parent
+    const seen = new Set<any>();
+    const visit = (n: any): void => {
+        if (!n || typeof n !== 'object' || seen.has(n)) return;
+        seen.add(n);
+        if (Array.isArray(n)) {
+            n.forEach(visit);
+            return;
+        }
+        if (
+            n.type === 'CallExpression' &&
+            n.callee?.type === 'MemberExpression' &&
+            n.callee.object?.type === 'Identifier' &&
+            n.callee.object.name === CONTEXT_NAME &&
+            n.callee.property?.name === 'get' &&
+            n.arguments[0]?.type === 'Identifier' &&
+            names.has(n.arguments[0].name) &&
+            !(n.arguments[1]?.type === 'Literal' && n.arguments[1].value === 0)
+        ) {
+            read.add(n.arguments[0].name);
+        }
+        for (const key of Object.keys(n)) if (key !== 'parent' && key !== 'loc') visit(n[key]);
+    };
+    visit(node.body.body);
+    if (!read.size) return;
+    const rebinds = params
+        .filter((name) => read.has(name))
+        .map((name) => {
+            const key = {
+                type: 'BinaryExpression',
+                operator: '+',
+                left: ASTFactory.createMemberExpression(ASTFactory.createIdentifier('$$'), ASTFactory.createIdentifier('id')),
+                right: { type: 'Literal', value: `_cp_${name}`, raw: JSON.stringify(`_cp_${name}`) },
+            };
+            const stmt: any = {
+                type: 'ExpressionStatement',
+                expression: {
+                    type: 'AssignmentExpression',
+                    operator: '=',
+                    left: ASTFactory.createIdentifier(name),
+                    right: ASTFactory.createCallExpression(
+                        ASTFactory.createMemberExpression(ASTFactory.createContextIdentifier(), ASTFactory.createIdentifier('callParam')),
+                        [ASTFactory.createIdentifier(name), key],
+                    ),
+                },
+            };
+            stmt._skipTransformation = true;
+            return stmt;
+        });
+    // after `const $$ = $.peekCtx()`
+    node.body.body.splice(1, 0, ...rebinds);
+}
+
 export function transformFunctionDeclaration(node: any, scopeManager: ScopeManager, c: any): void {
     // Note: We don't register parameters here anymore, that's done in the AnalysisPass.
 
@@ -1762,6 +1827,7 @@ export function transformFunctionDeclaration(node: any, scopeManager: ScopeManag
         scopeManager.enterFunctionHoistingRoot();
         c(node.body, scopeManager);
         scopeManager.exitFunctionHoistingRoot();
+        localizeParamHistory(node);
 
         // Clean up: remove function parameters from local series vars after exiting function scope
         node.params.forEach((param: any) => {
