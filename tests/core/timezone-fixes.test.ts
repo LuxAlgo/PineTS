@@ -191,7 +191,7 @@ plot(time_tradingday, "td")
 indicator("TD daily")
 plot(time, "time")
 plot(time_tradingday, "td")
-`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
+`);
         const _time = plots['time'].data;
         const _td = plots['td'].data;
         expect(_td.length).toBeGreaterThan(5);
