@@ -3,7 +3,7 @@
 
 import { Order } from '../types';
 import { Series } from '../../../Series';
-import { parseArgsForPineParams } from '../../utils';
+import { extractCallsiteId, parseArgsForPineParams } from '../../utils';
 import { argValue, isNaArg, floorQty, whenBlocks } from '../utils';
 import { checkQtyPercent } from '../validation';
 
@@ -38,6 +38,7 @@ export function close(context: any) {
         if (!context.strategy) {
             throw new Error('strategy.close() called before strategy() declaration');
         }
+        const callsiteId = extractCallsiteId(args);
         const parsed = parseArgsForPineParams<any>(args, CLOSE_SIGNATURES, CLOSE_ARGS_TYPES);
         if (whenBlocks(parsed)) return;
         const targetId = argValue(parsed.id);
@@ -112,6 +113,7 @@ export function close(context: any) {
             immediately: argValue(parsed.immediately) === true,
             disable_alert: argValue(parsed.disable_alert),
             _intended_trade_ids: context.strategy.opentrades.filter((t: any) => t.entry_id === targetId).map((t: any) => t.id),
+            _alertId: callsiteId !== undefined ? `Close entry(s) order ${callsiteId}` : undefined,
         };
         // Resolve qty: if a fixed qty was passed it locks in here; otherwise
         // the engine computes from the matching position at fill time.

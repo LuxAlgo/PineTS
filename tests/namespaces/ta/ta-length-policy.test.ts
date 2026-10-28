@@ -46,6 +46,8 @@ describe('ta length resource policy', () => {
     it.each([NaN, Infinity, -Infinity, -1, 0.5, Number.MAX_SAFE_INTEGER + 1, MAX_TA_LENGTH + 1])(
         'rejects unsafe length %s at every public TA method entry', length => {
             for (const [name, args] of lengthCalls) {
+                // Pivot strengths are truncated before validation, unlike TA window lengths.
+                if (length === 0.5 && (name === 'pivothigh' || name === 'pivotlow')) continue;
                 const ctx = context();
                 const ta = new TechnicalAnalysis(ctx);
                 ctx.pine = { ta };
@@ -63,7 +65,11 @@ describe('ta length resource policy', () => {
         expect(() => ta.roc(1, 0)).not.toThrow();
         expect(() => ta.pivothigh(1, 0, 0)).not.toThrow();
         expect(() => ta.pivotlow(1, 0, 0)).not.toThrow();
+        expect(() => ta.pivothigh(1, 2.9, 1.2)).not.toThrow();
+        expect(() => ta.pivotlow(1, 2.9, 1.2)).not.toThrow();
         expect(() => ta.pivothigh(1, 2_500, 2_500)).toThrow(PineRuntimeError);
+        expect(() => ta.pivothigh(1, 2_500.9, 2_500.9)).toThrow(PineRuntimeError);
+        expect(() => ta.pivotlow(1, 2_500.9, 2_500.9)).toThrow(PineRuntimeError);
         expect(Number.isNaN(ta.hma(1, 1))).toBe(true);
     });
 
@@ -107,28 +113,84 @@ describe('ta length resource policy', () => {
         expect(() => ta.pivothigh(source, 1, 0)).toThrow(PineRuntimeError);
     });
 
-    it('charges completed-window scans, sorted backfills, and percentile rebuilds', () => {
+    it('charges completed-window scans, sorted-window construction, and percentile inserts', () => {
         const source = Array.from({ length: 201 }, (_, i) => 201 - i);
-        const makeTa = (limit: number) => {
+        // A late first call no longer backfills source history. Feed real calls until the
+        // 100-value window is complete, then assert its native scan/construction is charged.
+        const expectCompletedWindowCharge = (limit: number, call: (ta: TechnicalAnalysis, values: number[]) => unknown) => {
             const ctx = context(new ExecutionBudget(500_000, { maxWorkUnits: limit }));
-            ctx.idx = 200;
-            return new TechnicalAnalysis(ctx);
+            const ta = new TechnicalAnalysis(ctx);
+            for (let idx = 0; idx < 99; idx++) {
+                ctx.idx = idx;
+                call(ta, source.slice(0, idx + 1));
+            }
+            ctx.idx = 99;
+            expect(() => call(ta, source.slice(0, 100))).toThrow(PineRuntimeError);
         };
 
-        expect(() => makeTa(300).bb(source, 100, 2)).toThrow(PineRuntimeError);
-        expect(() => makeTa(2_000).median(source, 100)).toThrow(PineRuntimeError);
-        expect(() => makeTa(2_000).percentile_linear_interpolation(source, 100, 50)).toThrow(PineRuntimeError);
+        expectCompletedWindowCharge(150, (ta, values) => ta.bb(values, 100, 2));
+        expectCompletedWindowCharge(2_000, (ta, values) => ta.median(values, 100));
+
+        // Descending values shift an ever larger sorted array on successive calls.
+        const ctx = context(new ExecutionBudget(500_000, { maxWorkUnits: 1_000 }));
+        const ta = new TechnicalAnalysis(ctx);
+        expect(() => {
+            for (let idx = 0; idx < 100; idx++) {
+                ctx.idx = idx;
+                ta.percentile_linear_interpolation(source.slice(0, idx + 1), 100, 50);
+            }
+        }).toThrow(PineRuntimeError);
     });
 
     it('charges a repeated same-bar sorted-window rollback', () => {
         const source = Array.from({ length: 101 }, (_, i) => 101 - i);
         const ctx = context(new ExecutionBudget(500_000, { maxWorkUnits: 10_000 }));
-        ctx.idx = 100;
         const ta = new TechnicalAnalysis(ctx);
-        ta.median(source, 50, 'same-bar');
+        for (let idx = 0; idx < 50; idx++) {
+            ctx.idx = idx;
+            ta.median(source.slice(0, idx + 1), 50, 'same-bar');
+        }
         const first = ctx.executionBudget.workUnits;
-        ta.median(source, 50, 'same-bar');
+        ta.median(source.slice(0, 50), 50, 'same-bar');
         expect(ctx.executionBudget.workUnits).toBeGreaterThan(first);
+    });
+
+    it('does not charge nonexistent source backfill on a late first percentile call', () => {
+        const ctx = context(new ExecutionBudget(500_000, { maxWorkUnits: 50 }));
+        ctx.idx = 200;
+        const ta = new TechnicalAnalysis(ctx);
+        const source = Array.from({ length: 201 }, (_, i) => 201 - i);
+
+        expect(() => ta.percentile_linear_interpolation(source, 100, 50)).not.toThrow();
+        expect(() => ta.percentile_linear_interpolation(source, 100, 50)).not.toThrow();
+        expect(ctx.executionBudget.workUnits).toBeGreaterThan(0);
+    });
+
+    it('rejects percentile work before mutating its history or sorted values', () => {
+        const ctx = context(new ExecutionBudget(500_000, { maxWorkUnits: 4 }));
+        ctx.idx = 200;
+        const ta = new TechnicalAnalysis(ctx);
+        const source = Array.from({ length: 201 }, (_, i) => 201 - i);
+
+        expect(() => ta.percentile_linear_interpolation(source, 100, 50)).toThrow(PineRuntimeError);
+        const state = ctx.taState['pli_100_50'];
+        expect(state.arr).toHaveLength(0);
+        expect(state.carry.h.size).toBe(0);
+    });
+
+    it('precharges a real percentile fill after skipped bars', () => {
+        const ctx = context(new ExecutionBudget(500_000, { maxWorkUnits: 1_000 }));
+        const ta = new TechnicalAnalysis(ctx);
+        ta.percentile_linear_interpolation([201], 100, 50);
+        const state = ctx.taState['pli_100_50'];
+        const priorHistorySize = state.carry.h.size;
+        const priorSortedSize = state.arr.length;
+
+        ctx.idx = 200;
+        const source = Array.from({ length: 201 }, (_, i) => 201 - i);
+        expect(() => ta.percentile_linear_interpolation(source, 100, 50)).toThrow(PineRuntimeError);
+        expect(state.carry.h.size).toBe(priorHistorySize);
+        expect(state.arr).toHaveLength(priorSortedSize);
     });
 
     it('charges keyless cross lookback across na bars', () => {

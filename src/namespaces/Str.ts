@@ -7,7 +7,7 @@ import { boundedArrayText } from './array/format';
 import { formatFloat, formatNumberPattern, formatVolume } from './numberFormat';
 import { assertElementCount, assertStringLength, MAX_COLLECTION_ELEMENTS, MAX_STRING_CODE_UNITS } from './limits';
 import { PineRuntimeError } from '../errors/PineRuntimeError';
-import { assertBoundedRegex } from './regexPolicy';
+import { javaRegexFind } from './javaRegex';
 import { DEFAULT_TIME_FORMAT, formatTime, resolveTimeZone } from './formatTime';
 
 const FORMAT_TIME_PARAMS = ['time', 'format', 'timezone'];
@@ -104,6 +104,12 @@ export class Str {
         const input = this.bounded(value, 'str.tonumber');
         this.context.executionBudget?.chargeWork(input.length, 'str.tonumber');
         const s = input.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '');
+        // A run of digits and dots is read up to its second dot: "1.2.3" is 1.2 and "1..2" is 1.
+        if (/^[+-]?[\d.]+$/.test(s)) {
+            const second = s.indexOf('.', s.indexOf('.') + 1);
+            const head = second < 0 ? s : s.slice(0, second);
+            return DECIMAL_NUMBER.test(head) ? Number(head) : NaN;
+        }
         return DECIMAL_NUMBER.test(s) ? Number(s) : NaN;
     }
     lower(value: string) {
@@ -157,7 +163,14 @@ export class Str {
         const repl = this.bounded(replacement, 'str.replace');
         const occ = Math.floor(Number(occurrence)) || 0;
 
-        if (tgt === '') return str;
+        // The empty target occurs before every character: ("abc", "", "X", 0) is "Xabc".
+        if (tgt === '') {
+            if (occ < 0 || occ > str.length) return str;
+            const size = str.length + repl.length;
+            assertStringLength(size, 'str.replace');
+            this.charge(str.length + size, size * 2, 'str.replace');
+            return str.slice(0, occ) + repl + str.slice(occ);
+        }
 
         let pos = 0;
         let found = 0;
@@ -174,7 +187,8 @@ export class Str {
             }
 
             found++;
-            pos = idx + tgt.length;
+            // Occurrences may overlap: the second "aa" of "aaaa" starts at index 1.
+            pos = idx + 1;
         }
     }
 
@@ -198,19 +212,25 @@ export class Str {
         // Pine returns the matched substring, or "" when nothing matches.
         const src = this.bounded(source, 'str.match');
         const expression = this.bounded(pattern, 'str.match');
-        assertBoundedRegex(expression, src);
-        // Unanchored matching may retry from each starting position. Charge a
-        // conservative worst-case bound so repeated calls share one quota.
-        this.charge(src.length * src.length + expression.length, src.length * 2, 'str.match');
-        const m = src.match(new RegExp(expression));
-        return m ? m[0] : '';
+        // The Java-flavor matcher checks its own strict input lengths and bounds
+        // backtracking. Charge every search step to the shared run budget; the
+        // optional callback is omitted for direct calls without a budget so the
+        // matcher's standalone step ceiling still applies.
+        this.charge(src.length + expression.length, (src.length + expression.length) * 2, 'str.match');
+        const budget = this.context.executionBudget;
+        const found = javaRegexFind(expression, src, budget
+            ? (steps) => this.charge(steps, steps * 24, 'str.match')
+            : undefined);
+        return found === null ? '' : found;
     }
 
     split(source: string, separator: string) {
         const src = this.bounded(source, 'str.split');
         const sep = this.bounded(separator, 'str.split');
         let count = 0;
-        if (sep === '') {
+        if (src === '') {
+            count = 1;
+        } else if (sep === '') {
             count = src.length;
         } else {
             count = 1;
@@ -221,7 +241,8 @@ export class Str {
         }
         assertElementCount(count, 'str.split');
         this.charge(src.length + count, src.length * 2 + count * 32, 'str.split');
-        const parts = src.split(sep, MAX_COLLECTION_ELEMENTS);
+        // An empty source always gives one empty element, even with an empty separator.
+        const parts = src === '' ? [''] : src.split(sep, MAX_COLLECTION_ELEMENTS);
         return new PineArrayObject(parts, PineArrayType.string, this.context);
     }
     substring(source: string, begin_pos: number, end_pos: number) {

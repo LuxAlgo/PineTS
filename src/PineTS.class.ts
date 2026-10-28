@@ -13,6 +13,7 @@ import type { SourceMode } from './security/SourceMode';
 import { ExecutionBudget } from './security/ExecutionBudget';
 import { PineRuntimeError } from './errors/PineRuntimeError';
 import { compiledArtifactKind } from './transpiler/analysis/VerifiedArtifact';
+import { renderBarAlerts } from './namespaces/alertEvents';
 import { processBarOrders, barPath, beginStrategyBar, riskStartBar, riskAtBarClose, processOrdersOnClose, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState, snapToTick } from './namespaces/strategy/utils';
 
 import { parseTimeframe, timeframeSeconds } from './timeframe';
@@ -630,6 +631,7 @@ export class PineTS {
         // The requested mode permits compatibility input; it does not change
         // the provenance of a versioned Pine artifact compiled by the verifier.
         context.sourceMode = compiledArtifactKind(prepared.fn) === 'verifiedPine' ? 'nativePine' : 'trustedJavaScript';
+        context._inputsMeta = () => ind.getInputsMeta();
         this._transpiledCode = prepared.fn;
         context.transpiledFn = prepared.fn;
         // Propagate transpile-time slices (one per request.security_lower_tf
@@ -681,6 +683,7 @@ export class PineTS {
         const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
         context.pineVersion = (prepared.fn as any)._pineVersion ?? null;
         context.sourceMode = compiledArtifactKind(prepared.fn) === 'verifiedPine' ? 'nativePine' : 'trustedJavaScript';
+        context._inputsMeta = () => ind.getInputsMeta();
         this._transpiledCode = prepared.fn;
         context.transpiledFn = prepared.fn;
         if (prepared.ltfSlices) (context as any)._ltfTruncatedBodies = prepared.ltfSlices;
@@ -795,6 +798,8 @@ export class PineTS {
 
             // Step back one position to reprocess last candle
             processedUpToIdx = this.data.length - (newCandles + 1);
+            // The bar forming when live updates began, and every bar after it, are realtime bars.
+            (context as any)._liveFromIdx ??= processedUpToIdx;
 
             // Roll back drawing objects created during the previous processing of
             // these bars so they don't accumulate on each streaming tick.
@@ -1019,6 +1024,7 @@ export class PineTS {
         context.length = this.data.length;
 
         const processFrom = this.data.length - (newCandles + 1);
+        (context as any)._liveFromIdx ??= processFrom;
         context.rollbackDrawings(processFrom);
 
         // Split execution: process bars before last → snapshot → last bar.
@@ -1457,6 +1463,7 @@ export class PineTS {
                 processOrdersOnClose(context);
                 if (rawBar) this._restoreRawBar(context, rawBar);
             }
+            renderBarAlerts(context);
 
             //collect results
             if (typeof result === 'object') {

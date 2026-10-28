@@ -244,7 +244,7 @@ The main class that handles:
 
 ## Alerts
 
-PineTS supports `alert()` and `alertcondition()` from Pine Script. Capture alert events via `context.alerts` after `run()`, or listen for real-time `'alert'` events with `stream()`. Use `setAlertMode('all')` for backtesting. See the **[Alerts](../alerts/)** page for details.
+PineTS supports `alert()` and `alertcondition()` from Pine Script, and the order-fill alerts of strategies. Capture alert events via `context.alerts` after `run()`, or listen for real-time `'alert'` events with `stream()`. Use `setAlertMode('all')` for backtesting. See the **[Alerts](../alerts/)** page for details.
 
 ## Project Status
 

@@ -21,7 +21,7 @@ The lower-level `transpile()` function follows the same default: markerless Java
 
 Compilation now enforces structural ceilings before and after transformation: 262,144 input code units (at most 524,288 UTF-8 bytes), 10,000 lines, 16,384 code units per line, 50,000 Pine tokens, 256 nesting levels, 100,000 AST nodes, and 2,000,000 generated code units. The 10-second phase check is cooperative; it cannot interrupt a parser already blocked inside one synchronous call.
 
-`str.match` uses a deliberately restricted regex dialect because JavaScript's regex engine is synchronous. Patterns are limited to 256 code units and subjects to 4,096; groups, alternatives, lookarounds, backreferences, brace ranges, optional quantifiers, and overlapping quantified atoms are rejected. Accepted character escapes include `\d`, `\w`, `\s`, and escaped punctuation. Callers needing richer regular expressions must perform that work outside the untrusted Pine runtime.
+`str.match` uses a step-bounded Java-flavor matcher rather than JavaScript's synchronous `RegExp` engine. Patterns are limited to 256 code units and subjects to 4,096. Matching steps are charged to the run-wide work and memory budgets, so pathological patterns stop with a runtime error instead of running indefinitely. Java-style groups, lookarounds, backreferences and quantifiers are supported within these limits.
 
 Source mode is an input classification and compiler check. Applications running community scripts still need a separately terminable, capability-limited execution unit and resource limits for CPU, memory, and provider work.
 

@@ -71,9 +71,12 @@ export class Parser {
     private tupleLiteralStart: WeakMap<object, Token> = new WeakMap();
     // Numbers each range loop's direction variable.
     private forLoopCount = 0;
-    constructor(tokens: Token[]) {
+    // Pine version of the source (`//@version=N`); null when unknown.
+    private version: number | null;
+    constructor(tokens: Token[], options: { version?: number | null } = {}) {
         this.tokens = tokens;
         this.pos = 0;
+        this.version = options.version ?? null;
     }
 
     // Utility methods
@@ -1401,22 +1404,28 @@ export class Parser {
     }
 
     /**
-     * Give a trailing loop a value: Pine yields whatever the loop body's last statement
-     * produced on its final iteration, or na when the body never ran (or the final
-     * iteration skipped it). Captures that into a temp reset at the top of each iteration
-     * and returns the temp's name, or null when the loop body has no value.
+     * Give a trailing loop a value: Pine yields what the body's last statement produced on the
+     * last iteration that reached the end of the body (na if none did). An iteration cut short
+     * by `break` / `continue` keeps the previous value: `for i = 0 to 10` / `if i == 3 => break` /
+     * `i * 100.0` is 200. Each iteration writes its own temp, copied to the loop's value as the
+     * body's final statement, which an early exit skips. Returns the value's name, or null when
+     * the loop body has no value.
      */
     private _captureLoopValue(statements: any[]): string | null {
         const loop = statements[statements.length - 1];
         if (loop.body?.type !== 'BlockStatement' || loop.body.body.length === 0) return null;
 
-        const tmp = `__loopValue_${this.loopValueCounter++}`;
+        const n = this.loopValueCounter++;
+        const tmp = `__loopValue_${n}`;
+        const iter = `__loopIter_${n}`;
         const na = () => new Identifier('na');
-        const assignTmp = (value: any) => new ExpressionStatement(new AssignmentExpression('=', new Identifier(tmp), value));
+        const assign = (name: string) => (value: any) => new ExpressionStatement(new AssignmentExpression('=', new Identifier(name), value));
 
-        if (!this._emitLastValue(loop.body.body, assignTmp)) return null;
-        loop.body.body.unshift(assignTmp(na()));
-        statements.splice(statements.length - 1, 0, new VariableDeclaration([new VariableDeclarator(new Identifier(tmp), na())], VariableDeclarationKind.LET));
+        if (!this._emitLastValue(loop.body.body, assign(iter))) return null;
+        loop.body.body.unshift(assign(iter)(na()));
+        loop.body.body.push(assign(tmp)(new Identifier(iter)));
+        const declare = (name: string) => new VariableDeclaration([new VariableDeclarator(new Identifier(name), na())], VariableDeclarationKind.LET);
+        statements.splice(statements.length - 1, 0, declare(tmp), declare(iter));
         return tmp;
     }
 
@@ -1717,19 +1726,32 @@ export class Parser {
             // Build for loop with runtime direction detection.
             // Pine Script: `for i = start to end [by step]`
             // Direction is fixed when the loop starts (start <= end → increment, else
-            // decrement); `end` is re-read each iteration. Re-reading `start` for the
-            // direction would flip `for i = array.size(a) - 1 to 0` once the body
-            // removes an element.
-            // Generated: for (let i = start, up = i <= end; up ? i <= end : i >= end; up ? i++ : i--)
-            const directionCheck = new Identifier(`__for_up${this.forLoopCount++}`);
-            const init = new VariableDeclaration(
-                [new VariableDeclarator(loopVar, start), new VariableDeclarator(directionCheck, new BinaryExpression('<=', loopVar, end))],
-                VariableDeclarationKind.LET
-            );
+            // decrement). Re-reading `start` for the direction would flip
+            // `for i = array.size(a) - 1 to 0` once the body removes an element.
+            // TradingView reads `step` once at loop entry. `end` is read once too up to
+            // v5; from v6 on it is re-read before every iteration, so assigning the bound
+            // variable in the body changes how many iterations run.
+            // Generated (v5): for (let i = start, end_ = end, up = i <= end_, step_ = step;
+            //                      up ? i <= end_ : i >= end_; up ? i += step_ : i -= step_)
+            const loopId = this.forLoopCount++;
+            const directionCheck = new Identifier(`__for_up${loopId}`);
+            const declarators = [new VariableDeclarator(loopVar, start)];
+            let bound = end;
+            if (this.version !== null && this.version < 6) {
+                bound = new Identifier(`__for_end${loopId}`);
+                declarators.push(new VariableDeclarator(bound, end));
+            }
+            declarators.push(new VariableDeclarator(directionCheck, new BinaryExpression('<=', loopVar, bound)));
+            let stepValue = step;
+            if (step) {
+                stepValue = new Identifier(`__for_step${loopId}`);
+                declarators.push(new VariableDeclarator(stepValue, step));
+            }
+            const init = new VariableDeclaration(declarators, VariableDeclarationKind.LET);
             const test = new ConditionalExpression(
                 directionCheck,
-                new BinaryExpression('<=', loopVar, end),
-                new BinaryExpression('>=', loopVar, end)
+                new BinaryExpression('<=', loopVar, bound),
+                new BinaryExpression('>=', loopVar, bound)
             );
 
             let update;
@@ -1737,8 +1759,8 @@ export class Parser {
                 // with step: start <= end ? i += step : i -= step
                 update = new ConditionalExpression(
                     directionCheck,
-                    new AssignmentExpression('+=', loopVar, step),
-                    new AssignmentExpression('-=', loopVar, step)
+                    new AssignmentExpression('+=', loopVar, stepValue),
+                    new AssignmentExpression('-=', loopVar, stepValue)
                 );
             } else {
                 // no step: start <= end ? i++ : i--

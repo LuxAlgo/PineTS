@@ -61,8 +61,10 @@ import {
     transformStrictLogicalOperators,
     transformDisplayArithmetic,
     propagateAsyncAwait,
+    deferVarInitializerFunctions,
 } from './transformers/MainTransformer';
 import { extractPineScriptVersion, pineToJS } from './pineToJS/pineToJS.index';
+import { extractStrategyAlertMessage } from './pineToJS/version';
 import { buildLtfSlices } from './slicing/buildLtfSlices';
 import { compilePineArtifact, compileTrustedJavaScript } from './analysis/VerifiedArtifact';
 import type { SourceMode } from '../security/SourceMode';
@@ -240,6 +242,7 @@ export function transpile(
     // Functions containing await (e.g., from request.security) must be async,
     // and their callers (via $.call) must await them.
     propagateAsyncAwait(ast);
+    if (pineVersion !== null) deferVarInitializerFunctions(ast);
     assertCompilerAstBudget(ast);
     assertCompilerElapsed(compilationStartedAt);
 
@@ -310,6 +313,8 @@ export function transpile(
     const mainFn = compileFinal(transformedCode);
     (mainFn as any)._pineVersion = pineVersion;
     (mainFn as any)._sourceMode = pineVersion === null ? 'trustedJavaScript' : 'nativePine';
+    const strategyAlertMessage = pineVersion !== null && typeof source === 'string' ? extractStrategyAlertMessage(source) : null;
+    if (strategyAlertMessage !== null) (mainFn as any)._strategyAlertMessage = strategyAlertMessage;
     if (slices && Object.keys(slices).length > 0) {
         for (const slice of Object.values(slices)) {
             (slice as any)._pineVersion = pineVersion;

@@ -477,7 +477,8 @@ plot(close)
         it('alertcondition with named arguments out of order and title skipped', async () => {
             const { alerts, upBars } = await run(`alertcondition(message = "msg", condition = cond)`);
             expect(alerts.map((a: any) => a.bar_index)).toEqual(upBars);
-            expect(alerts.every((a: any) => a.title === '' && a.message === 'msg')).toBe(true);
+            // Without a title argument the condition is named "Alert" (Pine User Manual, Alerts).
+            expect(alerts.every((a: any) => a.title === 'Alert' && a.message === 'msg')).toBe(true);
         });
 
         it('alertcondition with a named false condition never fires', async () => {

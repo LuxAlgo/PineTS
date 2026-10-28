@@ -40,9 +40,6 @@ export type ValueSource = { get(k: number): any } | ((k: number) => number);
 
 const read = (src: ValueSource, k: number): number => (typeof src === 'function' ? src(k) : src.get(k));
 
-// bars read back for the first call's backfill (beyond the window itself)
-const BACKFILL_BARS = 5000;
-
 class NonNaState implements NonNaView {
     h: History;
     lastIdx = -1;
@@ -120,13 +117,14 @@ class NonNaState implements NonNaView {
  * `length - 1` on, holding the fewer non-na values seen until then (`length` of the view is their count).
  *
  * In a local block the values are those of the calls, as on TradingView; `length` may change from call
- * to call (a series length), the window then reaching further back into the earlier calls. The values
- * before the first call are read from the source (PineTS's backfill, for a function first called on a
- * later bar, e.g. on the last bar only).
+ * to call (a series length), the window then reaching further back into the earlier calls. Nothing
+ * before the first call is in the window: a function first called on a later bar (or on the last bar
+ * only) has no value until it has been called `length` times (TV: `ta.sma(close, 20)` first called on
+ * bar 19 is na until bar 38).
  *
- * `valueAt` reads the source `k` bars back (0 = current): a series or a function; `current`, when given,
- * is the current value (`valueAt` is then only read for the backfill). State lives in
- * `context.taState[key]`; a bar evaluated again (live bar) starts from the values of the previous bars.
+ * `valueAt` reads the source (0 = current): a series or a function; `current`, when given, is the current
+ * value. State lives in `context.taState[key]`; a bar evaluated again (live bar) starts from the values
+ * of the previous bars.
  *
  * The values are kept with prefix sums (History), so the sum of any window costs O(1); `'sorted'` /
  * `'counts'` keep the window ordered / counted, O(log length) a value; `'extremes'` its maximum and
@@ -156,13 +154,7 @@ export function nonNaWindow(
     s.bars?.keepFor(length);
 
     if (context.idx !== s.lastIdx) {
-        if (s.lastIdx < 0) {
-            chargeTaWork(context, Math.min(context.idx, BACKFILL_BARS + 2 * length), 'ta.window');
-            for (let k = Math.min(context.idx, BACKFILL_BARS + 2 * length); k >= 1; k--) {
-                const v = read(valueAt, k);
-                if (!isNa(v)) s.push(v, context.idx - k);
-            }
-        } else {
+        if (s.lastIdx >= 0) {
             h.compact();
             s.bars?.compact();
         }

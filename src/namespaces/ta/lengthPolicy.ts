@@ -35,9 +35,12 @@ export function wrapTaLengthPolicy<T extends (...args: any[]) => any>(name: stri
         if (name === 'pivothigh' || name === 'pivotlow') {
             // The source argument is optional; the transpiler then places its call ID in slot 2.
             const indices = args.length === 2 || typeof args[2] === 'string' ? [0, 1] : [1, 2];
-            for (const i of indices) checkLength(args[i], label, true);
-            const left = Series.from(args[indices[0]]).get(0);
-            const right = Series.from(args[indices[1]]).get(0);
+            // Pivot strengths are truncated by the method, so validate the same effective
+            // integers here before any state or native work is started.
+            const left = Math.trunc(Series.from(args[indices[0]]).get(0));
+            const right = Math.trunc(Series.from(args[indices[1]]).get(0));
+            if (left !== 0) assertTaLength(left, label);
+            if (right !== 0) assertTaLength(right, label);
             assertTaLength(left + right + 1, label);
         } else if (OPTIONAL_SOURCE.has(name) && (args.length === 1 || typeof args[1] === 'string')) {
             checkLength(args[0], label, false);

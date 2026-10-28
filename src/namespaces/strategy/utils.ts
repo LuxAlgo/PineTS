@@ -5,6 +5,7 @@ import { Order, StrategyState, Trade } from './types';
 import { Series } from '../../Series';
 import { isNamedArgsBag } from '../utils';
 import { validateDrawingOptions } from '../drawingPolicy';
+import { orderFillAlert } from '../alertEvents';
 
 // strategy() parameters in the TradingView reference order.
 //prettier-ignore
@@ -693,6 +694,8 @@ export function processStrategyOrders(context: any, deferredOnly = false): void 
     if (!deferredOnly) (strategy as any)._preFillSize = { idx: context.idx, size: strategy.position_size };
 
     for (const order of queue) {
+        // The market orders filling at the open come first: their filled-order trip waits for all of them.
+        if (order.type !== 'market') flushRiskOrdersTrip(context);
         if (order.status !== 'pending') continue;
 
         // Skip exit-category orders — processExitOrders handles them.
@@ -760,16 +763,24 @@ export function processStrategyOrders(context: any, deferredOnly = false): void 
                 if (order.stop !== undefined && order.limit !== undefined) {
                     const direction = parseDirection(order.direction);
                     let activation: number | undefined;
+                    // The path vertices after the stop triggered (the whole bar for a stop triggered earlier).
+                    let afterTrigger = entryPath;
                     if (order._stopTriggered) activation = openPrice;
                     else if (direction === 1 ? highPrice >= order.stop : lowPrice <= order.stop) {
                         order._stopTriggered = true;
                         activation = direction === 1 ? Math.max(openPrice, order.stop) : Math.min(openPrice, order.stop);
+                        const at = pathPosition(entryPath, order.stop, direction === 1) ?? 0;
+                        afterTrigger = entryPath.slice(Math.floor(at) + 1);
                     }
                     if (activation !== undefined) {
+                        // A limit beyond the activation price fills only if the path comes back to it after
+                        // the trigger (TV, 1W: buy stop 8,918 reached on the way from the low to the high,
+                        // limit 8,044 under that low: no fill).
+                        const back = direction === 1 ? Math.min(...afterTrigger) : Math.max(...afterTrigger);
                         if (direction === 1 ? activation <= order.limit : activation >= order.limit) {
                             shouldFill = true;
                             fillPrice = activation;
-                        } else if (direction === 1 ? lowPrice <= order.limit - limitSlack : highPrice >= order.limit + limitSlack) {
+                        } else if (direction === 1 ? back <= order.limit - limitSlack : back >= order.limit + limitSlack) {
                             shouldFill = true;
                             fillPrice = order.limit;
                         }
@@ -861,7 +872,9 @@ export function processStrategyOrders(context: any, deferredOnly = false): void 
             const tiedQty = tiedExits.map(({ trade }) => Math.abs(trade.size));
             setFillAt(context, order.type === 'market' ? 0 : (entryPathPosition(order, fillPrice, entryPath) ?? 0));
             context._fillOnVertex = order.type === 'market' || fillPrice === openPrice;
+            context._riskMarketBatch = order.type === 'market';
             fillEntryOrder(context, order, fillPrice, currentTime, openPrice);
+            context._riskMarketBatch = false;
             context._fillOnVertex = undefined;
             if ((order.status as Order['status']) === 'filled') {
                 tiedExits.forEach(({ order: exit, trade }, i) => {
@@ -899,6 +912,7 @@ export function processStrategyOrders(context: any, deferredOnly = false): void 
             }
         }
     }
+    flushRiskOrdersTrip(context);
 
     // Remove filled and cancelled orders
     strategy.pending_orders = pending_orders.filter((o) => o.status === 'pending');
@@ -907,6 +921,38 @@ export function processStrategyOrders(context: any, deferredOnly = false): void 
     // Peaks are latched at the bar's end inside processExitOrders.
     markToMarket(context, closePrice);
     updateStrategyMetrics(context);
+}
+
+/** Order-fill alert of a strategy.entry / strategy.order fill of `qty`. */
+function entryFillAlert(context: any, order: Order, qty: number, price: number): void {
+    orderFillAlert(context, {
+        id: order.id,
+        direction: parseDirection(order.direction),
+        qty,
+        price,
+        comment: order.comment,
+        alertMessage: order.alert_message,
+        disabled: order.disable_alert,
+    });
+}
+
+/**
+ * Order-fill alert of a strategy.exit / close / close_all fill closing `qty` of a position in direction
+ * `posDir`. A strategy.exit leg uses its own comment_* / alert_* argument when the call has one.
+ */
+function exitFillAlert(context: any, order: Order, posDir: number, qty: number, price: number, kind?: 'profit' | 'loss' | 'trailing' | null): void {
+    const leg = <T>(profit: T, loss: T, trailing: T, generic: T): T =>
+        kind === 'profit' ? (profit ?? generic) : kind === 'loss' ? (loss ?? generic) : kind === 'trailing' ? (trailing ?? generic) : generic;
+    orderFillAlert(context, {
+        id: order._alertId ?? order.id,
+        direction: -posDir,
+        qty,
+        price,
+        // Without a comment, a close reports its exit id (`Close entry(s) order L`) as the comment.
+        comment: leg(order.comment_profit, order.comment_loss, order.comment_trailing, order.comment) || order.id,
+        alertMessage: leg(order.alert_profit, order.alert_loss, order.alert_trailing, order.alert_message),
+        disabled: order.disable_alert,
+    });
 }
 
 /**
@@ -919,10 +965,16 @@ function fillEntryOrder(context: any, order: Order, fillPrice: number, currentTi
         order.status = 'cancelled';
         return;
     }
-    // Pyramiding is counted when the order fills: two strategy.entry adds queued on one bar with
+    // Pyramiding is counted again when an add fills: two strategy.entry adds queued on one bar with
     // room for one more entry fill only the first (TV, case "21": pyramiding 3, 2 open, 2 adds).
-    // strategy.order is not limited by pyramiding.
-    if (order.category === 'entry' && Math.sign(strategy.position_size) === parseDirection(order.direction) && wouldExceedPyramiding(strategy, parseDirection(order.direction))) {
+    // Entries placed while flat all fill, past the cap (TV, 1W, pyramiding 1: two buy limits placed
+    // on one bar while flat, both filled on one bar). strategy.order is not limited by pyramiding.
+    if (
+        order.category === 'entry' &&
+        (order as any)._pyramidAdd !== false &&
+        Math.sign(strategy.position_size) === parseDirection(order.direction) &&
+        wouldExceedPyramiding(strategy, parseDirection(order.direction))
+    ) {
         order.status = 'cancelled';
         return;
     }
@@ -947,6 +999,7 @@ function fillEntryOrder(context: any, order: Order, fillPrice: number, currentTi
                 order.fill_price = fillPrice;
                 order.fill_bar = context.idx;
                 order.fill_time = currentTime;
+                entryFillAlert(context, order, Math.abs(posSize), fillPrice);
                 riskAfterFill(context, fillPrice);
                 return;
             }
@@ -1081,6 +1134,7 @@ function fillEntryOrder(context: any, order: Order, fillPrice: number, currentTi
                     order.fill_price = fillPrice;
                     order.fill_bar = context.idx;
                     order.fill_time = currentTime;
+                    entryFillAlert(context, order, qtyToClose, fillPrice);
                     riskAfterFill(context, fillPrice);
                 } else {
                     order.status = 'cancelled';
@@ -1096,6 +1150,7 @@ function fillEntryOrder(context: any, order: Order, fillPrice: number, currentTi
     order.fill_price = fillPrice;
     order.fill_bar = context.idx;
     order.fill_time = currentTime;
+    entryFillAlert(context, order, order.qty, fillPrice);
     riskAfterFill(context, fillPrice);
 }
 
@@ -1123,7 +1178,12 @@ export function processOrdersOnClose(context: any): void {
         o.trail_price === undefined &&
         o.trail_points === undefined;
 
+    // A live bar still forming has not closed: a strategy without calc_on_every_tick runs on it only at its close
+    // on TradingView, so its close orders (and their alerts) wait for the execution with the bar's final values.
+    const forming = strategy.config.calc_on_every_tick !== true && context.pine?.barstate?.isconfirmed === false;
+
     for (const [queuedAt, order] of strategy.pending_orders.entries()) {
+        if (forming) break;
         if (order.status !== 'pending' || order.bar !== context.idx) continue;
         if (isMarketClose(order)) {
             if (!onClose && !order.immediately) continue;
@@ -1159,12 +1219,14 @@ export function processOrdersOnClose(context: any): void {
             let qtyToClose = matchingQty;
             if (order.qty && order.qty > 0) qtyToClose = Math.min(order.qty, matchingQty);
             else if (order.qty_percent && order.qty_percent > 0) qtyToClose = partialCloseQty(context, matchingQty, order.qty_percent);
-            const fillPrice = applySlippage(context, -Math.sign(matching[0].size), closePrice);
+            const posDir = Math.sign(matching[0].size);
+            const fillPrice = applySlippage(context, -posDir, closePrice);
             closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime, { exitId: order.id, exitComment: order.comment });
             order.status = 'filled';
             order.fill_price = fillPrice;
             order.fill_bar = context.idx;
             order.fill_time = currentTime;
+            exitFillAlert(context, order, posDir, qtyToClose, fillPrice);
             riskAfterFill(context, fillPrice);
         } else if (onClose && (order.category ?? 'entry') === 'entry' && order.type === 'market') {
             markToMarket(context, closePrice);
@@ -1224,6 +1286,7 @@ function fillExitAtClose(context: any, order: Order, closePrice: number, current
         (t._exits_filled ??= new Set()).add(order.id);
         cap -= qty;
         closed = true;
+        exitFillAlert(context, order, dir, qty, fillPrice, kind);
         riskAfterFill(context, fillPrice);
     }
     const left = strategy.opentrades.some((t) => (!order.from_entry || t.entry_id === order.from_entry) && !t._exits_filled?.has(order.id));
@@ -1451,7 +1514,12 @@ function riskCloseOut(context: any, reason: string, price: number, scope: 'day' 
         setFillAt(context, 0);
     }
     if (strategy.opentrades.length > 0 && strategy.position_size !== 0) {
-        closePartialPosition(context, Math.abs(strategy.position_size), price, time, { exitId: reason, exitComment: reason, forced: true });
+        const size = strategy.position_size;
+        closePartialPosition(context, Math.abs(size), price, time, { exitId: reason, exitComment: reason, forced: true });
+        // The rule's alert_message replaces {{strategy.order.alert_message}} in the close-out's alert.
+        const rules = strategy.risk_rules ?? {};
+        const rule = reason === RISK_REASON.drawdown ? rules.max_drawdown : reason === RISK_REASON.orders ? rules.max_intraday_filled_orders : reason === RISK_REASON.intraday ? rules.max_intraday_loss : undefined;
+        orderFillAlert(context, { id: reason, direction: -Math.sign(size), qty: Math.abs(size), price, comment: reason, alertMessage: rule?.alert_message });
     }
     for (const o of strategy.pending_orders) if (o.status === 'pending') o.status = 'cancelled';
     if (scope === 'day') {
@@ -1489,6 +1557,7 @@ export function riskStartBar(context: any): void {
                         time: Series.from(context.data.openTime).get(0),
                         status: 'pending',
                         comment: RISK_REASON.consDays,
+                        alert_message: rules.max_cons_loss_days.alert_message,
                         _risk: true,
                     } as Order);
                 }
@@ -1541,6 +1610,12 @@ export function riskAfterFill(context: any, price: number): void {
         if (hit) return riskCloseOut(context, RISK_REASON.drawdown, price, 'forever');
     }
     if (rules.max_intraday_filled_orders && st.dayFills >= Number(rules.max_intraday_filled_orders.count)) {
+        // Market orders filling together at the open all fill before the rule closes the position
+        // (TV, 1W, count 2: three market orders, three trades closed by the rule).
+        if (context._riskMarketBatch) {
+            (st as any)._ordersTrip = price;
+            return;
+        }
         return riskCloseOut(context, RISK_REASON.orders, price, 'day');
     }
     // The check after a reversal sees the equity before the P&L its closing leg booked (TV, BTCUSDT 1h,
@@ -1548,6 +1623,15 @@ export function riskAfterFill(context: any, price: number): void {
     // 93,462.83 at the day start → closed at that open; 27 halts of 27). After a close order the P&L
     // is booked (BTCUSDT 1h, 1 %: close_all at +228 mid-day, trading goes on).
     if (rules.max_intraday_loss && !riskOpenFills(context)) riskIntradayLoss(context, price, fillPnl);
+}
+
+/** Close out under max_intraday_filled_orders once the market orders filling at the open are done. */
+function flushRiskOrdersTrip(context: any): void {
+    const st = (context.strategy as any)?._risk as RiskState | undefined;
+    const price = (st as any)?._ordersTrip;
+    if (price === undefined) return;
+    (st as any)._ordersTrip = undefined;
+    riskCloseOut(context, RISK_REASON.orders, price, 'day');
 }
 
 function riskIntradayLoss(context: any, price: number, unbooked = 0): boolean {
@@ -2485,15 +2569,20 @@ function entryBarPathExit(
 function exitCapacity(context: any, order: Order, matching: Trade[]): { total: number; perTrade: Map<Trade, number> } {
     const strategy: StrategyState = context.strategy;
     // What exit `o` takes of each trade it applies to: qty_percent of that trade's entry quantity,
-    // an absolute qty spread over the trades oldest first, or all of each without either.
+    // an absolute qty spread over the trades of an entry id oldest first, or all of each without either.
+    // An exit without from_entry gives each entry id its own qty (TV, 1W: exit qty = 1 over entries E1
+    // and E2 of 1 each closes both).
     const shares = (o: Order, ts: Trade[]): Map<Trade, number> => {
         const m = new Map<Trade, number>();
-        let left = o.qty && o.qty > 0 ? o.qty : Infinity;
+        const hasQty = !!(o.qty && o.qty > 0);
+        const left = new Map<string, number>();
         for (const t of ts) {
-            const want = o.qty_percent && o.qty_percent > 0 && !(o.qty && o.qty > 0) ? partialCloseQty(context, t._entry_qty ?? Math.abs(t.size), o.qty_percent) : left;
+            const key = o.from_entry ? '' : String(t.entry_id);
+            const remaining = left.get(key) ?? (hasQty ? (o.qty as number) : Infinity);
+            const want = o.qty_percent && o.qty_percent > 0 && !hasQty ? partialCloseQty(context, t._entry_qty ?? Math.abs(t.size), o.qty_percent) : remaining;
             const take = Math.min(want, Math.abs(t.size));
             m.set(t, take);
-            if (o.qty && o.qty > 0) left -= take;
+            if (hasQty) left.set(key, remaining - take);
         }
         return m;
     };
@@ -2591,9 +2680,17 @@ export function processExitOrders(context: any, phase: 'market' | 'open' | 'intr
     const slots = gapped.map((g) => g.slot);
     gapped.sort((a, b) => a.d - b.d || a.slot - b.slot).forEach((g, j) => (ranked[slots[j]] = g.x));
     const ordered = ranked.map((x) => x.o);
+    const halted = ((strategy as any)._risk as RiskState | undefined)?.haltedFrom;
     for (const order of ordered) {
         if (order.status !== 'pending') continue;
         if ((order.category ?? 'entry') !== 'exit') continue;
+        // Once a risk rule stops trading for good, exits placed from then on are rejected too: the
+        // position left open stays open (TV, 1W, max_cons_loss_days(2): an entry placed before the
+        // trip fills, its strategy.close never does).
+        if (halted !== undefined && order.bar >= halted && !(order as any)._risk) {
+            order.status = 'cancelled';
+            continue;
+        }
         if (phase === 'market' && !isMarketCloseOrder(order)) continue;
 
         // Gather matching open trades (from_entry filter; '' = all).
@@ -2614,18 +2711,13 @@ export function processExitOrders(context: any, phase: 'market' | 'open' | 'intr
             // Nothing to exit. In the pre-entry phases the order may be
             // WAITING on an entry that fills at this bar's open (TV: exit
             // orders placed before their entry wait for it) — leave it
-            // pending. After entries have filled (intrabar phase), check
-            // if there's still a pending entry order for this exit's
-            // from_entry — if so, keep the exit waiting; otherwise it's
-            // orphaned and should be cancelled.
-            if (phase === 'intrabar') {
-                const hasPendingEntry = order.from_entry
-                    ? strategy.pending_orders.some(
-                          (o) => o.status === 'pending' && (o.category ?? 'entry') === 'entry' && o.id === order.from_entry
-                      )
-                    : false;
-                if (!hasPendingEntry) order.status = 'cancelled';
-            }
+            // pending. An exit bound to an entry id keeps waiting even when
+            // that entry is cancelled: a later entry with the same id brings
+            // it back (TV, 1W: exit X issued with limit entry L, L cancelled,
+            // a market L two bars later exits at X's take-profit on its fill
+            // bar). After entries have filled (intrabar phase), an exit
+            // without from_entry is cancelled.
+            if (phase === 'intrabar' && !order.from_entry) order.status = 'cancelled';
             continue;
         }
         if (onlyTrades) {
@@ -2675,6 +2767,7 @@ export function processExitOrders(context: any, phase: 'market' | 'open' | 'intr
             order.fill_price = fillPrice;
             order.fill_bar = context.idx;
             order.fill_time = currentTime;
+            exitFillAlert(context, order, matchingDir, qtyToClose, fillPrice);
             riskAfterFill(context, fillPrice);
             continue;
         }
@@ -2952,6 +3045,7 @@ export function processExitOrders(context: any, phase: 'market' | 'open' | 'intr
                     },
                     ev.tradeId,
                 );
+                exitFillAlert(context, order, matchingDir, qtyThis, fillPrice, ev.kind);
                 // An exit in an OCA group acts as a reduce-type member (TV: its 1-unit fill takes 1 off a
                 // reduce-type strategy.order of 2 in the group).
                 if (order.oca_name && order.oca_type === 'reduce') applyOca(strategy, order, qtyThis);
@@ -3035,11 +3129,14 @@ export function applyPendingCloseMarginCall(context: any): void {
 
     // It fills at the previous bar's close, before this bar's path.
     setFillAt(context, -1);
-    closePartialPosition(context, Math.min(pending.qty, Math.abs(strategy.position_size)), applySlippage(context, -pending.dir, pending.price), pending.time, {
+    const mcQty = Math.min(pending.qty, Math.abs(strategy.position_size));
+    const mcPrice = applySlippage(context, -pending.dir, pending.price);
+    closePartialPosition(context, mcQty, mcPrice, pending.time, {
         exitId: MARGIN_CALL_EXIT_ID,
         exitComment: 'Margin call',
         forced: true,
     });
+    orderFillAlert(context, { id: MARGIN_CALL_EXIT_ID, direction: -pending.dir, qty: mcQty, price: mcPrice, comment: 'Margin call' });
 
     if (Math.abs(strategy.position_size) > 1e-9) {
         for (const o of strategy.pending_orders) {
@@ -3182,11 +3279,13 @@ export function processMarginCall(context: any, checkpoint: 'open' | 'extreme' |
 
         // The liquidation is a market order: slippage applies against the position.
         setFillAt(context, checkpointAt);
-        closePartialPosition(context, qtyToLiquidate, applySlippage(context, -positionDir, adversePrice), currentTime, {
+        const mcPrice = applySlippage(context, -positionDir, adversePrice);
+        closePartialPosition(context, qtyToLiquidate, mcPrice, currentTime, {
             exitId: MARGIN_CALL_EXIT_ID,
             exitComment: 'Margin call',
             forced: true,
         });
+        orderFillAlert(context, { id: MARGIN_CALL_EXIT_ID, direction: -positionDir, qty: qtyToLiquidate, price: mcPrice, comment: 'Margin call' });
         riskAfterMarginCall(context, adversePrice);
 
         // ---- Phantom re-check → SECOND margin call at the bar's CLOSE ----

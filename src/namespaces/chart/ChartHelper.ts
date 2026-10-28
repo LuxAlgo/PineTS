@@ -36,10 +36,11 @@ export class ChartHelper {
             copy(point: ChartPointObject): ChartPointObject {
                 return point.copy();
             },
-            now(price: number): ChartPointObject {
+            now(price?: number): ChartPointObject {
                 const idx = ctx.idx;
                 const time = ctx.marketData[idx]?.openTime;
-                return new ChartPointObject(time, idx, res(price));
+                // The price defaults to close.
+                return new ChartPointObject(time, idx, price === undefined ? Series.from(ctx.data.close).get(0) : res(price));
             },
         };
     }

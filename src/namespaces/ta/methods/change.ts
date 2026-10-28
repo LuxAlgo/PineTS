@@ -26,7 +26,12 @@ export function change(context: any) {
             return NaN;
         }
 
-        const change = currentValue - carry.h.at(length);
+        const previous = carry.h.at(length);
+        // The bool overload reports whether the value changed.
+        if (typeof currentValue === 'boolean') {
+            return previous === undefined || previous === null || Number.isNaN(Number(previous)) ? NaN : Number(currentValue) !== Number(previous);
+        }
+        const change = currentValue - previous;
         return context.precision(change);
     };
 }

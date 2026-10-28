@@ -3,7 +3,7 @@
 import { Series } from '../../../Series';
 import { CarryHistory } from './history';
 import { lowerBound, upperBound } from './windows';
-import { assertTaLength } from './assertTaLength';
+import { assertTaLength, MAX_TA_LENGTH } from './assertTaLength';
 import type { ExecutionBudget } from '../../../security/ExecutionBudget';
 
 const isNa = (v: number) => Number.isNaN(v);
@@ -19,8 +19,8 @@ const isNa = (v: number) => Number.isNaN(v);
  * block, a skipped bar repeating the last call's value). Verified against TradingView with synthetic
  * na patterns and lengths.
  *
- * Without na, the insert and the removal are binary searches. A first call on a later bar is completed
- * from the source history, like the other window functions' backfill.
+ * Without na, the insert and the removal are binary searches. A first call on a later bar starts from
+ * its own value, as the other window functions do.
  */
 export class PercentileArray {
     readonly arr: number[] = [];
@@ -33,6 +33,9 @@ export class PercentileArray {
     // undo of the current bar's changes, for a bar computed again (live bar)
     private undoLog: (() => void)[] = [];
 
+    private lastBar = -1;
+    private savedHeld = 0;
+    private savedHistorySize = 0;
     private lastTick: unknown = undefined;
 
     constructor(private readonly budget?: ExecutionBudget) {
@@ -46,17 +49,30 @@ export class PercentileArray {
      */
     step(idx: number, x: any, length: number, series: Series, tick?: unknown): number[] | undefined {
         assertTaLength(length, 'ta.percentile');
-        // A late first call or growing series length may fill by unshift/splice, each shifting O(n)
-        // values. Charge the full possible fill before any of the arrays are mutated.
-        const held = this.held.length - this.head;
-        const fill = Math.max(0, Math.min(length, idx + 1) - Math.min(length, held));
-        this.budget?.chargeWork(length * (fill + 1), 'ta.percentile');
+        // Charge the work before carry.push or the percentile arrays mutate. A first call on a
+        // late bar has no earlier call history; bar_index alone would charge a nonexistent fill.
+        const newBar = idx !== this.lastBar;
+        const rollback = !newBar && (tick === undefined || tick !== this.lastTick);
+        const held = rollback ? this.savedHeld : this.held.length - this.head;
+        const skipped = newBar && this.lastBar >= 0
+            ? Math.min(Math.max(0, idx - this.lastBar - 1), Math.max(MAX_TA_LENGTH, 2 * (length + 1)))
+            : 0;
+        const available = Math.min(length, (newBar ? this.carry.h.size + skipped : this.savedHistorySize) + 1);
+        const removals = Math.max(0, held + 1 - length);
+        const fill = Math.max(0, available - Math.min(held + 1, length));
+        const rollbackOps = rollback ? this.undoLog.length : 0;
+        // Each insert/remove/undo may search and shift the sorted array; a fill may also shift
+        // held values. The bound includes a possible commit compaction and same-bar rollback.
+        const maxSize = Math.max(this.arr.length, this.held.length, held) + fill + rollbackOps + 1;
+        this.budget?.chargeWork((1 + removals + fill + rollbackOps) * (3 * maxSize + 2), 'ta.percentile');
         if (length > this.reservedLength) {
             this.budget?.chargeMemory(32 * (length - this.reservedLength), 'ta.percentile');
             this.reservedLength = length;
         }
         const v = x == null ? NaN : Number(x);
         this.carry.push(idx, v, length, series, this.budget);
+        if (this.carry.newBar) this.savedHistorySize = this.carry.h.size - 1;
+        this.lastBar = idx;
         if (this.carry.newBar) this.commit();
         else if (tick === undefined || tick !== this.lastTick) this.rollback();
         this.lastTick = tick;
@@ -94,6 +110,7 @@ export class PercentileArray {
             this.held = this.held.slice(this.head);
             this.head = 0;
         }
+        this.savedHeld = this.held.length - this.head;
     }
 
     private rollback(): void {

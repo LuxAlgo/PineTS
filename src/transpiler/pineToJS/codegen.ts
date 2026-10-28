@@ -6,6 +6,7 @@
 
 import { CONTEXT_PINE_VARS, NAMESPACE_COLLISION_NAMES, JS_RESERVED_WORDS, BUILTIN_METHOD_NAMES } from '../settings';
 import { BUILTIN_PARAMS } from './builtinParams';
+import { resolveFunctionOverloads } from './overloads';
 
 // Set of names that conflict with Pine context variables/namespaces.
 // Function parameters with these names must be renamed to avoid Phase 2
@@ -54,7 +55,11 @@ export class CodeGenerator {
     // Per function scope (script body first): whether a variable name is a string.
     // `na` stored in a string variable is the na string, which is the empty string.
     private stringVarScopes: Array<Map<string, boolean>> = [new Map()];
-    constructor(options: { indentStr?: string; sourceCode?: string; includeSourceComments?: boolean } = {}) {
+    // Per function scope (script body first): the declared Pine type of a variable or parameter, if any.
+    private declaredTypeScopes: Array<Map<string, string | null>> = [new Map()];
+    private pineVersion: number | null;
+    constructor(options: { indentStr?: string; sourceCode?: string; includeSourceComments?: boolean; version?: number | null } = {}) {
+        this.pineVersion = options.version ?? null;
         this.indent = 0;
         this.indentStr = options.indentStr || '  ';
         this.output = [];
@@ -125,6 +130,7 @@ export class CodeGenerator {
     // Renaming runs first so the parameter map is keyed by the same (possibly
     // renamed) function name that call-site callees carry after the pass.
     private preProcessAST(ast: any) {
+        resolveFunctionOverloads(ast);
         this.renameConflictingVariables(ast);
         this.renameFunctionsSharingTypeNames(ast);
         this.collectFunctionParams(ast);
@@ -855,15 +861,18 @@ export class CodeGenerator {
         // call-site rewrite, so it must appear in the param list.
         const params = node.params;
         const stringVars = new Map<string, boolean>();
+        const declaredTypes = new Map<string, string | null>();
 
         for (let i = 0; i < params.length; i++) {
             const param = params[i];
             if (param.type === 'Identifier') {
                 this.write(param.name);
                 stringVars.set(param.name, isStringType(param.varType));
+                declaredTypes.set(param.name, param.varType ?? null);
             } else if (param.type === 'AssignmentPattern') {
                 const isString = isStringType(param.left.varType);
                 stringVars.set(param.left.name, isString);
+                declaredTypes.set(param.left.name, param.left.varType ?? null);
                 this.write(param.left.name);
                 this.write(' = ');
                 if (isString && isNaIdentifier(param.right)) this.write('""');
@@ -876,10 +885,12 @@ export class CodeGenerator {
 
         this.write(') ');
         this.stringVarScopes.push(stringVars);
+        this.declaredTypeScopes.push(declaredTypes);
         try {
             this.generateBlockStatement(node.body, false);
         } finally {
             this.stringVarScopes.pop();
+            this.declaredTypeScopes.pop();
         }
         this.write('\n');
 
@@ -994,10 +1005,15 @@ export class CodeGenerator {
             const isString =
                 decl.id.type === 'Identifier' &&
                 (decl.id.varType ? isStringType(decl.id.varType) : decl.init?.type === 'Literal' && typeof decl.init.value === 'string');
-            if (decl.id.type === 'Identifier') this.stringVarScopes[this.stringVarScopes.length - 1].set(decl.id.name, isString);
+            if (decl.id.type === 'Identifier') {
+                this.stringVarScopes[this.stringVarScopes.length - 1].set(decl.id.name, isString);
+                this.declaredTypeScopes[this.declaredTypeScopes.length - 1].set(decl.id.name, decl.id.varType ?? null);
+            }
 
             if (decl.init) {
                 this.write(' = ');
+                // TradingView runs a loop that initializes a `var` for one iteration only (v5 and v6).
+                if (kind === 'var' && (decl.init.type === 'ForStatement' || decl.init.type === 'WhileStatement')) decl.init._singleIteration = true;
                 if (isString && isNaIdentifier(decl.init)) this.write('""');
                 else this.generateExpression(decl.init);
             }
@@ -1038,6 +1054,15 @@ export class CodeGenerator {
         if (node.expression.type === 'SwitchExpression' && node.expression.discriminant === null) {
             this.write(this.indentStr.repeat(this.indent));
             this.generateSwitchAsIfElse(node.expression);
+            this.write('\n');
+            return;
+        }
+        // A `break`/`continue` in an arm targets the enclosing loop, which neither the IIFE nor a JS
+        // `switch` (which would catch the `break`) preserves. Pine arms never fall through, so an
+        // if/else chain on the once-evaluated discriminant is equivalent.
+        if (node.expression.type === 'SwitchExpression' && node.expression.cases.some((c) => this.armHasLoopJump(c))) {
+            this.write(this.indentStr.repeat(this.indent));
+            this.generateSwitchStatementWithLoopJumps(node.expression);
             this.write('\n');
             return;
         }
@@ -1553,6 +1578,16 @@ export class CodeGenerator {
 
     // Generate BinaryExpression
     generateBinaryExpression(node) {
+        if (node.operator === 'and' || node.operator === 'or' || node.operator === '&&' || node.operator === '||') {
+            this.generateLogicalOperands(node);
+            return;
+        }
+        // TradingView folds a comparison of two na literals like IEEE NaN: `na != na` is true, `na == na`
+        // false (a series na compared with itself is na, so falsy, either way).
+        if ((node.operator === '!=' || node.operator === '==') && isNaIdentifier(node.left) && isNaIdentifier(node.right)) {
+            this.write(node.operator === '!=' ? 'true' : 'false');
+            return;
+        }
         const currentPrecedence = this.getPrecedence(node);
 
         // Left child
@@ -1576,17 +1611,13 @@ export class CodeGenerator {
         this.write(' ');
 
         // Right child
+        // JS binary operators are left-associative, so a same-precedence right operand keeps its
+        // parentheses: a == (b == c), a - (b - c), close * (1 / 2) (v5 int division first).
+        // TradingView itself evaluates an additive chain left to right (1 + (big - big) is 0 at 1e16),
+        // so the right operand of `+` stays flat.
         const rightPrecedence = this.getPrecedence(node.right);
-        let needsRightParens = rightPrecedence < currentPrecedence;
-
-        // Handle associativity for same precedence
-        if (rightPrecedence === currentPrecedence) {
-            // Subtraction, division, modulo are non-associative (left-associative)
-            // so we need parens for right operand
-            if (op === '-' || op === '/' || op === '%') {
-                needsRightParens = true;
-            }
-        }
+        const needsRightParens =
+            rightPrecedence < currentPrecedence || (rightPrecedence === currentPrecedence && !['+', '&&', '||'].includes(op));
 
         if (needsRightParens) {
             this.write('(');
@@ -1595,6 +1626,33 @@ export class CodeGenerator {
         } else {
             this.generateExpression(node.right);
         }
+    }
+
+    // `and` / `or` always give a bool on TradingView: an na operand counts as false, so
+    // `naBool and true` is false (not na) and `false or naBool` is false. JS && / || would return
+    // the NaN operand itself, so each operand is coerced; short-circuiting is unchanged.
+    generateLogicalOperands(node) {
+        const isBool = (child) =>
+            (child.type === 'Literal' && typeof child.value === 'boolean') ||
+            (child.type === 'UnaryExpression' && (child.operator === '!' || child.operator === 'not')) ||
+            ['and', 'or', '&&', '||'].includes(child.operator);
+        const operand = (child) => {
+            // Comparisons are coerced too: with an na operand they return na.
+            if (isBool(child)) {
+                // A nested and/or keeps its parentheses: a and (b or c).
+                const nested = ['and', 'or', '&&', '||'].includes(child.operator);
+                if (nested) this.write('(');
+                this.generateExpression(child);
+                if (nested) this.write(')');
+                return;
+            }
+            this.write('!!(');
+            this.generateExpression(child);
+            this.write(')');
+        };
+        operand(node.left);
+        this.write(node.operator === 'and' || node.operator === '&&' ? ' && ' : ' || ');
+        operand(node.right);
     }
 
     // Generate UnaryExpression
@@ -1645,6 +1703,14 @@ export class CodeGenerator {
         return false;
     }
 
+    private isBoolVariable(name: string): boolean {
+        for (let i = this.declaredTypeScopes.length - 1; i >= 0; i--) {
+            const type = this.declaredTypeScopes[i].get(name);
+            if (type !== undefined) return typeof type === 'string' && /(^|\s)bool$/.test(type);
+        }
+        return false;
+    }
+
     // Generate UpdateExpression
     generateUpdateExpression(node) {
         if (node.prefix) {
@@ -1672,6 +1738,35 @@ export class CodeGenerator {
 
     // Generate CallExpression
     generateCallExpression(node) {
+        // TradingView folds these at compile time: in v5, `color(na)` is transparent black, not na
+        // (na(color(na)) is false; nz, fixnan and array searches keep it; in v6 it is na), while casting
+        // an na variable stays na; and a literal transparency is truncated (color.new(c, 33.7) reads
+        // back 33; a series 33.7 reads back 34).
+        if (
+            this.pineVersion !== null &&
+            this.pineVersion < 6 &&
+            node.callee?.type === 'Identifier' &&
+            node.callee.name === 'color' &&
+            node.arguments.length === 1 &&
+            isNaIdentifier(node.arguments[0])
+        ) {
+            this.write("'#00000000'");
+            return;
+        }
+        if (this.calleePath(node.callee) === 'color.new' && node.arguments[1]?.type === 'Literal' && typeof node.arguments[1].value === 'number') {
+            const t = Math.trunc(node.arguments[1].value);
+            node.arguments[1] = { ...node.arguments[1], value: t, raw: String(t) };
+        }
+        // nz's default replacement follows the argument's type: false for a bool (TV: nz(bool na) is false).
+        if (
+            node.callee?.type === 'Identifier' &&
+            node.callee.name === 'nz' &&
+            node.arguments.length === 1 &&
+            node.arguments[0].type === 'Identifier' &&
+            this.isBoolVariable(node.arguments[0].name)
+        ) {
+            node.arguments = [...node.arguments, { type: 'Literal', value: false, raw: 'false' }];
+        }
         const calleePrecedence = this.getPrecedence(node.callee);
         if (calleePrecedence < 19) {
             this.write('(');
@@ -2464,6 +2559,73 @@ export class CodeGenerator {
         this.write(stringArms ? 'return "";\n' : 'return na;\n');
     }
 
+    private isLoopJump(stmt: any): boolean {
+        return stmt?.type === 'ExpressionStatement' && stmt.expression?.type === 'Identifier' &&
+            (stmt.expression.name === 'break' || stmt.expression.name === 'continue');
+    }
+
+    /** True when an arm can reach a `break`/`continue` of the loop around the switch (not of a loop inside the arm). */
+    private armHasLoopJump(arm: any): boolean {
+        const visit = (stmt: any): boolean => {
+            if (!stmt || typeof stmt !== 'object') return false;
+            if (this.isLoopJump(stmt)) return true;
+            switch (stmt.type) {
+                case 'BlockStatement':
+                    return stmt.body.some(visit);
+                case 'IfStatement':
+                    return visit(stmt.consequent) || visit(stmt.alternate);
+                case 'ExpressionStatement':
+                    return stmt.expression?.type === 'SwitchExpression' && stmt.expression.cases.some((c: any) => this.armHasLoopJump(c));
+                default:
+                    return false;
+            }
+        };
+        return (arm.statements ?? []).some(visit);
+    }
+
+    private switchTempCounter = 0;
+
+    // Switch statement whose arms break/continue the enclosing loop: an if/else chain on the discriminant.
+    generateSwitchStatementWithLoopJumps(node) {
+        const temp = `__switch${this.switchTempCounter++}`;
+        this.write('{\n');
+        this.indent++;
+        this.write(this.indentStr.repeat(this.indent));
+        this.write(`const ${temp} = `);
+        this.generateExpression(node.discriminant);
+        this.write(';\n');
+        this.write(this.indentStr.repeat(this.indent));
+        for (let i = 0; i < node.cases.length; i++) {
+            const c = node.cases[i];
+            if (c.test) {
+                this.write(i === 0 ? 'if (' : ' else if (');
+                this.write(`${temp} == `);
+                this.generateExpression(c.test);
+                this.write(') {\n');
+            } else {
+                this.write(i === 0 ? '{\n' : ' else {\n');
+            }
+            this.indent++;
+            if (c.statements && c.statements.length > 0) {
+                for (const stmt of c.statements) {
+                    this.write(this.indentStr.repeat(this.indent));
+                    this.generateStatement(stmt);
+                }
+            } else {
+                this.write(this.indentStr.repeat(this.indent));
+                this.generateExpression(c.consequent);
+                this.write(';\n');
+            }
+            this.indent--;
+            this.write(this.indentStr.repeat(this.indent));
+            this.write('}');
+        }
+        this.write('\n');
+        this.indent--;
+        this.write(this.indentStr.repeat(this.indent));
+        this.write('}');
+    }
+
     // Generate switch without discriminant as if/else if/else chain (for statement context)
     generateSwitchAsIfElse(node) {
         for (let i = 0; i < node.cases.length; i++) {
@@ -2531,7 +2693,13 @@ export class CodeGenerator {
         if (body && body.body && body.body.length > 0) {
             const lastIdx = body.body.length - 1;
             const lastStmt = body.body[lastIdx];
-            if (lastStmt.type === 'ExpressionStatement') {
+            // A trailing nested loop gives its own value: for i … / for j … / i * 10 + j.
+            const value = lastStmt.type === 'ExpressionStatement'
+                ? lastStmt.expression
+                : lastStmt.type === 'ForStatement' || lastStmt.type === 'WhileStatement'
+                    ? lastStmt
+                    : null;
+            if (value && !this.isLoopJump(lastStmt)) {
                 // Replace last expression with __result = expression
                 body.body[lastIdx] = {
                     type: 'ExpressionStatement',
@@ -2539,11 +2707,12 @@ export class CodeGenerator {
                         type: 'AssignmentExpression',
                         operator: '=',
                         left: { type: 'Identifier', name: '__result' },
-                        right: lastStmt.expression,
+                        right: value,
                     },
                     _line: lastStmt._line,
                 };
             }
+            if (node._singleIteration) body.body.push({ type: 'ExpressionStatement', expression: { type: 'Identifier', name: 'break' } });
         }
 
         // Generate the loop statement

@@ -6,6 +6,7 @@ import { VIEWPORT_DEPENDENT_BUILTINS } from '../transpiler/settings';
 import { scanInputs } from './scanInputs';
 import { buildInputProxy } from './inputProxy';
 import { normalizeColorToRgbaHex } from '../namespaces/color/PineColor';
+import { extractPineScriptVersion } from '../transpiler/pineToJS/version';
 import { scanDeclaration } from './scanDeclaration';
 import { propsForDeclaration } from './propsSchema';
 import { buildPropProxy } from './propProxy';
@@ -251,9 +252,10 @@ export class Indicator {
         // here, before the proxy seeds its default values, so getInputsMeta()
         // and `.input` reads agree. Runtime is unaffected (getRuntimeInputs()
         // only forwards explicit overrides, never these defaults).
+        const pineVersion = typeof this.source === 'string' ? extractPineScriptVersion(this.source) : null;
         for (const m of this._inputMeta) {
             if (m.type === 'color' && m.defval !== undefined) {
-                m.defval = normalizeColorToRgbaHex(m.defval);
+                m.defval = normalizeColorToRgbaHex(m.defval, pineVersion);
             }
         }
         const built = buildInputProxy(this._inputMeta, (key) => this._explicitOverrides.add(key));

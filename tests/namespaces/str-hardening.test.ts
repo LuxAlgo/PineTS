@@ -40,12 +40,17 @@ describe('bounded str operations', () => {
         expect(() => bounded.replace_all('aa', 'a', 'bbbb')).toThrow(PineRuntimeError);
     });
 
-    it('rejects backtracking-prone regex features before invoking RegExp', () => {
-        for (const pattern of ['(a+)+$', 'a+a+$', 'a*a*a*$', '(a|aa)+$', '(?=a)a', '(a)\\1']) {
-            expect(() => str.match('aaaa!', pattern), pattern).toThrow(PineRuntimeError);
-        }
+    it('supports Java-flavor regex features while charging backtracking to the shared budget', () => {
+        expect(str.match('a', '(?=a)a')).toBe('a');
+        expect(str.match('aa', '(a)\\1')).toBe('aa');
+        expect(str.match('aaaa!', '(a+)+$')).toBe('');
         expect(str.match('hello 123', '\\d+')).toBe('123');
         expect(str.match('abc{close[9]}def', '\\{\\w+\\[\\s*\\d+\\s*\\]\\}')).toBe('{close[9]}');
+
+        const budget = new ExecutionBudget(500_000, { maxWorkUnits: 1_000, maxMemoryBytes: 1_000_000 });
+        const bounded = new Str({ executionBudget: budget } as any);
+        expect(() => bounded.match('a'.repeat(30) + '!', '(a+)+$')).toThrow(PineRuntimeError);
+        expect(budget.workUnits).toBeGreaterThan(0);
     });
 
     it('bounds regex subject and pattern lengths', () => {

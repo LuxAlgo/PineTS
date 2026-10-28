@@ -172,12 +172,14 @@ class InputAnalyzer {
     private readonly inputDefaults = new WeakMap<object, ConstValue>();
     private readonly functionNames = new Set<string>();
     private readonly truncatingIntDivision: boolean;
+    private readonly pineVersion: number | null;
 
     constructor(
         private readonly ast: any,
         options: AnalyzeInputsOptions,
     ) {
         this.truncatingIntDivision = options.version != null && options.version < 6;
+        this.pineVersion = options.version ?? null;
     }
 
     run(): InputSite[] {
@@ -223,6 +225,7 @@ class InputAnalyzer {
         return {
             enums: this.enums,
             truncatingIntDivision: this.truncatingIntDivision,
+            pineVersion: this.pineVersion,
             lookup: (name) => {
                 const sym = scope.resolve(name);
                 if (withInputDefaults && sym?.kind === 'value' && !sym.nonConst && sym.inputDefault) return sym.inputDefault;

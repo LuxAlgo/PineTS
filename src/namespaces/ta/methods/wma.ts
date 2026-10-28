@@ -2,7 +2,6 @@
 
 import { Series } from '../../../Series';
 import { CarryHistory } from '../utils/history';
-import { chargeTaWork } from '../utils/assertTaLength';
 
 // TradingView weighs an na bar with the last non-na value before it (and returns na on the na bar
 // itself), so the history holds the source with na values filled forward.
@@ -18,7 +17,6 @@ class WmaState {
     // non-na values seen, at the end of the previous bar and now
     savedSeen = 0;
     seen = 0;
-    started = false;
 }
 
 export function wma(context: any) {
@@ -36,15 +34,7 @@ export function wma(context: any) {
         const currentValue = series.get(0);
         carry.push(context.idx, currentValue, period, series, context.executionBudget);
 
-        if (!state.started) {
-            // the values before the first call, read from the source as the carried history's backfill
-            state.started = true;
-            for (let k = 1; k <= context.idx && state.seen < period; k++) {
-                chargeTaWork(context, 1, 'ta.wma');
-                if (!isNa(series.get(k))) state.seen++;
-            }
-            state.savedSeen = state.seen;
-        } else if (carry.newBar) state.savedSeen = state.seen;
+        if (carry.newBar) state.savedSeen = state.seen;
         else state.seen = state.savedSeen;
         if (!isNa(currentValue)) state.seen++;
 

@@ -359,7 +359,7 @@ evt.on('data', (context) => {
     console.log('New data:', context.result);
 });
 
-// Handle alert events (from alert() and alertcondition() calls)
+// Handle alert events (from alert() and alertcondition() calls, and strategy order fills)
 evt.on('alert', (alert) => {
     console.log('Alert:', alert.message);
 });
@@ -383,7 +383,7 @@ evt.on('error', (error) => {
 | Event | Payload | Description |
 | --- | --- | --- |
 | `'data'` | `Context` | New bar data processed |
-| `'alert'` | `{ type, message, title?, freq?, bar_index, time }` | Alert or alertcondition fired |
+| `'alert'` | `{ type, id, message, title?, freq?, alert_message?, order?, position_size?, prev_position_size?, bar_index, time }` | alert(), alertcondition() or strategy order fill (see [Alerts](../alerts/)) |
 | `'warning'` | `{ message, method?, bar }` | Non-blocking runtime warning |
 | `'error'` | `Error` | Fatal error (script halted) |
 
@@ -582,7 +582,7 @@ interface Context {
     // Results
     result: any; // Computed results
     plots: any; // Plot data
-    alerts: any[]; // Alert events from alert() and alertcondition()
+    alerts: any[]; // Alert events from alert(), alertcondition() and strategy order fills
     warnings: any[]; // Non-blocking runtime warnings
 
     // Market context
@@ -994,7 +994,7 @@ try {
 
 ## Alerts
 
-PineTS supports `alert()` and `alertcondition()` from Pine Script. Alerts are captured as events that your application can act on — send webhooks, trigger trades, or log signals.
+PineTS supports `alert()` and `alertcondition()` from Pine Script, and the order-fill alerts of strategies (with `alert_message` / `disable_alert`). Alerts are captured as events that your application can act on — send webhooks, trigger trades, or log signals.
 
 ### Quick Example
 

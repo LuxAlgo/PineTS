@@ -84,6 +84,7 @@ export class ScopeManager {
     private plotCallIdCounter: number = 0;
     private bareCallIdCounters: Map<string, number> = new Map();
     private alertCallIdCounter: number = 0;
+    private strategyCloseIdCounter: number = 0;
     private loopGuardCounter: number = 0;
     private hoistingStack: any[][] = [];
     private hoistingRoots: number[] = [];
@@ -245,6 +246,12 @@ export class ScopeManager {
         return {
             type: 'Literal',
             value: `alert_${this.alertCallIdCounter++}`,
+        };
+    }
+    public getNextStrategyCloseId(): any {
+        return {
+            type: 'Literal',
+            value: `strategy.close_${this.strategyCloseIdCounter++}`,
         };
     }
     public getNextLoopGuardName(): string {
