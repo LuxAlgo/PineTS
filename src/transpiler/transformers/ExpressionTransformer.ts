@@ -239,7 +239,11 @@ function udtFieldHistory(chain: any, baseName: string, baseRef: any, index: any,
     const [scopedName, kind] = scopeManager.getVariable(baseName);
     if (!isParam && kind !== 'var' && kind !== 'varip') {
         cursor.object = ASTFactory.createGetCall(baseRef, index);
-        return chain;
+        if (cursor === chain) return chain;
+        // Before the instance's first bar `$.get(<base>, N)` is na: a nested field of it is na too
+        // (`f.inner.px[1]` on the first bar), not a TypeError on `undefined.px`.
+        for (let hop: any = chain; hop !== cursor; hop = hop.object) hop.optional = true;
+        return { type: 'LogicalExpression', operator: '??', left: { type: 'ChainExpression', expression: chain }, right: ASTFactory.createIdentifier('NaN') };
     }
     cursor.object = ASTFactory.createGetCall(baseRef, 0);
     const paramId = scopeManager.generateParamId();
