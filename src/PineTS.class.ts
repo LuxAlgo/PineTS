@@ -695,6 +695,8 @@ export class PineTS {
 
             // Step back one position to reprocess last candle
             processedUpToIdx = this.data.length - (newCandles + 1);
+            // The bar forming when live updates began, and every bar after it, are realtime bars.
+            (context as any)._liveFromIdx ??= processedUpToIdx;
 
             // Roll back drawing objects created during the previous processing of
             // these bars so they don't accumulate on each streaming tick.
@@ -915,6 +917,7 @@ export class PineTS {
         context.length = this.data.length;
 
         const processFrom = this.data.length - (newCandles + 1);
+        (context as any)._liveFromIdx ??= processFrom;
         context.rollbackDrawings(processFrom);
 
         // Split execution: process bars before last → snapshot → last bar.

@@ -29,10 +29,16 @@ export interface AlertEvent {
 
 type PendingRender = { event: AlertEvent; template: string; vars?: Record<string, string> };
 
-/** Whether alert events fire on the current bar (realtime bar, or every bar in 'all' mode). */
+/**
+ * Whether alert events fire on the current bar: every bar in 'all' mode; otherwise the last bar, and in live
+ * updates every bar from the one that was forming when they began. A live bar is executed once more with its
+ * final values when the next bar arrives: that execution is its close, where `freq_once_per_bar_close` alerts
+ * (and every alert() of a strategy without calc_on_every_tick) fire.
+ */
 export function alertsFireOnBar(context: any): boolean {
     if (context.isSecondaryContext) return false;
     if ((context._alertMode || 'realtime') === 'all') return true;
+    if (context._liveFromIdx !== undefined && context.idx >= context._liveFromIdx) return true;
     return context.pine?.barstate?.isrealtime ?? context.idx === context.length - 1;
 }
 

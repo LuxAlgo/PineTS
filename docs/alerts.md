@@ -252,6 +252,8 @@ Each alert event has this shape:
 
 By default, PineTS matches TradingView behavior: alerts only fire on the **last (realtime) bar**. Historical bars are silently skipped. This is the correct behavior for live trading. The mode applies to all three sources: `alert()`, `alertcondition()` and strategy order fills.
 
+With live data (`stream()` with `live: true`, or `updateTail()`), the bar forming when updates begin and every bar after it are realtime bars. When a live bar closes, PineTS executes it once more with its final values before the next bar: that execution is where `alert.freq_once_per_bar_close` alerts (and the `alert()` calls of a strategy without `calc_on_every_tick`) fire. Once-per-bar alerts and `alertcondition()` do not fire a second time for that bar.
+
 For **backtesting**, you can switch to `'all'` mode to fire alerts on every bar:
 
 ```typescript
