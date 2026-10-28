@@ -17,8 +17,8 @@ const isNa = (v: number) => Number.isNaN(v);
  * block, a skipped bar repeating the last call's value). Verified against TradingView with synthetic
  * na patterns and lengths.
  *
- * Without na, the insert and the removal are binary searches. A first call on a later bar is completed
- * from the source history, like the other window functions' backfill.
+ * Without na, the insert and the removal are binary searches. A first call on a later bar starts from
+ * its own value, as the other window functions do.
  */
 export class PercentileArray {
     readonly arr: number[] = [];

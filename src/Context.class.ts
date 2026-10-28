@@ -851,6 +851,31 @@ export class Context {
     }
 
     /**
+     * A function parameter whose history the body reads (`s[1]`), as its own series at the call site
+     * (`key`): one value per bar the function runs, so `s[1]` is the value of the previous call. A
+     * second call on the same bar (a loop, a live bar computed again) replaces that bar's value.
+     * Collections and objects keep their reference.
+     */
+    callParam(value: any, key: string) {
+        const v = value instanceof Series ? value.get(0) : value;
+        if (v !== null && typeof v === 'object') return value;
+        let state = this.callParams.get(key);
+        if (!state) {
+            state = { idx: -1, data: [] };
+            this.callParams.set(key, state);
+        }
+        if (this.idx !== state.idx) {
+            state.data.push(v);
+            state.idx = this.idx;
+        } else state.data[state.data.length - 1] = v;
+        const series = this.typedSeries(state.data, v);
+        if (value instanceof Series && value.beforeStart !== undefined) series.beforeStart = value.beforeStart;
+        return series;
+    }
+
+    private callParams = new Map<string, { idx: number; data: any[] }>();
+
+    /**
      * Access a series value with Pine Script semantics (reverse order)
      * @param source - The source series or array
      * @param index - The lookback index (0 = current value)

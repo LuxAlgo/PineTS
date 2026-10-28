@@ -6,24 +6,18 @@ import { CarryHistory } from './history';
 /**
  * The source of `ta.linreg` / `ta.rci` as TradingView reads it: `length + 1` slots indexed by bar index, written only when the function is
  * called. Inside a local block, a bar the block skipped still holds what was written in its slot
- * `length + 1` (or a multiple of it) bars earlier, or 0 if nothing was.
- *
- * Before the first call PineTS fills the slots of the bars behind it from the source history (the
- * backfill of the other window functions, so a function first called on the last bar sees those bars).
- * Such a value is read only for its own bar; for a later bar it reads 0, like a slot never written.
+ * `length + 1` (or a multiple of it) bars earlier, or 0 if nothing was. A function first called on a
+ * later bar reads 0 for the slots before its first call (TV: `ta.linreg(close, 5, 0)` first called on
+ * bar 9 gives 2,177 for a close near 3,600).
  */
 export class BarRing {
     readonly size: number;
+    // a slot never written holds 0
     private vals: number[];
-    // the bar a slot was last filled for, and whether a call wrote it
-    private bars: number[];
-    private byCall: boolean[];
 
     constructor(readonly length: number) {
         this.size = length + 1;
         this.vals = new Array(this.size).fill(0);
-        this.bars = new Array(this.size).fill(-1);
-        this.byCall = new Array(this.size).fill(false);
     }
 
     slot(bar: number): number {
@@ -31,37 +25,18 @@ export class BarRing {
     }
 
     write(bar: number, v: number): void {
-        const s = this.slot(bar);
-        this.vals[s] = v;
-        this.bars[s] = bar;
-        this.byCall[s] = true;
-    }
-
-    /** Fills the slots of the `length` bars before `bar` from the source history. */
-    prefill(bar: number, series: Series): void {
-        for (let b = Math.max(0, bar - this.length); b < bar; b++) {
-            const s = this.slot(b);
-            this.vals[s] = series.get(bar - b);
-            this.bars[s] = b;
-            this.byCall[s] = false;
-        }
+        this.vals[this.slot(bar)] = v;
     }
 
     /** The value read for `bar`; na before the first bar of the chart. */
     read(bar: number): number {
         if (bar < 0) return NaN;
-        const s = this.slot(bar);
-        return this.byCall[s] || this.bars[s] === bar ? this.vals[s] : 0;
+        return this.vals[this.slot(bar)];
     }
 
     /** Value held by slot `s` as read for `bar` (a bar of that slot). */
-    readSlot(s: number, bar: number): number {
-        return this.byCall[s] || this.bars[s] === bar ? this.vals[s] : 0;
-    }
-
-    /** Whether slot `s` holds a backfilled value read as 0 for `bar`. */
-    stalePrefill(s: number, bar: number): boolean {
-        return !this.byCall[s] && this.bars[s] >= 0 && this.bars[s] !== bar;
+    readSlot(s: number, _bar: number): number {
+        return this.vals[s];
     }
 
     valueOf(s: number): number {
@@ -93,7 +68,6 @@ export class TvWeightedRing {
         if (!validLength(length)) return undefined;
         if (!this.ring || this.ring.length !== length) {
             this.ring = new BarRing(length);
-            this.ring.prefill(idx, series);
             this.lastCall = -1;
             this.ok = false;
             this.savedFor = -1;

@@ -4,17 +4,8 @@ import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
 import { CallWindow } from '../utils/windows';
 
-/** Upper (or lower) money flow of the bar history of `series`, read by a backfill. */
-class FlowHistory {
-    series: any;
-    volume: any;
-    constructor(private readonly up: boolean) {}
-    get(k: number): number {
-        const src = this.series.get(k);
-        const ch = src - this.series.get(k + 1);
-        return this.volume.get(k) * (this.up ? (ch <= 0 ? 0 : src) : ch >= 0 ? 0 : src);
-    }
-}
+// The windows only hold the calls' values (passed as `current`): there is no source to read back.
+const NO_SOURCE = { get: () => NaN };
 
 /**
  * Money Flow Index (MFI)
@@ -39,27 +30,25 @@ export function mfi(context: any) {
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `mfi_${length}`;
-        if (!context.taState[stateKey]) context.taState[stateKey] = { prev: new CallWindow(), up: new FlowHistory(true), down: new FlowHistory(false) };
+        if (!context.taState[stateKey]) context.taState[stateKey] = { prev: new CallWindow() };
         const state = context.taState[stateKey];
         const prev: CallWindow = state.prev;
         prev.begin(context.idx);
 
         // The change since the previous call (TradingView's ta.change inside the function, which in a
-        // local block compares with the last call), the previous bar before the first call
+        // local block compares with the last call); na on the first call
         const series = Series.from(source);
         const volume = Series.from(context.data.volume);
         const currentSrc = series.get(0);
-        const previousSrc = prev.ring.size ? prev.ring.at(0) : series.get(1);
+        const previousSrc = prev.ring.size ? prev.ring.at(0) : NaN;
         prev.push(context.idx, currentSrc, 1);
         const change = currentSrc - previousSrc;
 
         // upper: volume * src when the source rose (or its change is na), lower: when it fell. An na
         // flow (na source or volume) is skipped by the sums, as math.sum does on TradingView.
         const volume0 = volume.get(0);
-        state.up.series = state.down.series = series;
-        state.up.volume = state.down.volume = volume;
-        const upper = nonNaWindow(context, `${stateKey}_up`, state.up, length, false, volume0 * (change <= 0 ? 0 : currentSrc));
-        const lower = nonNaWindow(context, `${stateKey}_down`, state.down, length, false, volume0 * (change >= 0 ? 0 : currentSrc));
+        const upper = nonNaWindow(context, `${stateKey}_up`, NO_SOURCE, length, false, volume0 * (change <= 0 ? 0 : currentSrc));
+        const lower = nonNaWindow(context, `${stateKey}_down`, NO_SOURCE, length, false, volume0 * (change >= 0 ? 0 : currentSrc));
         if (!upper || !lower) {
             return NaN;
         }

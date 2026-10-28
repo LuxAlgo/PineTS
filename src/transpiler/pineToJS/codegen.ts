@@ -55,7 +55,11 @@ export class CodeGenerator {
     // Per function scope (script body first): whether a variable name is a string.
     // `na` stored in a string variable is the na string, which is the empty string.
     private stringVarScopes: Array<Map<string, boolean>> = [new Map()];
-    constructor(options: { indentStr?: string; sourceCode?: string; includeSourceComments?: boolean } = {}) {
+    // Per function scope (script body first): the declared Pine type of a variable or parameter, if any.
+    private declaredTypeScopes: Array<Map<string, string | null>> = [new Map()];
+    private pineVersion: number | null;
+    constructor(options: { indentStr?: string; sourceCode?: string; includeSourceComments?: boolean; version?: number | null } = {}) {
+        this.pineVersion = options.version ?? null;
         this.indent = 0;
         this.indentStr = options.indentStr || '  ';
         this.output = [];
@@ -857,15 +861,18 @@ export class CodeGenerator {
         // call-site rewrite, so it must appear in the param list.
         const params = node.params;
         const stringVars = new Map<string, boolean>();
+        const declaredTypes = new Map<string, string | null>();
 
         for (let i = 0; i < params.length; i++) {
             const param = params[i];
             if (param.type === 'Identifier') {
                 this.write(param.name);
                 stringVars.set(param.name, isStringType(param.varType));
+                declaredTypes.set(param.name, param.varType ?? null);
             } else if (param.type === 'AssignmentPattern') {
                 const isString = isStringType(param.left.varType);
                 stringVars.set(param.left.name, isString);
+                declaredTypes.set(param.left.name, param.left.varType ?? null);
                 this.write(param.left.name);
                 this.write(' = ');
                 if (isString && isNaIdentifier(param.right)) this.write('""');
@@ -878,10 +885,12 @@ export class CodeGenerator {
 
         this.write(') ');
         this.stringVarScopes.push(stringVars);
+        this.declaredTypeScopes.push(declaredTypes);
         try {
             this.generateBlockStatement(node.body, false);
         } finally {
             this.stringVarScopes.pop();
+            this.declaredTypeScopes.pop();
         }
         this.write('\n');
 
@@ -996,7 +1005,10 @@ export class CodeGenerator {
             const isString =
                 decl.id.type === 'Identifier' &&
                 (decl.id.varType ? isStringType(decl.id.varType) : decl.init?.type === 'Literal' && typeof decl.init.value === 'string');
-            if (decl.id.type === 'Identifier') this.stringVarScopes[this.stringVarScopes.length - 1].set(decl.id.name, isString);
+            if (decl.id.type === 'Identifier') {
+                this.stringVarScopes[this.stringVarScopes.length - 1].set(decl.id.name, isString);
+                this.declaredTypeScopes[this.declaredTypeScopes.length - 1].set(decl.id.name, decl.id.varType ?? null);
+            }
 
             if (decl.init) {
                 this.write(' = ');
@@ -1570,6 +1582,12 @@ export class CodeGenerator {
             this.generateLogicalOperands(node);
             return;
         }
+        // TradingView folds a comparison of two na literals like IEEE NaN: `na != na` is true, `na == na`
+        // false (a series na compared with itself is na, so falsy, either way).
+        if ((node.operator === '!=' || node.operator === '==') && isNaIdentifier(node.left) && isNaIdentifier(node.right)) {
+            this.write(node.operator === '!=' ? 'true' : 'false');
+            return;
+        }
         const currentPrecedence = this.getPrecedence(node);
 
         // Left child
@@ -1685,6 +1703,14 @@ export class CodeGenerator {
         return false;
     }
 
+    private isBoolVariable(name: string): boolean {
+        for (let i = this.declaredTypeScopes.length - 1; i >= 0; i--) {
+            const type = this.declaredTypeScopes[i].get(name);
+            if (type !== undefined) return typeof type === 'string' && /(^|\s)bool$/.test(type);
+        }
+        return false;
+    }
+
     // Generate UpdateExpression
     generateUpdateExpression(node) {
         if (node.prefix) {
@@ -1712,6 +1738,35 @@ export class CodeGenerator {
 
     // Generate CallExpression
     generateCallExpression(node) {
+        // TradingView folds these at compile time: in v5, `color(na)` is transparent black, not na
+        // (na(color(na)) is false; nz, fixnan and array searches keep it; in v6 it is na), while casting
+        // an na variable stays na; and a literal transparency is truncated (color.new(c, 33.7) reads
+        // back 33; a series 33.7 reads back 34).
+        if (
+            this.pineVersion !== null &&
+            this.pineVersion < 6 &&
+            node.callee?.type === 'Identifier' &&
+            node.callee.name === 'color' &&
+            node.arguments.length === 1 &&
+            isNaIdentifier(node.arguments[0])
+        ) {
+            this.write("'#00000000'");
+            return;
+        }
+        if (this.calleePath(node.callee) === 'color.new' && node.arguments[1]?.type === 'Literal' && typeof node.arguments[1].value === 'number') {
+            const t = Math.trunc(node.arguments[1].value);
+            node.arguments[1] = { ...node.arguments[1], value: t, raw: String(t) };
+        }
+        // nz's default replacement follows the argument's type: false for a bool (TV: nz(bool na) is false).
+        if (
+            node.callee?.type === 'Identifier' &&
+            node.callee.name === 'nz' &&
+            node.arguments.length === 1 &&
+            node.arguments[0].type === 'Identifier' &&
+            this.isBoolVariable(node.arguments[0].name)
+        ) {
+            node.arguments = [...node.arguments, { type: 'Literal', value: false, raw: 'false' }];
+        }
         const calleePrecedence = this.getPrecedence(node.callee);
         if (calleePrecedence < 19) {
             this.write('(');

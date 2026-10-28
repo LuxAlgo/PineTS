@@ -185,8 +185,9 @@ export class PineColor {
         a = resolveColor(a);
         if (a === undefined) return color;
 
-        // TradingView truncates the transparency to an integer in 0..100; na is fully transparent.
-        a = isNa(a) ? 100 : clamp(Math.trunc(a), 0, 100);
+        // The transparency is kept fractional, clamped to 0..100 (TV: 6.5 reads back as 7 and 50.4 as 51
+        // through the alpha byte); na is fully transparent.
+        a = isNa(a) ? 100 : clamp(a, 0, 100);
         // An na color is transparent black, so color.new(na, 50) is half-transparent black.
         if (isNa(color)) color = '#000000';
         if (typeof color !== 'string') return color;
