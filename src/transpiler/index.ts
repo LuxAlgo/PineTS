@@ -64,6 +64,7 @@ import {
     deferVarInitializerFunctions,
 } from './transformers/MainTransformer';
 import { extractPineScriptVersion, pineToJS } from './pineToJS/pineToJS.index';
+import { extractStrategyAlertMessage } from './pineToJS/version';
 import { buildLtfSlices } from './slicing/buildLtfSlices';
 import { verifyClosedWorld } from './analysis/ClosedWorldVerifier';
 
@@ -292,6 +293,8 @@ export function transpile(
     const _wraperFunction = new Function('', `var _r = ${transformedCode}\n; return _r;`);
     const mainFn = _wraperFunction(this);
     (mainFn as any)._pineVersion = pineVersion;
+    const strategyAlertMessage = pineVersion !== null && typeof source === 'string' ? extractStrategyAlertMessage(source) : null;
+    if (strategyAlertMessage !== null) (mainFn as any)._strategyAlertMessage = strategyAlertMessage;
     if (slices && Object.keys(slices).length > 0) {
         for (const slice of Object.values(slices)) (slice as any)._pineVersion = pineVersion;
         (mainFn as any)._ltfSlices = slices;

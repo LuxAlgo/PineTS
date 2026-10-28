@@ -9,6 +9,7 @@ import { PineMatrixObject } from './namespaces/matrix/PineMatrixObject';
 import { Barstate } from './namespaces/Barstate';
 import { Session } from './namespaces/Session';
 import { Core, NAHelper, AlertHelper } from './namespaces/Core';
+import type { AlertEvent } from './namespaces/alertEvents';
 import { PineColor } from './namespaces/color/PineColor';
 import { TimeHelper, TimeComponentHelper, EXTRACTORS } from './namespaces/Time';
 import { tradingDayOf } from './namespaces/tradingPeriod';
@@ -41,6 +42,7 @@ import { BUILTIN_METHOD_NAMES } from './transpiler/settings';
 import { PineRuntimeError } from './errors/PineRuntimeError';
 import type { IImportResolver } from './imports/IImportResolver';
 import type { IndicatorOptions } from './types/PineTypes';
+import type { IPineInput } from './Indicator/types';
 import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
 import { DRAWING_PARAMS } from './namespaces/drawingParams';
 import { withNamedArgs } from './namespaces/namedArgs';
@@ -80,11 +82,14 @@ export class Context {
     /** Runtime warnings (OOB access, etc.) — non-blocking, script continues. */
     public warnings: { message: string; method?: string; bar: number }[] = [];
 
-    /** Alert events emitted by alert() and alertcondition() calls. */
-    public alerts: { type: string; id: string; message: string; title?: string; freq?: string; bar_index: number; time: number }[] = [];
+    /** Alert events emitted by alert() and alertcondition() calls, and by strategy order fills. */
+    public alerts: AlertEvent[] = [];
 
     /** Alert mode: 'realtime' = only fire on live bars (TV behavior), 'all' = fire on every bar (backtest). */
     public _alertMode: 'realtime' | 'all' = 'realtime';
+
+    /** Input declarations of the running Pine source, read lazily (the default strategy alert message lists them). */
+    public _inputsMeta?: () => IPineInput[];
 
     /** The strategy broker trades on the tick grid (see PineTS.setFillsOnTickGrid). */
     public _fillsOnTickGrid: boolean = false;

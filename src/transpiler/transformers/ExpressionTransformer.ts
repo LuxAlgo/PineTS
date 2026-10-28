@@ -1955,6 +1955,22 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
             });
         }
 
+        // strategy.close call sites are numbered in source order: TradingView reports the fills of their orders
+        // as `Close entry(s) order strategy.close_N` ({{strategy.order.id}} of order-fill alerts).
+        if (fullPath === 'strategy.close') {
+            node.arguments.push({
+                type: 'ObjectExpression',
+                properties: [{
+                    type: 'Property',
+                    key: { type: 'Identifier', name: '__callsiteId' },
+                    value: scopeManager.getNextStrategyCloseId(),
+                    kind: 'init',
+                    computed: false,
+                    shorthand: false,
+                }],
+            });
+        }
+
         // Inject unique call ID for TA functions to enable proper state management
         // (`math.random` keeps a seeded generator per call site the same way, `math.sum` its window)
         if (namespace === 'ta' || fullPath === 'math.random' || fullPath === 'math.sum') {

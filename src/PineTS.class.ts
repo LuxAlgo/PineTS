@@ -8,6 +8,7 @@ import { Series } from './Series';
 import { Indicator } from './Indicator';
 import { toImportResolver } from './imports/Function/FunctionImportResolver.class';
 import type { IImportResolver, ImportResolverFn } from './imports/IImportResolver';
+import { renderBarAlerts } from './namespaces/alertEvents';
 import { processBarOrders, barPath, beginStrategyBar, riskStartBar, riskAtBarClose, processOrdersOnClose, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState, snapToTick } from './namespaces/strategy/utils';
 
 import { parseTimeframe, timeframeSeconds } from './timeframe';
@@ -530,6 +531,7 @@ export class PineTS {
 
         const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
         context.pineVersion = (prepared.fn as any)._pineVersion ?? null;
+        context._inputsMeta = () => ind.getInputsMeta();
         this._transpiledCode = prepared.fn;
         context.transpiledFn = prepared.fn;
         // Propagate transpile-time slices (one per request.security_lower_tf
@@ -578,6 +580,7 @@ export class PineTS {
 
         const context = this._initializeContext(ind.source ?? null as any, prepared.inputs, this._isSecondaryContext);
         context.pineVersion = (prepared.fn as any)._pineVersion ?? null;
+        context._inputsMeta = () => ind.getInputsMeta();
         this._transpiledCode = prepared.fn;
         context.transpiledFn = prepared.fn;
         if (prepared.ltfSlices) (context as any)._ltfTruncatedBodies = prepared.ltfSlices;
@@ -1347,6 +1350,7 @@ export class PineTS {
                 processOrdersOnClose(context);
                 if (rawBar) this._restoreRawBar(context, rawBar);
             }
+            renderBarAlerts(context);
 
             //collect results
             if (typeof result === 'object') {
