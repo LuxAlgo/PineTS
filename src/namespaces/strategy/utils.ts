@@ -1177,7 +1177,12 @@ export function processOrdersOnClose(context: any): void {
         o.trail_price === undefined &&
         o.trail_points === undefined;
 
+    // A live bar still forming has not closed: a strategy without calc_on_every_tick runs on it only at its close
+    // on TradingView, so its close orders (and their alerts) wait for the execution with the bar's final values.
+    const forming = strategy.config.calc_on_every_tick !== true && context.pine?.barstate?.isconfirmed === false;
+
     for (const [queuedAt, order] of strategy.pending_orders.entries()) {
+        if (forming) break;
         if (order.status !== 'pending' || order.bar !== context.idx) continue;
         if (isMarketClose(order)) {
             if (!onClose && !order.immediately) continue;
