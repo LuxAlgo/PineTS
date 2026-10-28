@@ -156,6 +156,8 @@ export function entry(context: any) {
             oca_name: ocaName,
             oca_type: ocaType as 'cancel' | 'reduce' | 'none' | undefined,
             comment: commentValue,
+            alert_message: extractValue(parsed.alert_message),
+            disable_alert: extractValue(parsed.disable_alert),
             _isReversalEntry: isReversal,
             // Only an add to an open same-side position counts against pyramiding again when it fills.
             _pyramidAdd: isAddingSameSide,

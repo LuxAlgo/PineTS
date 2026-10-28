@@ -4,6 +4,7 @@
 import { Order, StrategyState, Trade } from './types';
 import { Series } from '../../Series';
 import { isNamedArgsBag } from '../utils';
+import { orderFillAlert } from '../alertEvents';
 
 // strategy() parameters in the TradingView reference order.
 //prettier-ignore
@@ -921,6 +922,38 @@ export function processStrategyOrders(context: any, deferredOnly = false): void 
     updateStrategyMetrics(context);
 }
 
+/** Order-fill alert of a strategy.entry / strategy.order fill of `qty`. */
+function entryFillAlert(context: any, order: Order, qty: number, price: number): void {
+    orderFillAlert(context, {
+        id: order.id,
+        direction: parseDirection(order.direction),
+        qty,
+        price,
+        comment: order.comment,
+        alertMessage: order.alert_message,
+        disabled: order.disable_alert,
+    });
+}
+
+/**
+ * Order-fill alert of a strategy.exit / close / close_all fill closing `qty` of a position in direction
+ * `posDir`. A strategy.exit leg uses its own comment_* / alert_* argument when the call has one.
+ */
+function exitFillAlert(context: any, order: Order, posDir: number, qty: number, price: number, kind?: 'profit' | 'loss' | 'trailing' | null): void {
+    const leg = <T>(profit: T, loss: T, trailing: T, generic: T): T =>
+        kind === 'profit' ? (profit ?? generic) : kind === 'loss' ? (loss ?? generic) : kind === 'trailing' ? (trailing ?? generic) : generic;
+    orderFillAlert(context, {
+        id: order._alertId ?? order.id,
+        direction: -posDir,
+        qty,
+        price,
+        // Without a comment, a close reports its exit id (`Close entry(s) order L`) as the comment.
+        comment: leg(order.comment_profit, order.comment_loss, order.comment_trailing, order.comment) || order.id,
+        alertMessage: leg(order.alert_profit, order.alert_loss, order.alert_trailing, order.alert_message),
+        disabled: order.disable_alert,
+    });
+}
+
 /**
  * Fills an entry order at `fillPrice` (before slippage) after the risk and margin checks, or
  * cancels it. `markPrice` values the positions that stay open for the margin check.
@@ -965,6 +998,7 @@ function fillEntryOrder(context: any, order: Order, fillPrice: number, currentTi
                 order.fill_price = fillPrice;
                 order.fill_bar = context.idx;
                 order.fill_time = currentTime;
+                entryFillAlert(context, order, Math.abs(posSize), fillPrice);
                 riskAfterFill(context, fillPrice);
                 return;
             }
@@ -1099,6 +1133,7 @@ function fillEntryOrder(context: any, order: Order, fillPrice: number, currentTi
                     order.fill_price = fillPrice;
                     order.fill_bar = context.idx;
                     order.fill_time = currentTime;
+                    entryFillAlert(context, order, qtyToClose, fillPrice);
                     riskAfterFill(context, fillPrice);
                 } else {
                     order.status = 'cancelled';
@@ -1114,6 +1149,7 @@ function fillEntryOrder(context: any, order: Order, fillPrice: number, currentTi
     order.fill_price = fillPrice;
     order.fill_bar = context.idx;
     order.fill_time = currentTime;
+    entryFillAlert(context, order, order.qty, fillPrice);
     riskAfterFill(context, fillPrice);
 }
 
@@ -1177,12 +1213,14 @@ export function processOrdersOnClose(context: any): void {
             let qtyToClose = matchingQty;
             if (order.qty && order.qty > 0) qtyToClose = Math.min(order.qty, matchingQty);
             else if (order.qty_percent && order.qty_percent > 0) qtyToClose = partialCloseQty(context, matchingQty, order.qty_percent);
-            const fillPrice = applySlippage(context, -Math.sign(matching[0].size), closePrice);
+            const posDir = Math.sign(matching[0].size);
+            const fillPrice = applySlippage(context, -posDir, closePrice);
             closeMatching(context, order.from_entry, qtyToClose, fillPrice, currentTime, { exitId: order.id, exitComment: order.comment });
             order.status = 'filled';
             order.fill_price = fillPrice;
             order.fill_bar = context.idx;
             order.fill_time = currentTime;
+            exitFillAlert(context, order, posDir, qtyToClose, fillPrice);
             riskAfterFill(context, fillPrice);
         } else if (onClose && (order.category ?? 'entry') === 'entry' && order.type === 'market') {
             markToMarket(context, closePrice);
@@ -1242,6 +1280,7 @@ function fillExitAtClose(context: any, order: Order, closePrice: number, current
         (t._exits_filled ??= new Set()).add(order.id);
         cap -= qty;
         closed = true;
+        exitFillAlert(context, order, dir, qty, fillPrice, kind);
         riskAfterFill(context, fillPrice);
     }
     const left = strategy.opentrades.some((t) => (!order.from_entry || t.entry_id === order.from_entry) && !t._exits_filled?.has(order.id));
@@ -1469,7 +1508,12 @@ function riskCloseOut(context: any, reason: string, price: number, scope: 'day' 
         setFillAt(context, 0);
     }
     if (strategy.opentrades.length > 0 && strategy.position_size !== 0) {
-        closePartialPosition(context, Math.abs(strategy.position_size), price, time, { exitId: reason, exitComment: reason, forced: true });
+        const size = strategy.position_size;
+        closePartialPosition(context, Math.abs(size), price, time, { exitId: reason, exitComment: reason, forced: true });
+        // The rule's alert_message replaces {{strategy.order.alert_message}} in the close-out's alert.
+        const rules = strategy.risk_rules ?? {};
+        const rule = reason === RISK_REASON.drawdown ? rules.max_drawdown : reason === RISK_REASON.orders ? rules.max_intraday_filled_orders : reason === RISK_REASON.intraday ? rules.max_intraday_loss : undefined;
+        orderFillAlert(context, { id: reason, direction: -Math.sign(size), qty: Math.abs(size), price, comment: reason, alertMessage: rule?.alert_message });
     }
     for (const o of strategy.pending_orders) if (o.status === 'pending') o.status = 'cancelled';
     if (scope === 'day') {
@@ -1507,6 +1551,7 @@ export function riskStartBar(context: any): void {
                         time: Series.from(context.data.openTime).get(0),
                         status: 'pending',
                         comment: RISK_REASON.consDays,
+                        alert_message: rules.max_cons_loss_days.alert_message,
                         _risk: true,
                     } as Order);
                 }
@@ -2716,6 +2761,7 @@ export function processExitOrders(context: any, phase: 'market' | 'open' | 'intr
             order.fill_price = fillPrice;
             order.fill_bar = context.idx;
             order.fill_time = currentTime;
+            exitFillAlert(context, order, matchingDir, qtyToClose, fillPrice);
             riskAfterFill(context, fillPrice);
             continue;
         }
@@ -2993,6 +3039,7 @@ export function processExitOrders(context: any, phase: 'market' | 'open' | 'intr
                     },
                     ev.tradeId,
                 );
+                exitFillAlert(context, order, matchingDir, qtyThis, fillPrice, ev.kind);
                 // An exit in an OCA group acts as a reduce-type member (TV: its 1-unit fill takes 1 off a
                 // reduce-type strategy.order of 2 in the group).
                 if (order.oca_name && order.oca_type === 'reduce') applyOca(strategy, order, qtyThis);
@@ -3076,11 +3123,14 @@ export function applyPendingCloseMarginCall(context: any): void {
 
     // It fills at the previous bar's close, before this bar's path.
     setFillAt(context, -1);
-    closePartialPosition(context, Math.min(pending.qty, Math.abs(strategy.position_size)), applySlippage(context, -pending.dir, pending.price), pending.time, {
+    const mcQty = Math.min(pending.qty, Math.abs(strategy.position_size));
+    const mcPrice = applySlippage(context, -pending.dir, pending.price);
+    closePartialPosition(context, mcQty, mcPrice, pending.time, {
         exitId: MARGIN_CALL_EXIT_ID,
         exitComment: 'Margin call',
         forced: true,
     });
+    orderFillAlert(context, { id: MARGIN_CALL_EXIT_ID, direction: -pending.dir, qty: mcQty, price: mcPrice, comment: 'Margin call' });
 
     if (Math.abs(strategy.position_size) > 1e-9) {
         for (const o of strategy.pending_orders) {
@@ -3223,11 +3273,13 @@ export function processMarginCall(context: any, checkpoint: 'open' | 'extreme' |
 
         // The liquidation is a market order: slippage applies against the position.
         setFillAt(context, checkpointAt);
-        closePartialPosition(context, qtyToLiquidate, applySlippage(context, -positionDir, adversePrice), currentTime, {
+        const mcPrice = applySlippage(context, -positionDir, adversePrice);
+        closePartialPosition(context, qtyToLiquidate, mcPrice, currentTime, {
             exitId: MARGIN_CALL_EXIT_ID,
             exitComment: 'Margin call',
             forced: true,
         });
+        orderFillAlert(context, { id: MARGIN_CALL_EXIT_ID, direction: -positionDir, qty: qtyToLiquidate, price: mcPrice, comment: 'Margin call' });
         riskAfterMarginCall(context, adversePrice);
 
         // ---- Phantom re-check → SECOND margin call at the bar's CLOSE ----

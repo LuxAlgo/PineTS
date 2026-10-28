@@ -6,6 +6,7 @@ import { extractCallsiteId, parseArgsForPineParams } from './utils';
 import { spreadNamedArgs } from './namedArgs';
 import type { IndicatorOptions, PlotCharOptions } from '../types/PineTypes';
 import { silentInSecondary } from './silentInSecondary';
+import { alertsFireOnBar, pushAlert } from './alertEvents';
 
 //prettier-ignore
 const TIMESTAMP_SIGNATURES = [
@@ -173,19 +174,23 @@ export class AlertHelper {
         }
 
         const barIdx = this.context.idx;
-        const isRealtime = this.context.pine?.barstate?.isrealtime ?? (barIdx === this.context.length - 1);
-        const alertMode = this.context._alertMode || 'realtime';
+        if (!alertsFireOnBar(this.context)) return;
 
-        // In realtime mode, skip historical bars (matches TradingView behavior)
-        if (alertMode === 'realtime' && !isRealtime) return;
+        // A strategy runs on the bar's close unless calc_on_every_tick: every alert() call then
+        // triggers as alert.freq_once_per_bar_close, whatever its `freq` (Pine User Manual, Alerts).
+        const strategy = this.context.strategy;
+        const effective = strategy && strategy.config?.calc_on_every_tick !== true ? ALERT_FREQ.freq_once_per_bar_close : f;
 
         // Per-callsite frequency gating
         const gateKey = `${callsiteId}:${barIdx}`;
 
-        if (f === ALERT_FREQ.freq_once_per_bar) {
+        if (effective === ALERT_FREQ.freq_once_per_bar) {
             if (this._firedKeys.has(gateKey)) return;
             this._firedKeys.add(gateKey);
-        } else if (f === ALERT_FREQ.freq_once_per_bar_close) {
+        } else if (effective === ALERT_FREQ.freq_once_per_bar_close) {
+            // The executions of a calc_on_order_fills strategy after a fill inside the bar are not
+            // the bar's closing iteration.
+            if (this.context._fillPointPrice !== undefined) return;
             const isConfirmed = this.context.pine?.barstate?.isconfirmed ?? true;
             if (!isConfirmed) return;
             if (this._firedKeys.has(gateKey)) return;
@@ -193,11 +198,11 @@ export class AlertHelper {
         }
         // freq_all: no gating, fire every call
 
-        this.context.alerts.push({
+        pushAlert(this.context, {
             type: 'alert',
             id: callsiteId,
             message: msg,
-            freq: f,
+            freq: effective,
             bar_index: barIdx,
             time: this.context.data.openTime?.data?.[barIdx] ?? 0,
         });
@@ -319,12 +324,10 @@ export class Core {
         const callsiteId = `alertcondition_${this._acCounter++}`;
 
         if (!cond) return;
-
-        const isRealtime = this.context.pine?.barstate?.isrealtime ?? (barIdx === this.context.length - 1);
-        const alertMode = this.context._alertMode || 'realtime';
-
-        // In realtime mode, skip historical bars (matches TradingView behavior)
-        if (alertMode === 'realtime' && !isRealtime) return;
+        // A strategy compiles with alertcondition() calls, but no alert can be created from them
+        // (Pine User Manual, Alerts).
+        if (this.context.strategy) return;
+        if (!alertsFireOnBar(this.context)) return;
 
         // Per-callsite, per-bar dedup — alertcondition fires once per bar per callsite
         // (prevents duplicate emissions when stream() re-executes the live bar)
@@ -332,17 +335,22 @@ export class Core {
         if (this._acFiredKeys.has(gateKey)) return;
         this._acFiredKeys.add(gateKey);
 
-        const t = title ? Series.from(title).get(0) : '';
-        const m = message ? Series.from(message).get(0) : '';
+        // Without a title argument, the condition is named "Alert" (Pine User Manual, Alerts).
+        const t = title !== undefined && title !== null ? String(Series.from(title).get(0) ?? '') : 'Alert';
+        const m = message !== undefined && message !== null ? String(Series.from(message).get(0) ?? '') : '';
 
-        this.context.alerts.push({
-            type: 'alertcondition',
-            id: callsiteId,
-            title: t,
-            message: m,
-            bar_index: barIdx,
-            time: this.context.data.openTime?.data?.[barIdx] ?? 0,
-        });
+        pushAlert(
+            this.context,
+            {
+                type: 'alertcondition',
+                id: callsiteId,
+                title: t,
+                message: m,
+                bar_index: barIdx,
+                time: this.context.data.openTime?.data?.[barIdx] ?? 0,
+            },
+            m,
+        );
     }
     error(...args: any[]) {
         console.error('error called but is currently not implemented', args);

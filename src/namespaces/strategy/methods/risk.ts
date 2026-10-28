@@ -28,17 +28,17 @@ export function risk(context: any) {
             if (!context.strategy) return;
             context.strategy.risk_rules.max_cons_loss_days = { count: Number(argValue(count)), alert_message: argValue(alert_message) };
         },
-        max_drawdown: (value: number, type: 'cash' | 'percent_of_equity', _alert_message?: string) => {
+        max_drawdown: (value: number, type: 'cash' | 'percent_of_equity', alert_message?: string) => {
             if (!context.strategy) return;
-            context.strategy.risk_rules.max_drawdown = { value: Number(argValue(value)), type: argValue(type) };
+            context.strategy.risk_rules.max_drawdown = { value: Number(argValue(value)), type: argValue(type), alert_message: argValue(alert_message) };
         },
         max_intraday_filled_orders: (count: number, alert_message?: string) => {
             if (!context.strategy) return;
             context.strategy.risk_rules.max_intraday_filled_orders = { count: Number(argValue(count)), alert_message: argValue(alert_message) };
         },
-        max_intraday_loss: (value: number, type: 'cash' | 'percent_of_equity', _alert_message?: string) => {
+        max_intraday_loss: (value: number, type: 'cash' | 'percent_of_equity', alert_message?: string) => {
             if (!context.strategy) return;
-            context.strategy.risk_rules.max_intraday_loss = { value: Number(argValue(value)), type: argValue(type) };
+            context.strategy.risk_rules.max_intraday_loss = { value: Number(argValue(value)), type: argValue(type), alert_message: argValue(alert_message) };
         },
         max_position_size: (contracts: number) => {
             if (!context.strategy) return;

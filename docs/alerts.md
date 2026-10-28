@@ -7,13 +7,15 @@ permalink: /alerts/
 
 # Alerts
 
-PineTS supports Pine Script's `alert()` and `alertcondition()` functions, allowing indicators and strategies to emit alert events that your application can capture and act on — for example, sending webhook notifications, triggering trades, or logging signals.
+PineTS supports Pine Script's `alert()` and `alertcondition()` functions and the order-fill alerts of strategies, allowing scripts to emit alert events that your application can capture and act on — for example, sending webhook notifications, triggering trades, or logging signals.
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [alert()](#alert)
 - [alertcondition()](#alertcondition)
+- [Strategy Order-Fill Alerts](#strategy-order-fill-alerts)
+- [Placeholders](#placeholders)
 - [Capturing Alerts](#capturing-alerts)
 - [Alert Modes](#alert-modes)
 - [Complete Examples](#complete-examples)
@@ -22,10 +24,11 @@ PineTS supports Pine Script's `alert()` and `alertcondition()` functions, allowi
 
 ## Overview
 
-| Function                                    | Purpose                                              | Fires when                      |
-| ------------------------------------------- | ---------------------------------------------------- | ------------------------------- |
-| `alert(message, freq)`                      | Imperative — fires when the code path executes it    | Code reaches the `alert()` call |
-| `alertcondition(condition, title, message)` | Declarative — fires when a boolean condition is true | `condition` evaluates to `true` |
+| Source                                      | Purpose                                              | Fires when                                  | Event `type`       |
+| ------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- | ------------------ |
+| `alert(message, freq)`                      | Imperative — fires when the code path executes it    | Code reaches the `alert()` call             | `'alert'`          |
+| `alertcondition(condition, title, message)` | Declarative — fires when a boolean condition is true | `condition` evaluates to `true` (indicators) | `'alertcondition'` |
+| Strategy order fills                        | Fires when the broker emulator fills an order        | An order fills (strategies)                 | `'order_fill'`     |
 
 By default, alerts only fire on the **last (realtime) bar**, matching TradingView's behavior. Use `setAlertMode('all')` to fire on every bar for backtesting.
 
@@ -58,17 +61,25 @@ plot(ema21, "EMA 21", color.red)
 
 | Constant                        | Behavior                                                            |
 | ------------------------------- | ------------------------------------------------------------------- |
-| `alert.freq_all`                | Every `alert()` call triggers (including multiple calls per bar)    |
-| `alert.freq_once_per_bar`       | Only the **first** `alert()` call per bar triggers (default)        |
+| `alert.freq_all`                | Every execution of the call triggers                                |
+| `alert.freq_once_per_bar`       | Only the **first** execution of the call in a bar triggers (default) |
 | `alert.freq_once_per_bar_close` | Only triggers on the bar's **final tick** (when it closes/confirms) |
 
-If no frequency is specified, `alert.freq_once_per_bar` is used.
+If no frequency is specified, `alert.freq_once_per_bar` is used. Frequency gating is per call site: each `alert()` call has its own once-per-bar allowance.
+
+`alert()` messages are sent as written: placeholders such as `{{close}}` are not replaced in them (build the message with `str.tostring()` instead).
+
+### In strategies
+
+A strategy runs on the bar's close unless `calc_on_every_tick = true` is set in `strategy()`. Without it, every `alert()` call triggers as `alert.freq_once_per_bar_close`, whatever its `freq` argument, and the event's `freq` field reports that frequency.
 
 ---
 
 ## alertcondition()
 
 Registers a named alert condition that fires when a boolean expression is true. Unlike `alert()`, it doesn't support frequency gating — it fires once per bar when the condition is met.
+
+`alertcondition()` creates alerts in **indicators only**: a strategy compiles with `alertcondition()` calls, but they emit no events (as on TradingView). Without a `title`, the condition is named `"Alert"`. The `message` may contain [placeholders](#placeholders), replaced with the bar's values when the alert fires.
 
 ### Pine Script Syntax
 
@@ -91,8 +102,59 @@ hline(30, "Oversold")
 | Parameter   | Type           | Required | Description                         |
 | ----------- | -------------- | -------- | ----------------------------------- |
 | `condition` | `series bool`  | Yes      | When `true`, the alert fires        |
-| `title`     | `const string` | No       | Name of the alert condition         |
-| `message`   | `const string` | No       | Message included in the alert event |
+| `title`     | `const string` | No       | Name of the alert condition (default `"Alert"`) |
+| `message`   | `const string` | No       | Message included in the alert event, with [placeholders](#placeholders) |
+
+---
+
+## Strategy Order-Fill Alerts
+
+Every order the broker emulator fills in a strategy emits an `'order_fill'` alert event: entries, exits, `strategy.close()` / `strategy.close_all()` closes, `strategy.risk.*` close-outs and margin calls. No code is needed for these events; the order-generating functions only customize them:
+
+| Parameter | Functions | Effect |
+| --- | --- | --- |
+| `alert_message` | `strategy.entry`, `strategy.order`, `strategy.exit`, `strategy.close`, `strategy.close_all` | Text of the order's fill alert (`{{strategy.order.alert_message}}`). Empty when absent. |
+| `alert_profit`, `alert_loss`, `alert_trailing` | `strategy.exit` | Text for the take-profit, stop-loss or trailing-stop leg, overriding `alert_message` for that leg. |
+| `disable_alert` | `strategy.entry`, `strategy.order`, `strategy.exit`, `strategy.close`, `strategy.close_all` | When `true` as the order is created, its fill emits no alert. Accepts a series value. |
+| `alert_message` | `strategy.risk.max_drawdown`, `max_intraday_loss`, `max_intraday_filled_orders`, `max_cons_loss_days` | Text of the alert of the close-out the rule triggers. |
+
+The event's `message` is rendered from a template, with [placeholders](#placeholders) (including the `strategy.*` ones) replaced at the fill:
+
+- the script's `//@strategy_alert_message` annotation when it has one;
+- otherwise the message TradingView's "Create alert" dialog proposes: `<title> (<inputs>): order {{strategy.order.action}} @ {{strategy.order.contracts}} filled on {{ticker}}. New strategy position is {{strategy.position_size}}`, where `<inputs>` are the input values shown in the status line (bool, color, time, text_area and `display.none` inputs are left out; no parentheses when none is shown), e.g. `My Strategy (14, close): order buy @ 1 filled on BTCUSDT. New strategy position is 1`.
+
+The order's own text is always available as the event's `alert_message` field. Placeholders written inside an `alert_message` argument are not expanded, as on TradingView.
+
+```pine
+//@version=6
+strategy("Webhook strategy", overlay=true)
+//@strategy_alert_message {"action": "{{strategy.order.action}}", "qty": {{strategy.order.contracts}}, "note": "{{strategy.order.alert_message}}"}
+
+if ta.crossover(ta.sma(close, 14), ta.sma(close, 28))
+    strategy.entry("Long", strategy.long, alert_message = "enter long")
+strategy.exit("Exit", "Long", profit = 1000, loss = 500, alert_profit = "take profit", alert_loss = "stop loss")
+```
+
+---
+
+## Placeholders
+
+Placeholders are replaced once the bar's script has run, so `{{plot_N}}` and `{{plot("title")}}` give the values plotted on the bar where the alert fired. Numbers are written as plain numbers (TradingView formats `{{close}}` with the symbol's price format, e.g. `80578.00`). A placeholder PineTS does not know is left as written.
+
+| Placeholder | Value | Available in |
+| --- | --- | --- |
+| `{{open}}`, `{{high}}`, `{{low}}`, `{{close}}`, `{{volume}}` | The bar's values | `alertcondition()` messages, `//@strategy_alert_message` |
+| `{{time}}`, `{{timenow}}` | Bar open time / current time, UTC, `yyyy-MM-ddTHH:mm:ssZ` | same |
+| `{{ticker}}`, `{{exchange}}`, `{{interval}}` | `syminfo.ticker`, `syminfo.prefix`, `timeframe.period` | same |
+| `{{plot_0}}` … `{{plot_N}}` | Value of the Nth plot in order of appearance, counting `plot`, `plotchar`, `plotshape`, `plotarrow` (not `bgcolor` or `alertcondition`); `null` for a plot number the script does not have | same |
+| `{{plot("title")}}` | Value of the plot with that title | same |
+| `{{strategy.order.action}}` | `buy` or `sell` | `//@strategy_alert_message` |
+| `{{strategy.order.contracts}}`, `{{strategy.order.price}}` | Quantity and price of the fill | same |
+| `{{strategy.order.id}}`, `{{strategy.order.comment}}` | Order id; comment (the id when the order has none). A `strategy.close()` fill's id is `Close entry(s) order strategy.close_N` (N: the call site, in source order) and its default comment `Close entry(s) order <entry id>`; `strategy.close_all()` fills are `Close position order` | same |
+| `{{strategy.order.alert_message}}` | The order's `alert_message` | same |
+| `{{strategy.position_size}}` | Position after the fill (signed) | same |
+| `{{strategy.market_position}}`, `{{strategy.market_position_size}}` | `long` / `short` / `flat`, and the absolute size, after the fill | same |
+| `{{strategy.prev_market_position}}`, `{{strategy.prev_market_position_size}}` | The same, before the fill | same |
 
 ---
 
@@ -160,14 +222,25 @@ evt.on('error', (err) => {
 
 ### Alert Event Structure
 
-Each alert event (whether from `alert()` or `alertcondition()`) has this shape:
+Each alert event has this shape:
 
 ```typescript
 {
-    type: 'alert' | 'alertcondition',
-    message: string,          // The alert message
+    type: 'alert' | 'alertcondition' | 'order_fill',
+    id: string,               // Call site id (alert_0, alertcondition_0, ...) or order id
+    message: string,          // The alert message, placeholders replaced
     title?: string,           // Title (alertcondition only)
-    freq?: string,            // Frequency constant (alert only)
+    freq?: string,            // Frequency applied (alert only)
+    alert_message?: string,   // The order's alert_message (order_fill only)
+    order?: {                 // The filled order (order_fill only)
+        id: string,
+        action: 'buy' | 'sell',
+        contracts: number,
+        price: number,
+        comment: string,      // The order id when the order has no comment
+    },
+    position_size?: number,      // Position after the fill (order_fill only)
+    prev_position_size?: number, // Position before the fill (order_fill only)
     bar_index: number,        // Bar index where the alert fired
     time: number              // Bar open time (ms timestamp)
 }
@@ -177,7 +250,7 @@ Each alert event (whether from `alert()` or `alertcondition()`) has this shape:
 
 ## Alert Modes
 
-By default, PineTS matches TradingView behavior: alerts only fire on the **last (realtime) bar**. Historical bars are silently skipped. This is the correct behavior for live trading.
+By default, PineTS matches TradingView behavior: alerts only fire on the **last (realtime) bar**. Historical bars are silently skipped. This is the correct behavior for live trading. The mode applies to all three sources: `alert()`, `alertcondition()` and strategy order fills.
 
 For **backtesting**, you can switch to `'all'` mode to fire alerts on every bar:
 
@@ -222,7 +295,7 @@ import { PineTS, Provider } from 'pinets';
 
 const pine = new PineTS(Provider.Binance, 'BTCUSDT', '5', 200);
 
-const strategy = `
+const code = `
 //@version=6
 indicator("Scalp Alerts", overlay=true)
 
@@ -241,7 +314,7 @@ plot(fast, "Fast EMA", color.green)
 plot(slow, "Slow EMA", color.red)
 `;
 
-const evt = pine.stream(strategy, { live: true, interval: 10000 });
+const evt = pine.stream(code, { live: true, interval: 10000 });
 
 evt.on('alert', async (alert) => {
     console.log(`[${new Date().toISOString()}] ${alert.message}`);

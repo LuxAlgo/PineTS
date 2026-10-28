@@ -24,3 +24,12 @@ export function extractPineScriptVersion(sourceCode: string): number | null {
 
     return null;
 }
+
+/**
+ * The text of a strategy's `//@strategy_alert_message` annotation: the default message of its
+ * order-fill alerts. Null when the source has none.
+ */
+export function extractStrategyAlertMessage(sourceCode: string): string | null {
+    const match = sourceCode.match(/^[ \t]*\/\/[ \t]*@strategy_alert_message(?:[ \t]+(.*?))?[ \t]*$/m);
+    return match ? (match[1] ?? '') : null;
+}
