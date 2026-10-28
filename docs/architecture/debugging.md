@@ -362,7 +362,7 @@ it('should calculate correctly', async () => {
         return { sma };
     };
 
-    const { result } = await pineTS.run(sourceCode);
+    const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
     // Assertions
     expect(result.sma).toBeDefined();
@@ -409,7 +409,7 @@ const sourceCode = (context) => {
 ### Export to CSV
 
 ```javascript
-const { result, plots } = await pineTS.run(sourceCode);
+const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
 const csv = plots['sma'].data.map((p) => `${new Date(p.time).toISOString()},${p.value}`).join('\n');
 

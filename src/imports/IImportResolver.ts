@@ -21,6 +21,9 @@ export interface ImportInfo {
     version: number;
     /** Path of the library holding the import; undefined for the script being run. */
     importer?: string;
+    /** Cancellation/deadline for this resolution, shared with the calling run. */
+    signal?: AbortSignal;
+    deadline?: number;
 }
 
 /**

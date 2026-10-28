@@ -24,7 +24,7 @@ describe('runtime.error', () => {
     it('does not block execution when the guard condition is false', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '1D', null, new Date('2024-01-01').getTime(), new Date('2024-03-01').getTime());
 
-        const { plots } = await pineTS.run(GUARDED_SCRIPT);
+        const { plots } = await pineTS.run(GUARDED_SCRIPT, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['c'].data.length).toBeGreaterThan(0);
     });
@@ -32,7 +32,7 @@ describe('runtime.error', () => {
     it('halts the script with the given message when called', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-05').getTime());
 
-        await expect(pineTS.run(GUARDED_SCRIPT)).rejects.toThrow('Only the daily timeframe or higher are available for this model');
+        await expect(pineTS.run(GUARDED_SCRIPT, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow('Only the daily timeframe or higher are available for this model');
     });
 
     it('throws a catchable PineRuntimeError with method "runtime.error"', async () => {
@@ -40,7 +40,7 @@ describe('runtime.error', () => {
 
         let caught: unknown;
         try {
-            await pineTS.run(GUARDED_SCRIPT);
+            await pineTS.run(GUARDED_SCRIPT, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         } catch (err) {
             caught = err;
         }
@@ -56,7 +56,7 @@ describe('runtime.error', () => {
             pineTS.run(($: any) => {
                 const { runtime } = $.pine;
                 runtime.error('boom');
-            }),
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' }),
         ).rejects.toThrow('boom');
     });
 });

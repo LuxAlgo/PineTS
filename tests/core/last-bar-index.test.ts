@@ -35,7 +35,7 @@ describe('last_bar_index', () => {
             plotchar(isNotLast, 'isNotLast');
 
             return { bar_index, last_bar_index };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const biData = plots['bi'].data;
         const lbiData = plots['lbi'].data;

@@ -6,6 +6,7 @@ import { extractCallsiteId, parseArgsForPineParams } from './utils';
 import { spreadNamedArgs } from './namedArgs';
 import type { IndicatorOptions, PlotCharOptions } from '../types/PineTypes';
 import { silentInSecondary } from './silentInSecondary';
+import { validateDrawingOptions } from './drawingPolicy';
 import { alertsFireOnBar, pushAlert } from './alertEvents';
 
 //prettier-ignore
@@ -250,7 +251,9 @@ export class Core {
         };
         //TODO : most of these values are not actually used by PineTS, future work should be done to implement them
         // Layer order: spec defaults ← source call args ← user .prop overrides (latest wins).
-        this.context.indicator = { ...defaults, ...options, ...(this.context._propOverrides ?? {}) };
+        const resolved = { ...defaults, ...options, ...(this.context._propOverrides ?? {}) };
+        validateDrawingOptions(resolved);
+        this.context.indicator = resolved;
         return this.context.indicator;
     }
 

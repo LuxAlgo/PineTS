@@ -59,16 +59,25 @@ async function generateIndex() {
 ${objectImports}
 import { spreadNamedArgs } from '../namedArgs';
 import { MAP_PARAMS } from '../collectionParams';
+import { BoundedPineMap } from './capacity';
 
 export class PineMapObject {
-    public map: Map<any, any>;
+    private _map: BoundedPineMap;
     // 'string' for map<K, string>, whose missing keys read as the na string ("")
     public valueType?: string;
 ${objectPrivateProps}
 
     constructor(public context: any) {
-        this.map = new Map();
+        this._map = new BoundedPineMap(context);
 ${objectInitProps}
+    }
+
+    get map(): Map<any, any> { return this._map; }
+    set map(value: Map<any, any>) {
+        // Build the replacement completely before making it visible to callers.
+        const next = new BoundedPineMap(this.context);
+        for (const [key, entry] of value) next.set(key, entry);
+        this._map = next;
     }
 
     toString(): string {

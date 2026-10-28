@@ -66,7 +66,7 @@ describe('Indicators', () => {
             plotchar(res, '_res');
         }
     
-        const { result, plots } = await pineTS.run(pineTSSourceCode);
+        const { result, plots } = await pineTS.run(pineTSSourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
     
         let _plotdata_res = plots['_res']?.data;
         let _plotdata_src = plots['_src']?.data;
@@ -168,7 +168,7 @@ describe('Indicators', () => {
             
         }
     
-        const { result, plots } = await pineTS.run(pineTSSourceCode);
+        const { result, plots } = await pineTS.run(pineTSSourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
     
         
 
@@ -255,7 +255,7 @@ describe('Indicators', () => {
             
         }
     
-        const { result, plots } = await pineTS.run(pineTSSourceCode);
+        const { result, plots } = await pineTS.run(pineTSSourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
     
         
 
@@ -336,7 +336,7 @@ describe('Indicators', () => {
             plotchar(cci, '_cci');
         }
 
-        const { result, plots } = await pineTS.run(pineTSSourceCode);
+        const { result, plots } = await pineTS.run(pineTSSourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata_wt = plots['_wt']?.data;
         let _plotdata_cci = plots['_cci']?.data;
@@ -417,7 +417,7 @@ describe('Indicators', () => {
 // plotchar(c2_prev, '_c2_prev')
 // `
 
-        const { result, plots } = await pineTS.run(pineTSSourceCode);
+        const { result, plots } = await pineTS.run(pineTSSourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata_c1_curr = plots['_c1_curr']?.data;
         let _plotdata_c1_prev = plots['_c1_prev']?.data;

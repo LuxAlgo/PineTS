@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
-import { BarRing, validLength } from '../utils/barRing';
+import { BarRing } from '../utils/barRing';
 import { lowerBound, upperBound } from '../utils/windows';
+import { chargeTaMemory, chargeTaWork, validTaLength } from '../utils/assertTaLength';
 
 /** The BarRing of the window, its slots also kept sorted by value (na left out) so ranks need no sort. */
 class RankRing {
@@ -54,13 +55,20 @@ class RankRing {
 export function rci(context: any) {
     return (source: any, _length: any, _callId?: string) => {
         const length = Series.from(_length).get(0);
-        if (!validLength(length)) return NaN;
+        if (!validTaLength(length, 'ta.rci')) return NaN;
 
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `rci_${length}`;
         const series = Series.from(source);
         let win: RankRing = context.taState[stateKey];
-        if (!win || win.length !== length) win = context.taState[stateKey] = new RankRing(length);
+        if (!win || win.length !== length) {
+            // Initial sorted-slot construction can shift O(length²) elements.
+            chargeTaWork(context, length * length, 'ta.rci');
+            chargeTaMemory(context, 40 * (length + 1), 'ta.rci');
+            win = context.taState[stateKey] = new RankRing(length);
+        }
+
+        chargeTaWork(context, 4 * length, 'ta.rci');
 
         const idx = context.idx;
         const currentValue = series.get(0);

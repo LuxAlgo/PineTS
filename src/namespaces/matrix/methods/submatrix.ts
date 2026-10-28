@@ -2,6 +2,7 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { assertMatrixIndex } from '../indexValidation';
 
 export function submatrix(context: Context) {
     return (id: PineMatrixObject, from_row?: number, to_row?: number, from_col?: number, to_col?: number) => {
@@ -12,6 +13,10 @@ export function submatrix(context: Context) {
         to_row ??= sourceRows;
         from_col ??= 0;
         to_col ??= sourceCols;
+        assertMatrixIndex(from_row, sourceRows, 'row', 'matrix.submatrix', true);
+        assertMatrixIndex(to_row, sourceRows, 'row', 'matrix.submatrix', true);
+        assertMatrixIndex(from_col, sourceCols, 'column', 'matrix.submatrix', true);
+        assertMatrixIndex(to_col, sourceCols, 'column', 'matrix.submatrix', true);
         const rows = to_row - from_row;
         const cols = to_col - from_col;
 

@@ -15,7 +15,7 @@ describe('LINEFILL Namespace', () => {
             var hasLine1 = lf.line1 !== undefined;
             var hasLine2 = lf.line2 !== undefined;
             return { lf_color, hasLine1, hasLine2 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.lf_color[0]).toBeTruthy();
         expect(result.hasLine1[0]).toBe(true);
@@ -36,7 +36,7 @@ describe('LINEFILL Namespace', () => {
             var line1Match = gotLine1.id === l1.id;
             var line2Match = gotLine2.id === l2.id;
             return { line1Match, line2Match };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.line1Match[0]).toBe(true);
         expect(result.line2Match[0]).toBe(true);
@@ -53,7 +53,7 @@ describe('LINEFILL Namespace', () => {
             linefill.set_color(lf, '#00ff00');
             var colorAfter = lf.color;
             return { colorBefore, colorAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.colorBefore[0]).toBe('#ff0000');
         expect(result.colorAfter[0]).toBe('#00ff00');
@@ -71,7 +71,7 @@ describe('LINEFILL Namespace', () => {
             var deletedFlag = lf._deleted;
             var countAfter = linefill.all.length;
             return { deletedFlag, countBefore, countAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.deletedFlag[0]).toBe(true);
         expect(result.countBefore[0]).toBe(1);
@@ -91,7 +91,7 @@ describe('LINEFILL Namespace', () => {
             linefill.delete(lf2);
             var afterDeleteCount = linefill.all.length;
             return { totalCount, afterDeleteCount };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.totalCount[0]).toBe(2);
         expect(result.afterDeleteCount[0]).toBe(1);
@@ -108,7 +108,7 @@ describe('LINEFILL Namespace', () => {
             linefill.set_color(lf, '#00ff00');
             var colorAfterDelete = lf.color;
             return { colorAfterDelete };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.colorAfterDelete[0]).toBe('#ff0000');
     });
@@ -121,7 +121,7 @@ describe('LINEFILL Namespace', () => {
             var l2 = line.new(0, 40000, 10, 50000);
             linefill.new(l1, l2, '#5b9cf6');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__linefills__']).toBeDefined();
         expect(plots['__linefills__'].data.length).toBeGreaterThan(0);
@@ -151,7 +151,7 @@ describe('LINEFILL Namespace', () => {
             // The linefill's line reference should reflect the change
             var lfLine1Y1 = lf.line1.y1;
             return { lfLine1Y1 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Since linefill stores a reference to the line object,
         // mutations should be reflected
@@ -168,7 +168,7 @@ describe('LINEFILL Namespace', () => {
             linefill.new(l1, l2, color.blue);
             linefill.new(l2, l3, color.red);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // There should be exactly 1 data entry containing all linefills
         expect(plots['__linefills__'].data.length).toBe(1);
@@ -205,7 +205,7 @@ if barstate.islast
     lf := linefill.new(l1, l2, color=color.blue)
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__linefills__']).toBeDefined();
         const linefills = plots['__linefills__'].data[0]?.value;
@@ -226,7 +226,7 @@ if barstate.islast
             var l2 = line.new(0, 40000, 10, 50000);
             linefill.new(l1, l2, '#ff5733');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const linefills = plots['__linefills__'].data[0].value;
         expect(linefills[0].color).toBe('#ff5733');
@@ -253,7 +253,7 @@ if barstate.islast
     lf := linefill.new(l1, l2, color=color(na))
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const linefills = plots['__linefills__']?.data[0]?.value;
         expect(linefills).toBeDefined();
         expect(linefills.length).toBeGreaterThan(0);

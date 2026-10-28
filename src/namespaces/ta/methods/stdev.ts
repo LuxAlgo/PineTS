@@ -2,6 +2,7 @@
 
 import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
+import { chargeTaWork } from '../utils/assertTaLength';
 
 export function stdev(context: any) {
     return (source: any, _length: any, ...rest: any[]) => {
@@ -18,6 +19,7 @@ export function stdev(context: any) {
         const mean = window.sum / length;
         let sumSquaredDiff = 0;
         const values = window.values();
+        chargeTaWork(context, length, 'ta.stdev');
         for (let i = 0; i < length; i++) sumSquaredDiff += Math.pow(values[i] - mean, 2);
 
         const divisor = bias ? length : length - 1;

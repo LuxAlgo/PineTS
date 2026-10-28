@@ -66,7 +66,9 @@ import {
 import { extractPineScriptVersion, pineToJS } from './pineToJS/pineToJS.index';
 import { extractStrategyAlertMessage } from './pineToJS/version';
 import { buildLtfSlices } from './slicing/buildLtfSlices';
-import { verifyClosedWorld } from './analysis/ClosedWorldVerifier';
+import { compilePineArtifact, compileTrustedJavaScript } from './analysis/VerifiedArtifact';
+import type { SourceMode } from '../security/SourceMode';
+import { assertCompilerSourceBudget, assertCompilerLibrariesBudget, assertGeneratedCodeBudget, assertCompilerAstBudget, assertCompilerElapsed } from './analysis/CompilerBudget';
 
 /**
  * Resolve the input into PineTS code plus the Pine Script version it came from.
@@ -75,11 +77,18 @@ import { verifyClosedWorld } from './analysis/ClosedWorldVerifier';
  */
 function getPineTSFromSource(
     source: string | Function,
-    opts: { pineOnly?: boolean; libraries?: Record<string, string> } = {}
+    opts: { pineOnly?: boolean; sourceMode?: SourceMode; libraries?: Record<string, string> } = {}
 ): { code: string; version: number | null } {
+    assertCompilerLibrariesBudget(opts.libraries);
     if (typeof source === 'function') {
-        return { code: source.toString(), version: null };
+        if (opts.pineOnly || opts.sourceMode !== 'trustedJavaScript') {
+            throw new Error('Native Pine source required: JavaScript functions require sourceMode: "trustedJavaScript".');
+        }
+        const code = source.toString();
+        assertCompilerSourceBudget(code);
+        return { code, version: null };
     } else {
+        assertCompilerSourceBudget(source);
         const pineScriptVersion = extractPineScriptVersion(source);
         if (pineScriptVersion === null) {
             // No `//@version` marker: the source is treated as PineTS syntax,
@@ -87,9 +96,9 @@ function getPineTSFromSource(
             // `pineOnly` is set (untrusted third-party scripts), reject it —
             // only Pine Script with a version marker, which goes through the
             // closed-world verifier below, is accepted.
-            if (opts.pineOnly) {
+            if (opts.pineOnly || opts.sourceMode !== 'trustedJavaScript') {
                 throw new Error(
-                    'Pine Script version marker required: markerless source is treated as raw JavaScript and is rejected when pineOnly is set.'
+                    'Pine Script version marker required: markerless JavaScript requires sourceMode: "trustedJavaScript".'
                 );
             }
             //assume it's PineTS syntax ==> use it as is
@@ -123,7 +132,7 @@ function getPineTSFromSource(
  */
 export function transpile(
     source: string | Function,
-    options: { debug: boolean; ln?: boolean; verify?: boolean; pineOnly?: boolean; libraries?: Record<string, string> } = { debug: false, ln: false }
+    options: { debug: boolean; ln?: boolean; verify?: boolean; pineOnly?: boolean; sourceMode?: SourceMode; libraries?: Record<string, string> } = { debug: false, ln: false }
 ): Function {
     // Handle backward compatibility if a boolean is passed (though signature changed)
     if (typeof options === 'boolean') {
@@ -131,8 +140,24 @@ export function transpile(
     }
 
     const { debug } = options;
+    const compilationStartedAt = Date.now();
 
-    const { code: sourceCode, version: pineVersion } = getPineTSFromSource(source, { pineOnly: options.pineOnly, libraries: options.libraries });
+    if (options.sourceMode !== undefined && options.sourceMode !== 'nativePine' && options.sourceMode !== 'trustedJavaScript') {
+        throw new TypeError('Unknown sourceMode');
+    }
+    if ((options.sourceMode === 'nativePine' || options.pineOnly) && options.verify === false) {
+        throw new Error('Native Pine mode cannot disable final artifact verification.');
+    }
+    const { code: sourceCode, version: pineVersion } = getPineTSFromSource(source, {
+        pineOnly: options.pineOnly,
+        sourceMode: options.sourceMode,
+        libraries: options.libraries,
+    });
+    assertCompilerElapsed(compilationStartedAt);
+    assertGeneratedCodeBudget(sourceCode);
+    if (pineVersion !== null && options.verify === false) {
+        throw new Error('Versioned Pine cannot disable final artifact verification.');
+    }
     let code = sourceCode;
 
     // Pre-process: Wrap in context function if not already wrapped
@@ -146,6 +171,8 @@ export function transpile(
         sourceType: 'module',
         locations: debug,
     });
+    assertCompilerAstBudget(ast);
+    assertCompilerElapsed(compilationStartedAt);
 
     // Pre-process: Transform all nested arrow functions
     transformNestedArrowFunctions(ast);
@@ -216,6 +243,8 @@ export function transpile(
     // and their callers (via $.call) must await them.
     propagateAsyncAwait(ast);
     if (pineVersion !== null) deferVarInitializerFunctions(ast);
+    assertCompilerAstBudget(ast);
+    assertCompilerElapsed(compilationStartedAt);
 
     // Post-process: inject __maxLoops local variable at the top of the function body.
     // This caches $.__maxLoops (from Context) in a local variable so loop guards
@@ -247,8 +276,7 @@ export function transpile(
     }
 
     // Generate final code
-    // astring exports baseGenerator (camelCase) in this version/build
-    const baseGenerator = astring.baseGenerator || astring.GENERATOR || ((astring as any).default && (astring as any).default.BASE_GENERATOR);
+    const baseGenerator = astring.baseGenerator;
 
     const customGenerator = Object.assign({}, baseGenerator, {
         LineComment(node: any, state: any) {
@@ -260,22 +288,14 @@ export function transpile(
         generator: customGenerator,
         comments: debug,
     });
+    assertGeneratedCodeBudget(transformedCode);
+    assertCompilerElapsed(compilationStartedAt);
 
-    // Closed-world verification. Pine Script (version marker present) describes
-    // a closed world TradingView resolves against its built-ins; enforce the
-    // same on the GENERATED code — the exact string `new Function` compiles —
-    // so a script cannot reach host globals, the prototype chain, or PineTS
-    // runtime internals through it. Runs by default on the Pine path; set
-    // `verify: false` to opt out. PineTS-syntax / function input
-    // (pineVersion === null) is first-party JavaScript by contract and is not
-    // verified — gate untrusted strings with `pineOnly` instead.
-    if (options.verify !== false && pineVersion !== null) {
-        // Parse as a program: `transformedCode` is the arrow as an expression
-        // statement (astring emits a trailing `;`), so it parses on its own —
-        // wrapping it in parentheses would turn the `;` into a syntax error.
-        const verifyAst = acorn.parse(transformedCode, { ecmaVersion: 'latest' });
-        verifyClosedWorld(verifyAst);
-    }
+    // Every final Pine artifact is parsed and verified at its compilation
+    // boundary. The trusted compatibility path is deliberately separate.
+    const compileFinal = pineVersion !== null
+        ? compilePineArtifact
+        : compileTrustedJavaScript;
 
     // Slice every `request.security_lower_tf` call site. Each slice is a
     // pre-built async Function whose body is the user-script prefix up
@@ -288,15 +308,18 @@ export function transpile(
     // tooling that needs to exercise the legacy full-script slow path,
     // e.g. correctness comparisons).
     const slicingDisabled = (typeof process !== 'undefined') && process?.env?.PINETS_DISABLE_LTF_SLICING === '1';
-    const slices = slicingDisabled ? {} : buildLtfSlices(ast);
+    const slices = slicingDisabled ? {} : buildLtfSlices(ast, compileFinal);
 
-    const _wraperFunction = new Function('', `var _r = ${transformedCode}\n; return _r;`);
-    const mainFn = _wraperFunction(this);
+    const mainFn = compileFinal(transformedCode);
     (mainFn as any)._pineVersion = pineVersion;
+    (mainFn as any)._sourceMode = pineVersion === null ? 'trustedJavaScript' : 'nativePine';
     const strategyAlertMessage = pineVersion !== null && typeof source === 'string' ? extractStrategyAlertMessage(source) : null;
     if (strategyAlertMessage !== null) (mainFn as any)._strategyAlertMessage = strategyAlertMessage;
     if (slices && Object.keys(slices).length > 0) {
-        for (const slice of Object.values(slices)) (slice as any)._pineVersion = pineVersion;
+        for (const slice of Object.values(slices)) {
+            (slice as any)._pineVersion = pineVersion;
+            (slice as any)._sourceMode = (mainFn as any)._sourceMode;
+        }
         (mainFn as any)._ltfSlices = slices;
     }
     return mainFn;

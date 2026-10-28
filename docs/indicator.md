@@ -49,13 +49,13 @@ const pine = new PineTS(/* market data or provider */);
 const ctx = await pine.run(ind);
 ```
 
-Raw strings and raw functions also work — they get wrapped in a throwaway Indicator internally:
+Raw versioned Pine strings work directly. JavaScript strings and functions require an explicit trusted mode; all three forms get wrapped in a throwaway Indicator internally:
 
 ```javascript
 await pine.run(code); // raw Pine string
 await pine.run(($) => {
     /* ... */
-}); // raw JS function
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' }); // trusted JS function
 ```
 
 You'd choose the explicit `Indicator` form when you want to:

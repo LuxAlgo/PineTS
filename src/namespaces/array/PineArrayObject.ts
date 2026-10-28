@@ -45,9 +45,11 @@ import { stdev as stdev_factory } from './methods/stdev';
 import { sum as sum_factory } from './methods/sum';
 import { unshift as unshift_factory } from './methods/unshift';
 import { variance as variance_factory } from './methods/variance';
-import { tostringElements } from './format';
 import { spreadNamedArgs } from '../namedArgs';
 import { ARRAY_PARAMS } from '../collectionParams';
+import { boundedArrayText } from './format';
+import { MAX_STRING_CODE_UNITS } from '../limits';
+import { guardArray } from './capacity';
 
 export enum PineArrayType {
     any = '',
@@ -64,6 +66,7 @@ export enum PineArrayType {
 }
 
 export class PineArrayObject {
+    private _array: any[];
     private _abs: any;
     private _avg: any;
     private _binary_search: any;
@@ -108,7 +111,8 @@ export class PineArrayObject {
     private _unshift: any;
     private _variance: any;
 
-    constructor(public array: any, public type: PineArrayType, public context: any) {
+    constructor(array: any[], public type: PineArrayType, public context: any) {
+        this._array = guardArray(array, context);
         this._abs = abs_factory(this.context);
         this._avg = avg_factory(this.context);
         this._binary_search = binary_search_factory(this.context);
@@ -154,13 +158,19 @@ export class PineArrayObject {
         this._variance = variance_factory(this.context);
     }
 
+    get array(): any[] { return this._array; }
+    set array(value: any[]) { this._array = guardArray(value, this.context); }
+
     // Element count for JavaScript callers (PineTS syntax: `line.all.length`); Pine uses size().
     get length(): number {
         return this.array.length;
     }
 
     toString(): string {
-        return '[' + tostringElements(this).join(', ') + ']';
+        return boundedArrayText(this, 'tostring', MAX_STRING_CODE_UNITS, 'array.toString', (work, bytes) => {
+            this.context?.executionBudget?.chargeWork(work, 'array.toString');
+            this.context?.executionBudget?.chargeMemory(bytes, 'array.toString');
+        });
     }
 
     [Symbol.iterator]() {

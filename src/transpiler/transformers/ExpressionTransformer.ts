@@ -1281,7 +1281,9 @@ function hoistedArgRef(name: string): any {
     return ref;
 }
 
-export function transformFunctionArgument(arg: any, namespace: string, scopeManager: ScopeManager): any {
+const INPUT_METHODS_WITH_POSITIONAL_OPTIONS = new Set(['int', 'float', 'enum', 'session', 'string', 'timeframe']);
+
+export function transformFunctionArgument(arg: any, namespace: string, scopeManager: ScopeManager, preserveInputOptionsArray = false): any {
     // Handle binary expressions (arithmetic operations)
 
     switch (arg?.type) {
@@ -1352,6 +1354,9 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                 }
                 return element;
             });
+            // A Pine input's `options` is a literal list, not a time series.
+            // Wrapping it in `input.param` would select only its last element.
+            if (preserveInputOptionsArray) return arg;
             break;
     }
 
@@ -1650,7 +1655,12 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                 };
             } else if (prop.value.type !== 'Literal') {
                 // For complex expressions (CallExpression, BinaryExpression, etc.), recursively transform them
-                prop.value = transformFunctionArgument(prop.value, namespace, scopeManager);
+                prop.value = transformFunctionArgument(
+                    prop.value,
+                    namespace,
+                    scopeManager,
+                    namespace === 'input' && prop.key?.name === 'options' && prop.value.type === 'ArrayExpression'
+                );
             }
             return prop;
         });
@@ -1886,14 +1896,20 @@ function transformCallExpressionInner(node: any, scopeManager: ScopeManager, nam
         }
         // Transform arguments using the namespace's param
         const newArgs: any[] = [];
-        node.arguments.forEach((arg: any) => {
+        node.arguments.forEach((arg: any, index: number) => {
             // If argument is already a param call, don't wrap it again. A skipped parameter
             // (`undefined`, from named arguments) stays bare so the function's default applies.
             if (arg._isParamCall || isUndefinedArg(arg)) {
                 newArgs.push(arg);
                 return;
             }
-            newArgs.push(transformFunctionArgument(arg, namespace, scopeManager));
+            newArgs.push(transformFunctionArgument(
+                arg,
+                namespace,
+                scopeManager,
+                namespace === 'input' && index === 2 && arg.type === 'ArrayExpression' &&
+                    INPUT_METHODS_WITH_POSITIONAL_OPTIONS.has(node.callee.property.name)
+            ));
         });
         node.arguments = newArgs;
 

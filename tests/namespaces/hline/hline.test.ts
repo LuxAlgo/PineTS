@@ -10,7 +10,7 @@ describe('HLINE Namespace', () => {
         const { plots } = await pineTS.run((context) => {
             hline(70, 'Overbought');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // hline delegates to plot.any, so it should create a plot entry
         expect(plots['Overbought']).toBeDefined();
@@ -24,7 +24,7 @@ describe('HLINE Namespace', () => {
         const { plots } = await pineTS.run((context) => {
             hline(50, 'Midline');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // All data values should be constant at 50
         const values = plots['Midline'].data.map((d: any) => d.value);
@@ -41,7 +41,7 @@ describe('HLINE Namespace', () => {
             var h1 = hline(70, 'Upper');
             var hasH1 = h1 !== undefined && h1 !== null;
             return { hasH1 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.hasH1[0]).toBe(true);
     });
@@ -53,7 +53,7 @@ describe('HLINE Namespace', () => {
             hline(70, 'Level');
             hline(30, 'Level'); // Same title, different callsite
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // First hline uses title "Level" as key, second gets "Level#1"
         expect(plots['Level']).toBeDefined();
@@ -74,7 +74,7 @@ describe('HLINE Namespace', () => {
             hline(30, 'Oversold');
             hline(50, 'Midline');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['Overbought']).toBeDefined();
         expect(plots['Oversold']).toBeDefined();
@@ -94,7 +94,7 @@ describe('HLINE Namespace', () => {
                 hline.style_dotted,
             ].join(',');
             return { allStyles };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const styles = result.allStyles[0].split(',');
         expect(styles.length).toBe(3);

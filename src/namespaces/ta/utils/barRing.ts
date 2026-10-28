@@ -2,6 +2,8 @@
 
 import { Series } from '../../../Series';
 import { CarryHistory } from './history';
+import { assertTaLength, validTaLength } from './assertTaLength';
+import type { ExecutionBudget } from '../../../security/ExecutionBudget';
 
 /**
  * The source of `ta.linreg` / `ta.rci` as TradingView reads it: `length + 1` slots indexed by bar index, written only when the function is
@@ -16,6 +18,7 @@ export class BarRing {
     private vals: number[];
 
     constructor(readonly length: number) {
+        assertTaLength(length, 'ta.barRing');
         this.size = length + 1;
         this.vals = new Array(this.size).fill(0);
     }
@@ -45,7 +48,7 @@ export class BarRing {
 }
 
 /** A window length the functions accept (an int >= 1); any other gives na. */
-export const validLength = (length: number) => Number.isInteger(length) && length >= 1;
+export const validLength = (length: number) => validTaLength(length, 'ta.linreg');
 
 /**
  * The window of ta.linreg as TradingView reads it (BarRing), with its sum S and weighted sum N (newest
@@ -64,9 +67,11 @@ export class TvWeightedRing {
     private saved: [number, number, number, boolean, number] = [-1, 0, 0, false, 0];
 
     /** [S, N] of the window of the call on bar `idx`, undefined when it holds na. */
-    step(idx: number, x: number, length: number, series: Series): [number, number] | undefined {
+    step(idx: number, x: number, length: number, series: Series, budget?: ExecutionBudget): [number, number] | undefined {
         if (!validLength(length)) return undefined;
         if (!this.ring || this.ring.length !== length) {
+            budget?.chargeWork(length, 'ta.linreg');
+            budget?.chargeMemory(24 * (length + 1), 'ta.linreg');
             this.ring = new BarRing(length);
             this.lastCall = -1;
             this.ok = false;
@@ -91,6 +96,7 @@ export class TvWeightedRing {
         }
         let S = 0;
         let N = 0;
+        budget?.chargeWork(length, 'ta.linreg');
         for (let i = 0; i < length; i++) {
             const v = ring.read(idx - i);
             N += v * (length - i);
@@ -115,20 +121,24 @@ export class TvWeightedRing {
 /** ta.linreg: [S, N] (N weighing the newest value `length`) in the slot form, or the series form. */
 export class LinregCall {
     private slots = new TvWeightedRing();
-    private carry = new CarryHistory(2);
+    private carry: CarryHistory;
     private firstLength = NaN;
     private seriesForm = false;
     // [slope, intercept] of the last call that had a regression line (committed), and after this call
     private committedLine: [number, number] | null = null;
     line: [number, number] | null = null;
 
+    constructor(private readonly budget?: ExecutionBudget) {
+        this.carry = new CarryHistory(2, undefined, true, budget);
+    }
+
     step(idx: number, x: number, length: number, series: Series): [number, number] | undefined {
-        this.carry.push(idx, x, validLength(length) ? length : 1, series);
+        this.carry.push(idx, x, validLength(length) ? length : 1, series, this.budget);
         if (this.carry.newBar) this.committedLine = this.line;
         this.line = this.committedLine;
         if (Number.isNaN(this.firstLength)) this.firstLength = length;
         else if (length !== this.firstLength) this.seriesForm = true;
-        if (!this.seriesForm) return this.slots.step(idx, x, length, series);
+        if (!this.seriesForm) return this.slots.step(idx, x, length, series, this.budget);
 
         const h = this.carry.h;
         if (!validLength(length) || h.size < length || h.nas(length) > 0) return undefined;

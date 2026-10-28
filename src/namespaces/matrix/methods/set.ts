@@ -2,25 +2,14 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
-import { PineRuntimeError } from '../../../errors/PineRuntimeError';
+import { assertMatrixIndex } from '../indexValidation';
 
 export function set(context: Context) {
     return (id: PineMatrixObject, row: number, col: number, value: any) => {
         const rows = id.matrix.length;
         const cols = rows > 0 ? id.matrix[0].length : 0;
-        // TradingView halts the script with a runtime error on out-of-bounds access.
-        if (row < 0 || row >= rows) {
-            throw new PineRuntimeError(
-                `Row index ${row} is out of bounds, matrix has ${rows} rows.`,
-                'matrix.set'
-            );
-        }
-        if (col < 0 || col >= cols) {
-            throw new PineRuntimeError(
-                `Column index ${col} is out of bounds, matrix has ${cols} columns.`,
-                'matrix.set'
-            );
-        }
+        assertMatrixIndex(row, rows, 'row', 'matrix.set');
+        assertMatrixIndex(col, cols, 'column', 'matrix.set');
         id.matrix[row][col] = value;
     };
 }

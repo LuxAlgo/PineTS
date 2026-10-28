@@ -14,9 +14,10 @@ import { size as size_factory } from './methods/size';
 import { values as values_factory } from './methods/values';
 import { spreadNamedArgs } from '../namedArgs';
 import { MAP_PARAMS } from '../collectionParams';
+import { BoundedPineMap } from './capacity';
 
 export class PineMapObject {
-    public map: Map<any, any>;
+    private _map: BoundedPineMap;
     // 'string' for map<K, string>, whose missing keys read as the na string ("")
     public valueType?: string;
     private _clear: any;
@@ -31,7 +32,7 @@ export class PineMapObject {
     private _values: any;
 
     constructor(public context: any) {
-        this.map = new Map();
+        this._map = new BoundedPineMap(context);
         this._clear = clear_factory(this.context);
         this._contains = contains_factory(this.context);
         this._copy = copy_factory(this.context);
@@ -42,6 +43,14 @@ export class PineMapObject {
         this._remove = remove_factory(this.context);
         this._size = size_factory(this.context);
         this._values = values_factory(this.context);
+    }
+
+    get map(): Map<any, any> { return this._map; }
+    set map(value: Map<any, any>) {
+        // Build the replacement completely before making it visible to callers.
+        const next = new BoundedPineMap(this.context);
+        for (const [key, entry] of value) next.set(key, entry);
+        this._map = next;
     }
 
     toString(): string {

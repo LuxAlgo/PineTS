@@ -15,7 +15,7 @@ describe('Array Creation', () => {
             return {
                 size,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const part_size = result.size.reverse().slice(0, 5);
         const expected_size = [10, 10, 10, 10, 10];
@@ -37,7 +37,7 @@ describe('Array Creation', () => {
             return { a, b };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {

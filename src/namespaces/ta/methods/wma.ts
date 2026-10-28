@@ -10,7 +10,10 @@ const fillForward = (x: number, prev: number) => (Number.isNaN(x) ? prev : x);
 const isNa = (v: any) => v === null || v === undefined || Number.isNaN(v);
 
 class WmaState {
-    carry = new CarryHistory(2, fillForward);
+    carry: CarryHistory;
+    constructor(budget?: any) {
+        this.carry = new CarryHistory(2, fillForward, true, budget);
+    }
     // non-na values seen, at the end of the previous bar and now
     savedSeen = 0;
     seen = 0;
@@ -25,11 +28,11 @@ export function wma(context: any) {
         // the last call's value); O(1) for any period (prefix sums)
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `wma_${period}`;
-        const state: WmaState = (context.taState[stateKey] ??= new WmaState());
+        const state: WmaState = (context.taState[stateKey] ??= new WmaState(context.executionBudget));
         const carry = state.carry;
         const series = Series.from(source);
         const currentValue = series.get(0);
-        carry.push(context.idx, currentValue, period, series);
+        carry.push(context.idx, currentValue, period, series, context.executionBudget);
 
         if (carry.newBar) state.savedSeen = state.seen;
         else state.seen = state.savedSeen;

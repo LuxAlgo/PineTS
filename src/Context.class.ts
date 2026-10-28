@@ -2,6 +2,7 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { IProvider, ISymbolInfo } from './marketData/IProvider';
+import type { SourceMode } from './security/SourceMode';
 import { PineArray } from './namespaces/array/array.index';
 import { PineMap } from './namespaces/map/map.index';
 import { PineMatrix } from './namespaces/matrix/matrix.index';
@@ -41,6 +42,7 @@ import { receiverMatchesMethod } from './namespaces/methodDispatch';
 import { BUILTIN_METHOD_NAMES } from './transpiler/settings';
 import { PineRuntimeError } from './errors/PineRuntimeError';
 import type { IImportResolver } from './imports/IImportResolver';
+import { ExecutionBudget } from './security/ExecutionBudget';
 import type { IndicatorOptions } from './types/PineTypes';
 import type { IPineInput } from './Indicator/types';
 import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
@@ -77,6 +79,7 @@ export class Context {
     public dataVersion: number = 0; // Incremented when market data changes (streaming mode)
 
     public __maxLoops: number = 500000;
+    public readonly executionBudget: ExecutionBudget;
     public NA: any = NaN;
 
     /** Runtime warnings (OOB access, etc.) — non-blocking, script continues. */
@@ -162,6 +165,8 @@ export class Context {
     public timeframe: string = '';
     /** `//@version=` of the running Pine Script source; null for PineTS syntax. */
     public pineVersion: number | null = null;
+    /** Trust decision from the primary run, inherited by secondary requests. */
+    public sourceMode: SourceMode = 'nativePine';
     public limit: number;
     public sDate: number;
     public eDate: number;
@@ -190,6 +195,7 @@ export class Context {
         eDate,
         fullContext,
         inputs,
+        executionBudget,
     }: {
         marketData: any;
         source: IProvider | any[];
@@ -200,6 +206,7 @@ export class Context {
         eDate?: number;
         fullContext?: Context;
         inputs?: Record<string, any>;
+        executionBudget?: ExecutionBudget;
     }) {
         this.marketData = marketData;
         this.source = source;
@@ -209,7 +216,8 @@ export class Context {
         this.sDate = sDate;
         this.eDate = eDate;
         this.fullContext = fullContext || this;
-        this.inputs = inputs || {};
+        this.executionBudget = executionBudget ?? fullContext?.executionBudget ?? new ExecutionBudget();
+        this.inputs = Object.assign(Object.create(null), inputs || {});
         // console.log('Context initialized with inputs keys:', Object.keys(this.inputs));
         // Initialize core functions
         const core = new Core(this);
@@ -314,6 +322,13 @@ export class Context {
                 return tradingDayOf(closeTime - 1, syminfo?.timezone || 'UTC', syminfo?.session);
             },
             get inputs() {
+                // Native Pine can reference this legacy builtin directly, bypassing
+                // input.* resolution. Never expose caller-owned host objects there.
+                for (const value of Object.values(_this.inputs)) {
+                    if (value !== null && value !== undefined && !['string', 'number', 'boolean'].includes(typeof value)) {
+                        throw new TypeError('Pine inputs require primitive override values');
+                    }
+                }
                 return _this.inputs;
             },
             log: new Log(this),
@@ -1055,6 +1070,11 @@ export class Context {
         throw new PineRuntimeError(message);
     }
 
+    /** Called by the final loop-instrumentation pass, including initializer IIFEs. */
+    public chargeLoopIteration(): void {
+        this.executionBudget.chargeLoopIteration();
+    }
+
     public drawingOrNa(receiver: any) {
         const isNa = receiver === null || receiver === undefined || (typeof receiver === 'number' && isNaN(receiver));
         return isNa ? NA_DRAWING : receiver;
@@ -1067,6 +1087,7 @@ export class Context {
      * @param args - Arguments to pass to the function
      */
     public call(fn: Function, id: string, ...args: any[]) {
+        this.executionBudget.enterFunctionCall();
         this.pushId(id);
         try {
             const result = fn(...args);
@@ -1075,6 +1096,7 @@ export class Context {
             return result === undefined ? NaN : result;
         } finally {
             this.popId();
+            this.executionBudget.leaveFunctionCall();
         }
     }
 

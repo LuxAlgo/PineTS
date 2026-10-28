@@ -22,7 +22,7 @@ indicator("CloseTime Test")
 plot(time, "time")
 plot(time_close, "time_close")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const _time = plots['time']?.data;
         const _tc = plots['time_close']?.data;
 
@@ -39,7 +39,7 @@ indicator("CloseTime Delta Test")
 plot(time, "time")
 plot(time_close, "time_close")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const _time = plots['time']?.data;
         const _tc = plots['time_close']?.data;
         const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
@@ -56,7 +56,7 @@ plot(time_close, "time_close")
 indicator("CloseTime Exact Test")
 plot(time_close, "time_close")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         // First weekly bar: opens 2019-01-07, closes 2019-01-14 00:00 UTC
         expect(plots['time_close'].data[0].value).toBe(new Date('2019-01-14T00:00:00Z').getTime());
     });
@@ -76,7 +76,7 @@ describe('closeTime normalization — PineTS safety-net (array-based data)', () 
             const { time_close } = $.pine;
             let tc = time_close;
             return { tc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Safety-net: closeTime = openTime + 1W (604800000ms)
         const oneWeekMs = 604_800_000;
@@ -96,7 +96,7 @@ describe('closeTime normalization — PineTS safety-net (array-based data)', () 
             const { time_close } = $.pine;
             let tc = time_close;
             return { tc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Should use provider-supplied closeTime, not compute from timeframe
         expect(result.tc[0]).toBe(1547424000000);
@@ -114,7 +114,7 @@ describe('closeTime normalization — PineTS safety-net (array-based data)', () 
             const { time_close } = $.pine;
             let tc = time_close;
             return { tc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Default: 1D = 86400000ms
         expect(result.tc[0]).toBe(1546819200000 + 86_400_000);
@@ -134,7 +134,7 @@ indicator("TradingDay Test")
 plot(time, "time")
 plot(time_tradingday, "td")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const _time = plots['time']?.data;
         const _td = plots['td']?.data;
 
@@ -151,7 +151,7 @@ indicator("TradingDay All Bars")
 plot(time_close, "tc")
 plot(time_tradingday, "td")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const _tc = plots['tc']?.data;
         const _td = plots['td']?.data;
 
@@ -169,7 +169,7 @@ plot(time_tradingday, "td")
 indicator("TD TV Comparison")
 plot(time_tradingday, "td")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const tdData = plots['td']?.data;
 
         // TV values for BTCUSDC Weekly (the bar's Sunday; TV gives time_tradingday - time = 6 days):
@@ -219,8 +219,8 @@ indicator("TZ Test")
 plot(hour, "hour")
 plot(dayofmonth, "dom")
 `;
-        const { plots: plotsDefault } = await pineTSDefault.run(sourceCode);
-        const { plots: plotsWithTZ } = await pineTSWithTZ.run(sourceCode);
+        const { plots: plotsDefault } = await pineTSDefault.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
+        const { plots: plotsWithTZ } = await pineTSWithTZ.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // All computation values should be identical
         for (let i = 0; i < plotsDefault['hour'].data.length; i++) {
@@ -240,7 +240,7 @@ indicator("TZ Test")
 ts = timestamp("2019-06-10 00:00")
 plot(ts, "ts")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         // Should resolve in exchange timezone (UTC), NOT chart timezone (UTC-5)
         expect(plots['ts'].data[0].value).toBe(1560124800000); // 2019-06-10 00:00 UTC
     });
@@ -255,7 +255,7 @@ plot(ts, "ts")
 indicator("TZ Test")
 plot(time_tradingday, "td")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         // time_tradingday uses syminfo.timezone (UTC), not chart timezone
         // First bar opens 2019-01-07, closes 2019-01-14 → TD = midnight Jan 13 (its last day)
         expect(plots['td'].data[0].value).toBe(Date.UTC(2019, 0, 13, 0, 0, 0));
@@ -273,7 +273,7 @@ plot(weekofyear, "woy")
 plot(month, "month")
 plot(year, "year")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         // Bar opens 2019-01-07 00:00 UTC — computation uses exchange TZ (UTC)
         expect(plots['woy'].data[0].value).toBe(2);
         expect(plots['month'].data[0].value).toBe(1);
@@ -295,7 +295,7 @@ plot(time, "time")
 plot(time_close, "tc")
 plot(time_tradingday, "td")
 `;
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const _time = plots['time']?.data;
         const _tc = plots['tc']?.data;
         const _td = plots['td']?.data;

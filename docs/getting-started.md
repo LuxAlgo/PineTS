@@ -85,7 +85,7 @@ const { result } = await pineTS.run(indicator);
 
 ### Option 2: Use PineTS Syntax
 
-If you prefer or need more control, you can use PineTS syntax, which is a JavaScript/TypeScript version with minimal differences from Pine Script.
+If you prefer or need more control, you can use PineTS syntax, which is a JavaScript/TypeScript version with minimal differences from Pine Script. JavaScript functions and markerless JavaScript strings require the explicit `trustedJavaScript` source mode. Only use this mode for code you trust; native Pine Script with a `//@version` marker remains the default. See [Source Modes](source-mode.md).
 
 #### Converting Pine Script to PineTS
 
@@ -149,7 +149,7 @@ const { result } = await pineTS.run((context) => {
 
     let _oo = open;
     _oo = math.abs(open[1] - close[2]);
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 ## Streaming Data and Pagination
@@ -173,6 +173,7 @@ const evt = pineTS.stream(
         pageSize: 50, // Process in chunks of 50
         live: true, // Continue with live data
         interval: 2000, // Poll every 2 seconds
+        sourceMode: 'trustedJavaScript', // Required for this JS callback
     },
 );
 

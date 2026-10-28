@@ -1,15 +1,44 @@
 # Change Log
 
-## [Unreleased] - TradingView Parity
+## [Unreleased]
+
+### Security Hardening
+
+This update closes documented host-access and resource-exhaustion paths in untrusted Pine execution. It changes the default source mode and adds an opt-in, terminable Node execution boundary.
+
+#### Changed
+
+- **Breaking: versioned Pine is required by default.** `PineTS.run()`, `stream()`, `update()`, `Indicator.prepare()` and `transpile()` reject markerless code and JavaScript functions unless the caller explicitly selects `sourceMode: 'trustedJavaScript'`. Prepared artifacts are keyed by mode and policy version; `runPretranspiled()` accepts only compiler-produced artifacts with matching provenance. See [Source modes](docs/source-mode.md).
+- **`str.match` runs on a step-bounded Java-flavor matcher.** Pattern and subject lengths are limited, and matching steps consume the shared execution budget so runaway patterns cannot block the host indefinitely.
+
+#### Added
+
+- **A shared execution budget** accounts for loop iterations, bars, function calls and recursion depth, native work, cumulative memory charges, and provider calls, pages, raw bars and response bytes across primary and secondary contexts. Abort signals and deadlines propagate into provider requests. Resource, cancellation, deadline and provider failures expose stable `PineRuntimeError.code` values.
+- **Compilation and import limits** bound source bytes, lines, tokens, nesting, AST size and generated code before execution. Imported source and provider responses are size-checked while being read.
+- **Opt-in Node child execution** at `pinets/isolation/node` runs versioned Pine in a fresh process with bounded time, message sizes, output and V8 heap. The adapter rejects JavaScript and host objects, and fails closed for secondary market-data requests. See [Node child execution](docs/isolation-node.md).
+- **Release checks** run a high-severity dependency audit and the test suite before the production build; development tooling dependencies were updated.
+
+#### Fixed
+
+- **Generated Pine could reach host globals.** The closed-world verifier previously treated declarations in unrelated scopes as valid bindings, while `request.*` slices could be compiled after verification. References now resolve in their actual lexical scopes, and every final executable slice is verified before compilation; an unsafe slice falls back to the verified full-program path.
+- **Input and matrix access could expose JavaScript prototype properties.** Input overrides now require own, type-valid values instead of inherited properties. Matrix indices are validated as safe integers before any read or write.
+- **Execution limits could be bypassed or multiplied.** Loop expressions inside initializers now receive guards, and nested or repeated loops, recursion and secondary executions consume the same run-wide budget instead of independent per-loop allowances.
+- **Native operations could exhaust CPU or memory outside loop guards.** Array and map growth, derived matrix sizes and indices, table dimensions and ranges, drawing churn, TA window lengths, and string expansion are validated and charged before expensive work or mutation.
+- **Provider and fixture requests could amplify work.** Binance symbols are URL-encoded and pagination must advance; provider pages, retries, bars and bytes are bounded. Mock-provider fixture matching treats symbols and timeframes as literals rather than regex patterns.
+- **`input.*` option lists remain intact with per-call-site caching.** Named and positional literal `options` arrays are preserved by transpilation, so valid overrides remain available and out-of-list overrides are rejected.
+
+The Node child is not a complete OS sandbox. Deployments accepting hostile scripts still need a restricted account or container, denied egress, and host-level CPU, memory and process limits.
+
+### TradingView Parity
 
 Each change below was checked against TradingView's output for the same script.
 
-### Changed
+#### Changed
 
 - **`ta.*` history starts at the first call.** A window function first called on a later bar (inside an `if`, or on the last bar only) was backfilled from the source history. TradingView doesn't do that: `ta.sma(close, 20)` first called on bar 19 is na until its 20th call, and a call made only on the last bar is na. PineTS now does the same; the highest family covers the calls made so far, and `ta.linreg` / `ta.rci` read 0 for the slots before the first call. Tests: `tests/namespaces/ta/ta-late-first-call.test.ts`, `ta-late-first-call-wide.test.ts`.
 - **`str.match` follows Java's regex flavor** (`(?i)`, possessive quantifiers and the other Java constructs TradingView accepts), on a backtracking matcher that stops a runaway pattern with a runtime error instead of hanging.
 
-### Fixed
+#### Fixed
 
 - **Fractional pivot strengths.** `ta.pivothigh` / `ta.pivotlow` truncate `series int/float` strengths, as TradingView does (`(2.9, 1.9)` behaves as `(2, 1)`).
 - **Named colors follow the script version.** `color.red`, `color.teal` and `color.yellow` are `#FF5252`, `#00897B` and `#FFEB3B` in scripts before v6, and `#F23645`, `#089981` and `#FDD835` in v6, including color input defaults.
@@ -22,6 +51,7 @@ Each change below was checked against TradingView's output for the same script.
 - **Strategies.** Market orders filling together at the open all fill before `max_intraday_filled_orders` closes out; entries placed while flat fill past the pyramiding cap; a stop-limit's limit fills only if the bar returns to it after the stop; an exit without `from_entry` takes its `qty` from each entry id; an exit waiting on a cancelled entry attaches to a later entry with the same id; once a risk rule stops trading for good, later exits are rejected too.
 - **Alerts.** Strategy order fills emit `order_fill` alert events: `alert_message` (and `strategy.exit`'s `alert_profit` / `alert_loss` / `alert_trailing`) fill `{{strategy.order.alert_message}}`, `disable_alert` silences an order, a `strategy.risk.*` rule's `alert_message` goes with its close-out; the message is the `//@strategy_alert_message` template, else TradingView's default `<title> (<inputs>): order {{strategy.order.action}} @ … New strategy position is {{strategy.position_size}}`. A `strategy.close()` fill reports the order id `Close entry(s) order strategy.close_N`. `alertcondition()` messages replace their placeholders (`{{close}}`, `{{plot_0}}` numbered as on TradingView, `{{plot("title")}}`, `{{ticker}}`, `{{time}}`, ...), an untitled condition is named "Alert", and a strategy's `alertcondition()` calls emit nothing; in a strategy without `calc_on_every_tick`, `alert()` triggers as `alert.freq_once_per_bar_close`. With live data, a bar's close fires its `freq_once_per_bar_close` alerts (they never fired in `stream()`: the closing execution of a live bar runs after the next bar arrived). On a live bar still forming, a strategy without `calc_on_every_tick` no longer fills its `process_orders_on_close` orders (and alerts them) on the first tick at the tick's price: they fill at the bar close.
 - **Requests and drawings.** `request.security_lower_tf` with `ignore_invalid_symbol` returns na for a symbol without data; a matrix, map or UDT expression no longer swallows the `gaps` / `lookahead` arguments after it; drawings built from `chart.point`s without `xloc` use bar indexes; `chart.point.now()` prices at `close`; `line.get_price` of a vertical line is na.
+
 ## [0.13.1] - 2026-10-27 - Transpiler, Live Update & Performance Fixes
 
 This release fixes a set of transpiler parity bugs, live updates of the forming bar, daily / weekly / monthly periods on session markets and the v5 `when` argument of the order commands, and removes two per-bar costs from the generated code.

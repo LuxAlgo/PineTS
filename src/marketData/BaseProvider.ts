@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { IProvider, ISymbolInfo, BaseProviderConfig } from './IProvider';
+import { IProvider, ISymbolInfo, BaseProviderConfig, ProviderRequestOptions } from './IProvider';
 import { Kline, normalizeCloseTime } from './types';
 import { selectSubTimeframe, aggregateCandles, getAggregationRatio, getApproximateRatio } from './aggregation';
 import { stripTickerModifier } from '../tickerModifier';
 import { canonicalTimeframe, parseTimeframe, timeframeBarStart } from '../timeframe';
+import { ExecutionBudget } from '../security/ExecutionBudget';
+import { PineRuntimeError } from '../errors/PineRuntimeError';
 
 /**
  * Normalize a user-supplied timeframe key to the canonical form used
@@ -139,7 +141,14 @@ export abstract class BaseProvider<TConfig extends BaseProviderConfig = BaseProv
         limit?: number,
         sDate?: number,
         eDate?: number,
+        options?: ProviderRequestOptions,
     ): Promise<Kline[]> {
+        // Existing callers use null as an omitted limit. Normalize that legacy
+        // form before the budget treats an explicit number as a reservation.
+        limit = limit == null ? undefined : limit;
+        const budget = options?.budget ?? new ExecutionBudget();
+        const request = { ...options, budget };
+        budget.chargeProviderCall();
         // Extended-ticker chart-type modifiers (";heikinashi") are honored only by data
         // sources that own the transform; bundled providers serve STANDARD candles, so the
         // modifier is stripped here — the venue APIs must never see it.
@@ -149,7 +158,7 @@ export abstract class BaseProvider<TConfig extends BaseProviderConfig = BaseProv
 
         // Fast path: natively supported
         if (supported.has(normalizedTf)) {
-            return this._getMarketDataNative(tickerId, normalizedTf, limit, sDate, eDate);
+            return this._fetchBudgetedNative(tickerId, normalizedTf, limit, sDate, eDate, request);
         }
 
         // Aggregation path
@@ -175,13 +184,14 @@ export abstract class BaseProvider<TConfig extends BaseProviderConfig = BaseProv
         const subSDate = calendarGrid && sDate !== undefined && target ? timeframeBarStart(sDate, target) : sDate;
 
         // Fetch sub-candles
-        const subCandles = await this._getMarketDataNative(
-            tickerId, subTimeframe, subLimit, subSDate, eDate,
+        const subCandles = await this._fetchBudgetedNative(
+            tickerId, subTimeframe, subLimit, subSDate, eDate, request,
         );
 
         if (subCandles.length === 0) return [];
 
         // Aggregate
+        budget.chargeWork(subCandles.length, 'request.provider');
         const aggregated = aggregateCandles(subCandles, normalizedTf, subTimeframe, { calendarGrid });
 
         // Apply limit to the aggregated result
@@ -207,11 +217,42 @@ export abstract class BaseProvider<TConfig extends BaseProviderConfig = BaseProv
         limit?: number,
         sDate?: number,
         eDate?: number,
+        options?: ProviderRequestOptions,
     ): Promise<Kline[]>;
 
-    abstract getSymbolInfo(tickerId: string): Promise<ISymbolInfo>;
+    abstract getSymbolInfo(tickerId: string, options?: ProviderRequestOptions): Promise<ISymbolInfo>;
 
     // ── Private helpers ─────────────────────────────────────────────────
+
+    private async _fetchBudgetedNative(
+        tickerId: string,
+        timeframe: string,
+        limit: number | undefined,
+        sDate: number | undefined,
+        eDate: number | undefined,
+        options: ProviderRequestOptions & { budget: ExecutionBudget },
+    ): Promise<Kline[]> {
+        const { budget } = options;
+        const release = budget.reserveProviderRawBars(limit);
+        let reported = 0;
+        const recordRawBars = (count: number) => {
+            // Once a page arrives, actual consumption replaces the optimistic
+            // reservation. A later page may then exhaust the shared quota.
+            release();
+            budget.chargeProviderRawBars(count);
+            reported += count;
+        };
+        try {
+            const data = await this._getMarketDataNative(tickerId, timeframe, limit, sDate, eDate,
+                { ...options, recordRawBars });
+            if (!Array.isArray(data)) throw new PineRuntimeError('Provider returned invalid market data.', 'request.provider', 'PROVIDER_FAILURE');
+            release();
+            if (data.length > reported) budget.chargeProviderRawBars(data.length - reported);
+            return data;
+        } finally {
+            release();
+        }
+    }
 
     /**
      * Compute how many sub-candles to fetch to produce `limit` aggregated candles.

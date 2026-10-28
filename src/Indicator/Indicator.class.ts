@@ -13,6 +13,8 @@ import { buildPropProxy } from './propProxy';
 import { resolveImports } from '../imports/resolveImports';
 import type { IImportResolver } from '../imports/IImportResolver';
 import type { IPineInput, IPineProp, PreparedScript } from './types';
+import { SOURCE_POLICY_VERSION, type SourceMode } from '../security/SourceMode';
+import type { ExecutionBudget } from '../security/ExecutionBudget';
 
 /**
  * The single owner of every per-script artifact. Holds the source, lazily
@@ -49,7 +51,7 @@ export class Indicator {
     declare public readonly prop: Record<string, unknown>;
 
     // Lazy artifacts — populated on first prepare() call.
-    private _prepared: PreparedScript | null = null;
+    private _preparedByMode = new Map<string, PreparedScript>();
     // Sources of the imported libraries, keyed by import path, and the resolver
     // they came from — set by resolveImports().
     private _libraries: Record<string, string> | null = null;
@@ -110,19 +112,28 @@ export class Indicator {
      * on the instance, so passing the same Indicator to multiple `pine.run()`
      * calls produces a single transpilation pass.
      *
-     * NB: cache is keyed by *instance identity*, not by options. If you need
-     * different debug settings, create a new Indicator.
+     * Cache entries are separated by source trust mode and policy version.
+     * A JavaScript artifact prepared in trusted mode must never be reused by
+     * a later native-Pine run of this Indicator.
      */
-    public prepare(opts: { debug?: boolean; ln?: boolean } = {}): PreparedScript {
-        if (this._prepared) return this._prepared;
+    public prepare(opts: { debug?: boolean; ln?: boolean; sourceMode?: SourceMode } = {}): PreparedScript {
+        const sourceMode = opts.sourceMode ?? 'nativePine';
+        const cacheKey = `${SOURCE_POLICY_VERSION}:${sourceMode}:${!!opts.debug}:${!!opts.ln}`;
+        const cached = this._preparedByMode.get(cacheKey);
+        if (cached) return cached;
 
-        const fn = transpile(this.source, { debug: !!opts.debug, ln: opts.ln, libraries: this._libraries ?? undefined });
+        const fn = transpile(this.source, {
+            debug: !!opts.debug,
+            ln: opts.ln,
+            sourceMode,
+            libraries: this._libraries ?? undefined,
+        });
 
         const usesVisibleRange = detectViewportUsage(fn);
         const ltfSlices = (fn as any)._ltfSlices;
 
         const self = this;
-        this._prepared = {
+        const prepared: PreparedScript = {
             fn,
             get inputs() {
                 return self.getRuntimeInputs();
@@ -130,7 +141,8 @@ export class Indicator {
             usesVisibleRange,
             ltfSlices,
         };
-        return this._prepared;
+        this._preparedByMode.set(cacheKey, prepared);
+        return prepared;
     }
 
     /**
@@ -140,18 +152,21 @@ export class Indicator {
      * Indicator is transpiled again if that resolver serves other sources.
      * Throws when the script imports a library the resolver does not know.
      */
-    public async resolveImports(resolver: IImportResolver | null): Promise<void> {
+    public async resolveImports(resolver: IImportResolver | null, budget?: ExecutionBudget): Promise<void> {
         if (typeof this.source !== 'string') return;
-        if (this._libraries && this._librariesResolver === resolver) return;
-        const libraries = await resolveImports(this.source, resolver);
-        if (this._libraries && !sameSources(this._libraries, libraries)) this._prepared = null;
+        if (this._libraries && this._librariesResolver === resolver) {
+            budget?.chargeWork(0);
+            return;
+        }
+        const libraries = await resolveImports(this.source, resolver, budget);
+        if (!sameSources(this._libraries ?? {}, libraries)) this._preparedByMode.clear();
         this._libraries = libraries;
         this._librariesResolver = resolver;
     }
 
     /** True iff the script references any built-in in `VIEWPORT_DEPENDENT_BUILTINS`. */
-    public usesVisibleRange(): boolean {
-        return this.prepare().usesVisibleRange;
+    public usesVisibleRange(sourceMode: SourceMode = 'nativePine'): boolean {
+        return this.prepare({ sourceMode }).usesVisibleRange;
     }
 
     /**
@@ -170,7 +185,7 @@ export class Indicator {
      * override key matches.
      */
     public getRuntimeInputs(): Record<string, unknown> {
-        const out: Record<string, unknown> = { ...(this.inputs ?? {}) };
+        const out: Record<string, unknown> = Object.assign(Object.create(null), this.inputs ?? {});
         if (this._inputMeta) {
             for (const key of this._explicitOverrides) {
                 const value = this._inputValues[key];

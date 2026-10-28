@@ -33,7 +33,7 @@ describe('Runtime Error Capture', () => {
 
             let caught: unknown;
             try {
-                await pineTS.run(code);
+                await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             } catch (err) {
                 caught = err;
             }
@@ -52,7 +52,7 @@ describe('Runtime Error Capture', () => {
                 return array.get(arr, 0);
             };
 
-            await expect(pineTS.run(code)).rejects.toThrow(PineRuntimeError);
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
         });
 
         it('array.remove OOB throws PineRuntimeError', async () => {
@@ -63,7 +63,7 @@ describe('Runtime Error Capture', () => {
                 return array.remove(arr, 5);
             };
 
-            await expect(pineTS.run(code)).rejects.toThrow(PineRuntimeError);
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
         });
 
         it('matrix.get OOB throws PineRuntimeError', async () => {
@@ -74,7 +74,7 @@ describe('Runtime Error Capture', () => {
                 return matrix.get(m, 5, 0);
             };
 
-            await expect(pineTS.run(code)).rejects.toThrow(PineRuntimeError);
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
         });
 
         it('loop guard violation still throws (blocking)', async () => {
@@ -90,7 +90,7 @@ while true
 plot(i)
             `;
 
-            await expect(pineTS.run(code)).rejects.toThrow(/loop/i);
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(/loop/i);
         });
     });
 
@@ -107,7 +107,7 @@ plot(i)
             };
 
             const error = await new Promise<any>((resolve, reject) => {
-                const stream = pineTS.stream(code, { live: false });
+                const stream = pineTS.stream(code, { live: false , sourceMode: 'trustedJavaScript'});
                 const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
 
                 stream.on('error', (err: any) => {
@@ -140,7 +140,7 @@ plot(i)
             `;
 
             const error = await new Promise<any>((resolve, reject) => {
-                const stream = pineTS.stream(code, { live: false });
+                const stream = pineTS.stream(code, { live: false , sourceMode: 'trustedJavaScript'});
                 const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
 
                 stream.on('error', (err: any) => {

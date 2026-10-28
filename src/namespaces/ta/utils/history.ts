@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { lowerBound, upperBound, ValueCounts } from './windows';
+import { assertTaLength, MAX_TA_LENGTH } from './assertTaLength';
+import { PineRuntimeError } from '../../../errors/PineRuntimeError';
+import type { ExecutionBudget } from '../../../security/ExecutionBudget';
 
 /**
  * Lookback kept by a History: TradingView's history buffers go up to 5000 bars; a longer window keeps
@@ -47,7 +50,8 @@ export class History {
     end = 0;
     private keep = MIN_KEEP;
 
-    constructor(sums: 0 | 1 | 2 = 0) {
+    constructor(sums: 0 | 1 | 2 = 0, private readonly budget?: ExecutionBudget) {
+        budget?.chargeMemory(64 * 8 + 65 * 4 + sums * 2 * 65 * 8, 'ta.history');
         this.ph = sums >= 1 ? new Float64Array(65) : null;
         this.pl = sums >= 1 ? new Float64Array(65) : null;
         this.qh = sums >= 2 ? new Float64Array(65) : null;
@@ -60,11 +64,17 @@ export class History {
 
     /** Keeps at least `n` entries (and the default lookback). */
     keepFor(n: number): void {
+        // CarryHistory reserves one extra slot for the value leaving the public window.
+        if (!Number.isSafeInteger(n) || n < 1 || n > MAX_TA_LENGTH + 1) {
+            throw new PineRuntimeError(`TA history span exceeds ${MAX_TA_LENGTH + 1}.`, 'ta.history');
+        }
         if (2 * n > this.keep) this.keep = 2 * n;
     }
 
     private grow(): void {
         const cap = this.v.length * 2;
+        const channels = 1 + (this.ph ? 2 : 0) + (this.qh ? 2 : 0);
+        this.budget?.chargeMemory(cap * 8 * channels + (cap + 1) * 4, 'ta.history');
         const re = (a: Float64Array, n: number) => {
             const b = new Float64Array(n);
             b.set(a);
@@ -217,6 +227,8 @@ abstract class TailTracker {
     private savedHi = 0;
     private log: Op[] = [];
 
+    constructor(protected readonly budget?: ExecutionBudget) {}
+
     protected abstract add(v: number): void;
     protected abstract remove(v: number): void;
 
@@ -228,6 +240,7 @@ abstract class TailTracker {
 
     rollback(): void {
         for (let i = this.log.length - 1; i >= 0; i--) {
+            this.budget?.chargeWork(1, 'ta.window');
             const [added, v] = this.log[i];
             if (added) this.remove(v);
             else this.add(v);
@@ -239,12 +252,14 @@ abstract class TailTracker {
 
     private doAdd(v: number): void {
         if (isNa(v)) return;
+        this.budget?.chargeWork(1, 'ta.window');
         this.add(v);
         this.log.push([true, v]);
     }
 
     private doRemove(v: number): void {
         if (isNa(v)) return;
+        this.budget?.chargeWork(1, 'ta.window');
         this.remove(v);
         this.log.push([false, v]);
     }
@@ -268,15 +283,23 @@ abstract class TailTracker {
 export class SortedTail extends TailTracker {
     sorted: number[] = [];
     protected add(v: number): void {
-        this.sorted.splice(upperBound(this.sorted, v), 0, v);
+        const at = upperBound(this.sorted, v);
+        this.budget?.chargeWork(this.sorted.length - at + 1, 'ta.sortedWindow');
+        this.sorted.splice(at, 0, v);
     }
     protected remove(v: number): void {
-        this.sorted.splice(lowerBound(this.sorted, v), 1);
+        const at = lowerBound(this.sorted, v);
+        this.budget?.chargeWork(this.sorted.length - at, 'ta.sortedWindow');
+        this.sorted.splice(at, 1);
     }
 }
 
 export class CountsTail extends TailTracker {
-    counts = new ValueCounts();
+    counts: ValueCounts;
+    constructor(budget?: ExecutionBudget) {
+        super(budget);
+        this.counts = new ValueCounts(budget);
+    }
     protected add(v: number): void {
         this.counts.add(v);
     }
@@ -306,12 +329,14 @@ export class ExtremeTail {
     constructor(
         private readonly max: boolean,
         private readonly newest = false,
+        private readonly budget?: ExecutionBudget,
     ) {}
 
     commit(h: History): void {
         // drop the entries no longer kept by the history
         while (this.head < this.idx.length && this.idx[this.head] < h.start) this.head++;
         if (this.head > 1024 && this.head * 2 > this.idx.length) {
+            this.budget?.chargeWork(this.idx.length + this.val.length, 'ta.extremeWindow');
             this.idx.splice(0, this.head);
             this.val.splice(0, this.head);
             this.head = 0;
@@ -322,6 +347,7 @@ export class ExtremeTail {
     }
 
     rollback(): void {
+        this.budget?.chargeWork(this.popped.length + this.pushedCount, 'ta.extremeWindow');
         this.idx.length -= this.pushedCount;
         this.val.length -= this.pushedCount;
         for (let i = this.popped.length - 1; i >= 0; i--) {
@@ -339,6 +365,7 @@ export class ExtremeTail {
     sync(h: History): void {
         if (this.synced < h.start) this.synced = h.start;
         for (; this.synced < h.end; this.synced++) {
+            this.budget?.chargeWork(1, 'ta.extremeWindow');
             const j = this.synced;
             const v = h.get(j);
             if (isNa(v)) {
@@ -346,6 +373,7 @@ export class ExtremeTail {
                 continue;
             }
             while (this.idx.length > this.head) {
+                this.budget?.chargeWork(1, 'ta.extremeWindow');
                 const w = this.val[this.val.length - 1];
                 if (!(this.max ? w < v || (this.newest && w === v) : w > v || (this.newest && w === v))) break;
                 if (this.pushedCount > 0) {
@@ -392,8 +420,11 @@ export class CarryHistory {
     constructor(
         sums: 0 | 1 | 2 = 0,
         private readonly fill?: (x: number, prev: number) => number,
+        // Retained for budget-aware callers; source history is no longer backfilled on first call.
+        _backfill = true,
+        budget?: ExecutionBudget,
     ) {
-        this.h = new History(sums);
+        this.h = new History(sums, budget);
     }
 
     private write(x: number): void {
@@ -401,14 +432,15 @@ export class CarryHistory {
         h.push(this.fill ? this.fill(x, h.size ? h.at(0) : NaN) : x);
     }
 
-    /** Adds the value `x` of the call on bar `idx`. */
-    push(idx: number, x: any, length: number, _series?: { get(k: number): any }): void {
-        this.visit(idx, length, _series);
+    /** Adds the value `x` of the call on bar `idx`; the source argument is legacy and not read. */
+    push(idx: number, x: any, length: number, _series?: { get(k: number): any }, budget?: ExecutionBudget): void {
+        this.visit(idx, length, _series, budget);
         this.write(x == null ? NaN : Number(x));
     }
 
     /** Starts the call on bar `idx` without adding a value (the bar is then not in the history). */
-    visit(idx: number, length: number, _series?: { get(k: number): any }): void {
+    visit(idx: number, length: number, _series?: { get(k: number): any }, budget?: ExecutionBudget): void {
+        if (length !== 0) assertTaLength(length, 'ta.history');
         const h = this.h;
         h.keepFor(length + 1);
         if (idx !== this.lastIdx) {
@@ -416,6 +448,7 @@ export class CarryHistory {
             if (this.lastIdx >= 0) {
                 h.compact();
                 const skipped = Math.min(idx - this.lastIdx - 1, Math.max(MIN_KEEP, 2 * (length + 1)));
+                budget?.chargeWork(skipped, 'ta.history');
                 if (h.size) for (let k = 0; k < skipped; k++) h.push(h.at(0));
             }
             this.savedEnd = h.end;

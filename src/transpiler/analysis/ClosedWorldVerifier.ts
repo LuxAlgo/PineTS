@@ -22,9 +22,9 @@
  * would raise spurious violations). It enforces the closed world the Pine
  * front-end is supposed to describe:
  *
- *   1. Every identifier reference must be declared somewhere in the generated
- *      program (a parameter, a `var`/`let`/`const`, a function or class name, a
- *      catch binding) or be one of a tiny set of JavaScript values the
+ *   1. Every identifier reference must resolve to a binding visible at that
+ *      lexical position (a parameter, a `var`/`let`/`const`, a function or class
+ *      name, a catch binding) or be one of a tiny set of JavaScript values the
  *      transpiler legitimately emits (`undefined`, `NaN`, `Infinity`, `Error`).
  *      A free `process` / `fetch` / `Function` / `globalThis` therefore throws.
  *
@@ -78,6 +78,11 @@ const DENIED_PROPERTY_NAMES = new Set([
     '_context',
 ]);
 
+// Raw collection storage is an implementation detail. Exposing it lets a Pine
+// program call native Array/Map methods outside the budget. The generated
+// `$.pine.array/map/matrix` namespace access is the one legitimate exception.
+const RAW_STORAGE_PROPERTY_NAMES = new Set(['matrix', '_matrix', 'array', '_array', 'map', '_map']);
+
 // Keys that are not part of the syntactic child graph. `parent` (and other
 // back-references the transformers attach) make the AST cyclic, so descending
 // into them would recurse forever; `loc`/`start`/`end`/`range` and the comment
@@ -119,37 +124,73 @@ function collectPatternNames(pattern: any, out: Set<string>): void {
     }
 }
 
+type ScopeKind = 'program' | 'function' | 'block';
+type LexicalScope = { parent: LexicalScope | null; kind: ScopeKind; bindings: Set<string> };
+
+function childScope(parent: LexicalScope, kind: ScopeKind): LexicalScope {
+    return { parent, kind, bindings: new Set<string>() };
+}
+
+function varScope(scope: LexicalScope): LexicalScope {
+    while (scope.kind === 'block' && scope.parent) scope = scope.parent;
+    return scope;
+}
+
+function isBound(name: string, scope: LexicalScope): boolean {
+    for (let current: LexicalScope | null = scope; current; current = current.parent) {
+        if (current.bindings.has(name)) return true;
+    }
+    return false;
+}
+
 /**
- * Pass 1 — collect every declared name in the program.
- *
- * Scope is deliberately flattened: a name declared anywhere counts as declared
- * everywhere. This only ever makes the verifier MORE permissive (it never
- * invents a false violation from a real binding), while the attack identifiers
- * it must catch — `process`, `Function`, `globalThis`, … — are never declared
- * anywhere in transpiler output, so they are still caught. If a script shadows
- * one of those names with its own binding, the reference legitimately resolves
- * to that binding and is correctly allowed.
+ * Pass 1 — register declarations in their actual JavaScript scopes. `var`
+ * hoists to its containing function, while parameters, catches, block bindings
+ * and named expressions remain local. Collecting before checking references
+ * preserves JavaScript's forward declarations without accepting sibling names.
  */
-function collectDeclaredNames(node: any, out: Set<string>, seen: WeakSet<object>): void {
-    if (!node || typeof node !== 'object' || seen.has(node)) return;
+function collectBindings(node: any, scope: LexicalScope, scopeByNode: WeakMap<object, LexicalScope>, seen: WeakSet<object>): void {
+    if (!node || typeof node !== 'object' || typeof node.type !== 'string' || seen.has(node)) return;
     seen.add(node);
 
+    let current = scope;
     switch (node.type) {
-        case 'VariableDeclarator':
-            collectPatternNames(node.id, out);
+        case 'Program':
+            scopeByNode.set(node, scope);
             break;
         case 'FunctionDeclaration':
         case 'FunctionExpression':
         case 'ArrowFunctionExpression':
-            if (node.id?.name) out.add(node.id.name);
-            for (const p of node.params || []) collectPatternNames(p, out);
+            if (node.type === 'FunctionDeclaration' && node.id?.name) scope.bindings.add(node.id.name);
+            current = childScope(scope, 'function');
+            scopeByNode.set(node, current);
+            if (node.id?.name) current.bindings.add(node.id.name);
+            for (const param of node.params || []) collectPatternNames(param, current.bindings);
             break;
         case 'ClassDeclaration':
         case 'ClassExpression':
-            if (node.id?.name) out.add(node.id.name);
+            if (node.type === 'ClassDeclaration' && node.id?.name) scope.bindings.add(node.id.name);
+            current = childScope(scope, 'block');
+            scopeByNode.set(node, current);
+            if (node.id?.name) current.bindings.add(node.id.name);
+            break;
+        case 'BlockStatement':
+        case 'SwitchStatement':
+        case 'ForStatement':
+        case 'ForInStatement':
+        case 'ForOfStatement':
+            current = childScope(scope, 'block');
+            scopeByNode.set(node, current);
             break;
         case 'CatchClause':
-            if (node.param) collectPatternNames(node.param, out);
+            current = childScope(scope, 'block');
+            scopeByNode.set(node, current);
+            if (node.param) collectPatternNames(node.param, current.bindings);
+            break;
+        case 'VariableDeclaration':
+            for (const declaration of node.declarations || []) {
+                collectPatternNames(declaration.id, node.kind === 'var' ? varScope(scope).bindings : scope.bindings);
+            }
             break;
     }
 
@@ -157,9 +198,9 @@ function collectDeclaredNames(node: any, out: Set<string>, seen: WeakSet<object>
         if (SKIP_KEYS.has(key)) continue;
         const value = node[key];
         if (Array.isArray(value)) {
-            for (const child of value) collectDeclaredNames(child, out, seen);
+            for (const child of value) collectBindings(child, current, scopeByNode, seen);
         } else if (value && typeof value === 'object' && typeof value.type === 'string') {
-            collectDeclaredNames(value, out, seen);
+            collectBindings(value, current, scopeByNode, seen);
         }
     }
 }
@@ -177,8 +218,17 @@ function isPseudoLiteralIdentifier(name: string): boolean {
     return name.length >= 2 && ((name.startsWith("'") && name.endsWith("'")) || (name.startsWith('"') && name.endsWith('"')));
 }
 
-function assertPropertyAllowed(name: unknown): void {
-    if (typeof name === 'string' && DENIED_PROPERTY_NAMES.has(name)) {
+function isGeneratedNamespaceAccess(member: any, name: string): boolean {
+    if (name !== 'array' && name !== 'map' && name !== 'matrix') return false;
+    const owner = member?.object;
+    return owner?.type === 'MemberExpression' && !owner.computed &&
+        owner.object?.type === 'Identifier' && owner.object.name === '$' &&
+        owner.property?.type === 'Identifier' && owner.property.name === 'pine';
+}
+
+function assertPropertyAllowed(name: unknown, member?: any): void {
+    if (typeof name === 'string' && (DENIED_PROPERTY_NAMES.has(name) ||
+        (member && RAW_STORAGE_PROPERTY_NAMES.has(name) && !isGeneratedNamespaceAccess(member, name)))) {
         throw new ClosedWorldViolation(`Access to reserved property "${name}" is not allowed`);
     }
 }
@@ -188,9 +238,17 @@ function assertPropertyAllowed(name: unknown): void {
  * let us tell a member-property or object-key identifier (never a reference)
  * from a true reference.
  */
-function verifyNode(node: any, parent: any, keyInParent: string | null, declared: Set<string>, seen: WeakSet<object>): void {
+function verifyNode(
+    node: any,
+    parent: any,
+    keyInParent: string | null,
+    scope: LexicalScope,
+    scopeByNode: WeakMap<object, LexicalScope>,
+    seen: WeakSet<object>
+): void {
     if (!node || typeof node !== 'object' || typeof node.type !== 'string' || seen.has(node)) return;
     seen.add(node);
+    const current = scopeByNode.get(node) || scope;
 
     switch (node.type) {
         case 'ThisExpression':
@@ -213,7 +271,7 @@ function verifyNode(node: any, parent: any, keyInParent: string | null, declared
             const isMemberProperty = parent?.type === 'MemberExpression' && keyInParent === 'property' && !parent.computed;
             const isObjectKey = parent?.type === 'Property' && keyInParent === 'key' && !parent.computed;
             if (isMemberProperty || isObjectKey) {
-                assertPropertyAllowed(node.name);
+                assertPropertyAllowed(node.name, isMemberProperty ? parent : undefined);
                 return; // not a value reference — do not require a declaration
             }
             if (isPseudoLiteralIdentifier(node.name)) return; // transpiler-internal string constant
@@ -222,7 +280,7 @@ function verifyNode(node: any, parent: any, keyInParent: string | null, declared
             // `Error.captureStackTrace(...)`) would reach and mutate the
             // process-global Error object, so it is rejected like any host global.
             if (node.name === 'Error' && parent?.type === 'NewExpression' && keyInParent === 'callee') return;
-            if (!declared.has(node.name) && !SAFE_FREE_IDENTIFIERS.has(node.name)) {
+            if (!isBound(node.name, current) && !SAFE_FREE_IDENTIFIERS.has(node.name)) {
                 throw new ClosedWorldViolation(`Undeclared identifier "${node.name}"`);
             }
             return;
@@ -232,7 +290,7 @@ function verifyNode(node: any, parent: any, keyInParent: string | null, declared
                 // Only a static literal key is allowed (array/tuple indexing,
                 // fixed string keys). A dynamic key could target any property.
                 if (node.property?.type === 'Literal') {
-                    assertPropertyAllowed(node.property.value);
+                    assertPropertyAllowed(node.property.value, node);
                 } else {
                     throw new ClosedWorldViolation('dynamic computed member access is not allowed');
                 }
@@ -244,9 +302,9 @@ function verifyNode(node: any, parent: any, keyInParent: string | null, declared
         if (SKIP_KEYS.has(key)) continue;
         const value = node[key];
         if (Array.isArray(value)) {
-            for (const child of value) verifyNode(child, node, key, declared, seen);
+            for (const child of value) verifyNode(child, node, key, current, scopeByNode, seen);
         } else if (value && typeof value === 'object' && typeof value.type === 'string') {
-            verifyNode(value, node, key, declared, seen);
+            verifyNode(value, node, key, current, scopeByNode, seen);
         }
     }
 }
@@ -258,7 +316,8 @@ function verifyNode(node: any, parent: any, keyInParent: string | null, declared
  * on the first offending node.
  */
 export function verifyClosedWorld(ast: any): void {
-    const declared = new Set<string>();
-    collectDeclaredNames(ast, declared, new WeakSet<object>());
-    verifyNode(ast, null, null, declared, new WeakSet<object>());
+    const root: LexicalScope = { parent: null, kind: 'program', bindings: new Set<string>() };
+    const scopeByNode = new WeakMap<object, LexicalScope>();
+    collectBindings(ast, root, scopeByNode, new WeakSet<object>());
+    verifyNode(ast, null, null, root, scopeByNode, new WeakSet<object>());
 }

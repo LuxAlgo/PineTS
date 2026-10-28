@@ -10,7 +10,7 @@ describe('time_close (dual-use identifier)', () => {
             const { time_close } = $.pine;
             let tc = time_close;
             return { tc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Should be a valid timestamp
         expect(result.tc[0]).toBeGreaterThan(0);
@@ -22,7 +22,7 @@ describe('time_close (dual-use identifier)', () => {
             let t = time;
             let tc = time_close;
             return { t, tc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // close time should be after open time for the same bar
         expect(result.tc[0]).toBeGreaterThan(result.t[0]);
@@ -34,7 +34,7 @@ describe('time_close (dual-use identifier)', () => {
             let tc0 = time_close('W', 0);
             let tc1 = time_close('W', 1);
             return { tc0, tc1 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // On last bar, tc1 should equal tc0 of the previous bar
         const lastIdx = result.tc0.length - 1;
@@ -48,7 +48,7 @@ indicator("Time Close Test")
 tc = time_close
 plot(tc, "time_close")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['time_close']).toBeDefined();
         expect(plots['time_close'].data[0].value).toBeGreaterThan(0);
     });

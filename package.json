@@ -41,10 +41,18 @@
                 "default": "./dist/pinets.min.browser.js"
             },
             "default": "./dist/pinets.min.es.js"
+        },
+        "./isolation/node": {
+            "types": "./dist/types/isolation/node.d.ts",
+            "node": {
+                "import": "./dist/isolation-node.mjs"
+            }
         }
     },
     "files": [
         "dist/*.min.*",
+        "dist/isolation-*.mjs",
+        "dist/isolation-*.mjs.map",
         "dist/types"
     ],
     "type": "module",
@@ -65,11 +73,12 @@
         "build:dev:browser": "cross-env BUILD=dev FORMAT=browser rollup -c ./rollup.config.js",
         "build:dev:browser-es": "cross-env BUILD=dev FORMAT=browser-es rollup -c ./rollup.config.js",
         "build:dev:es": "cross-env BUILD=dev rollup -c ./rollup.config.js",
-        "build:prod:all": "npm run generate:ta-index && npm run generate:math-index && npm run generate:array-index && npm run generate:input-index && npm run generate:request-index && npm run generate:map-index && npm run generate:matrix-index && npm run build:prod:browser && npm run build:prod:cjs && npm run build:prod:es && npm run build:prod:browser-es && tsc --emitDeclarationOnly --declaration --outDir dist/types -p tsconfig.dts.json",
+        "build:prod:all": "npm run generate:ta-index && npm run generate:math-index && npm run generate:array-index && npm run generate:input-index && npm run generate:request-index && npm run generate:map-index && npm run generate:matrix-index && npm run build:prod:browser && npm run build:prod:cjs && npm run build:prod:es && npm run build:prod:browser-es && npm run build:prod:isolation-node && tsc --emitDeclarationOnly --declaration --outDir dist/types -p tsconfig.dts.json",
         "build:prod:cjs": "cross-env BUILD=prod FORMAT=cjs rollup -c ./rollup.config.js",
         "build:prod:browser": "cross-env BUILD=prod FORMAT=browser rollup -c ./rollup.config.js",
         "build:prod:browser-es": "cross-env BUILD=prod FORMAT=browser-es rollup -c ./rollup.config.js",
         "build:prod:es": "cross-env BUILD=prod rollup -c ./rollup.config.js",
+        "build:prod:isolation-node": "cross-env BUILD=prod FORMAT=isolation-node rollup -c ./rollup.config.js",
         "prepublishOnly": "npm run build:prod:all",
         "knip": "knip"
     },
@@ -84,24 +93,26 @@
         "@rollup/plugin-commonjs": "^29.0.0",
         "@rollup/plugin-json": "^6.1.0",
         "@rollup/plugin-node-resolve": "^16.0.3",
+        "@types/node": "^22.20.5",
         "@types/react": "^19.2.10",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.2",
-        "@vitest/coverage-v8": "^4.1.0",
-        "autoprefixer": "^10.4.23",
+        "@vitest/coverage-v8": "^4.1.12",
+        "autoprefixer": "^10.6.1",
         "badgen": "^3.2.3",
         "cross-env": "^7.0.3",
-        "knip": "^5.43.6",
-        "postcss": "^8.5.6",
+        "knip": "^6.42.1",
+        "postcss": "^8.5.31",
+        "rollup": "^4.64.12",
         "rollup-plugin-esbuild": "^6.2.1",
         "rollup-plugin-sourcemaps": "^0.6.3",
         "rollup-plugin-typescript-paths": "^1.5.0",
         "tailwindcss": "^4.1.18",
         "tsx": "^4.21.0",
         "typescript": "~5.9.3",
-        "vite": "^7.3.1",
+        "vite": "^7.3.7",
         "vite-tsconfig-paths": "^4.3.2",
-        "vitest": "^4.1.0"
+        "vitest": "^4.1.12"
     },
     "repository": {
         "type": "git",

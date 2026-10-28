@@ -72,7 +72,7 @@ describe('updateTail: var state drift fix', () => {
             var n = 0;
             n = n + 1;
             plot(n, 'n');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const nAfterRun = ctx.plots['n'].data[ctx.plots['n'].data.length - 1].value;
         // Sanity check: after N bars, accumulator must equal N
@@ -120,7 +120,7 @@ describe('updateTail: var state drift fix', () => {
             var n = 0;
             n = n + 1;
             plot(n, 'n');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const initialN = ctx.plots['n'].data[ctx.plots['n'].data.length - 1].value;
         expect(initialN).toBe(N);

@@ -224,7 +224,8 @@ async function buildFastBuiltinSecContext(
     // pagination semantics, syminfo). Wait for `ready()` and read the
     // populated arrays — never call `run()`, so no transpile, no
     // iteration, no shifts, no helpers.
-    const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, effectiveSDate, secEDate);
+    const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, effectiveSDate, secEDate,
+        { executionBudget: context.executionBudget });
     pineTS.markAsSecondary(context);
     await pineTS.ready();
 
@@ -405,7 +406,8 @@ export function security_lower_tf(context: any) {
                         : 0;
                     const secEDate = lastBarCloseTime || context.eDate || Date.now();
 
-                    const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate);
+                    const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate,
+                        { executionBudget: context.executionBudget });
                     pineTS.markAsSecondary(context);
 
                     // The call site's truncated slice (the prefix of statements

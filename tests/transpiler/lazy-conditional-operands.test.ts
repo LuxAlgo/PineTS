@@ -40,7 +40,7 @@ describe('?: is lazy (all versions)', () => {
                 pine(v, `var a = array.new_float()
 x = array.size(a) > 0 ? array.get(a, 0) : na
 plot(x, "x")`)
-            );
+            , undefined, undefined, { sourceMode: 'trustedJavaScript' });
             const x = plots['x'].data.map((p) => p.value);
             expect(x.length).toBeGreaterThan(0);
             expect(x.every((val) => Number.isNaN(val))).toBe(true);
@@ -51,7 +51,7 @@ plot(x, "x")`)
                 pine(v, `var a = array.new_float()
 x = array.size(a) == 0 ? na : array.get(a, 0)
 plot(x, "x")`)
-            );
+            , undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['x'].data.every((p) => Number.isNaN(p.value))).toBe(true);
         });
 
@@ -60,7 +60,7 @@ plot(x, "x")`)
                 pine(v, `// even bars: count executions; odd bars: -1
 x = bar_index % 2 == 0 ? ta.cum(1) : -1
 plot(x, "x")`)
-            );
+            , undefined, undefined, { sourceMode: 'trustedJavaScript' });
             const x = plots['x'].data.map((p) => p.value);
             // Hand-derived under TV lazy semantics: on even bar 2k the branch has
             // run k+1 times so far (bars 0, 2, ..., 2k).
@@ -77,7 +77,7 @@ plot(x, "x")`)
                 pine(v, `f(arr) => array.size(arr) > 0 ? array.get(arr, 0) : na
 var a = array.new_float()
 plot(f(a), "x")`)
-            );
+            , undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['x'].data.every((p) => Number.isNaN(p.value))).toBe(true);
         });
 
@@ -85,7 +85,7 @@ plot(f(a), "x")`)
             const { plots } = await mk().run(
                 pine(v, `var a = array.new_float()
 plot(array.size(a) > 0 ? array.get(a, 0) : na, "x")`)
-            );
+            , undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['x'].data.every((p) => Number.isNaN(p.value))).toBe(true);
         });
 
@@ -94,7 +94,7 @@ plot(array.size(a) > 0 ? array.get(a, 0) : na, "x")`)
                 pine(v, `var a = array.from(1.0, 2.0, 3.0)
 x = array.size(a) > 0 ? math.max(array.get(a, 0), array.get(a, 2)) : na
 plot(x, "x")`)
-            );
+            , undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['x'].data.every((p) => p.value === 3)).toBe(true);
         });
 
@@ -103,7 +103,7 @@ plot(x, "x")`)
                 pine(v, `x = bar_index % 2 == 0 ? ta.tr : 0
 plot(x, "x")
 plot(ta.tr, "ref")`)
-            );
+            , undefined, undefined, { sourceMode: 'trustedJavaScript' });
             const x = plots['x'].data.map((p) => p.value);
             const ref = plots['ref'].data.map((p) => p.value);
             expect(x[2]).toBeCloseTo(ref[2], 8);
@@ -115,7 +115,7 @@ plot(ta.tr, "ref")`)
                 pine(v, `x = bar_index % 2 == 0 ? math.max(ta.tr, 0) : 0
 plot(x, "x")
 plot(ta.tr, "ref")`)
-            );
+            , undefined, undefined, { sourceMode: 'trustedJavaScript' });
             const x = plots['x'].data.map((p) => p.value);
             const ref = plots['ref'].data.map((p) => p.value);
             expect(x[2]).toBeCloseTo(ref[2], 8);
@@ -130,7 +130,7 @@ describe('and / or: strict in v5, lazy in v6 (TradingView semantics)', () => {
             pine(6, `var a = array.new_float()
 y = array.size(a) > 0 and array.get(a, 0) > 0
 plot(y ? 1 : 0, "y")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['y'].data.every((p) => p.value === 0)).toBe(true);
     });
 
@@ -139,7 +139,7 @@ plot(y ? 1 : 0, "y")`)
             pine(6, `var a = array.new_float()
 z = array.size(a) == 0 or array.get(a, 0) > 0
 plot(z ? 1 : 0, "z")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['z'].data.every((p) => p.value === 1)).toBe(true);
     });
 
@@ -148,7 +148,7 @@ plot(z ? 1 : 0, "z")`)
             pine(6, `// cum executes only on even bars: its k-th execution happens on bar 2(k-1)
 flag = bar_index % 2 == 0 and ta.cum(1) >= 50
 plot(flag ? 1 : 0, "f")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const f = plots['f'].data.map((p) => p.value);
         // 50th execution is on bar 98 -> first true at bar 98, false before
         expect(f[50]).toBe(0);
@@ -160,7 +160,7 @@ plot(flag ? 1 : 0, "f")`)
         const { plots } = await mk().run(
             pine(5, `flag = bar_index % 2 == 0 and ta.cum(1) >= 50
 plot(flag ? 1 : 0, "f")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const f = plots['f'].data.map((p) => p.value);
         // cum runs every bar: cum = bar_index + 1, so >= 50 from bar 49; first even bar is 50
         expect(f[48]).toBe(0);
@@ -175,7 +175,7 @@ plot(flag ? 1 : 0, "f")`)
                 pine(5, `var a = array.new_float()
 y = array.size(a) > 0 and array.get(a, 0) > 0
 plot(y ? 1 : 0, "y")`)
-            )
+            , undefined, undefined, { sourceMode: 'trustedJavaScript' })
         ).rejects.toThrow(/out of bounds/);
     });
 });
@@ -202,7 +202,7 @@ plot(array.size(arr), "n")`;
 
     for (const [op, body] of [['and', POP_AND], ['or', POP_OR]] as const) {
         it(`v5: right operand of \`${op}\` inside a taken branch is evaluated (strict)`, async () => {
-            const { plots } = await mk().run(pine(5, body));
+            const { plots } = await mk().run(pine(5, body), undefined, undefined, { sourceMode: 'trustedJavaScript' });
             const n = plots['n'].data.map((p) => p.value);
             expect(n.slice(0, 6)).toEqual([0, 1, 1, 2, 2, 3]);
             expect(n[20]).toBe(10);
@@ -210,7 +210,7 @@ plot(array.size(arr), "n")`;
         });
 
         it(`v6: right operand of \`${op}\` inside a taken branch is short-circuited (lazy)`, async () => {
-            const { plots } = await mk().run(pine(6, body));
+            const { plots } = await mk().run(pine(6, body), undefined, undefined, { sourceMode: 'trustedJavaScript' });
             const n = plots['n'].data.map((p) => p.value);
             expect(n.slice(0, 6)).toEqual([1, 2, 3, 4, 5, 6]);
             expect(n[20]).toBe(21);
@@ -251,7 +251,7 @@ s = ta.ema(close, 8)
     ];
     for (const [name, inline, reference] of cases) {
         it(`${name}: inline form equals the hand-written predicate`, async () => {
-            const { plots } = await mk().run(pine(6, HEADER + inline + '\n' + reference));
+            const { plots } = await mk().run(pine(6, HEADER + inline + '\n' + reference), undefined, undefined, { sourceMode: 'trustedJavaScript' });
             const x = plots['x'].data.map((p) => p.value);
             const ref = plots['ref'].data.map((p) => p.value);
             // skip the warm-up bars where the reference's `[2]` lookups are na
@@ -277,7 +277,7 @@ inb = cond ? request.security(syminfo.tickerid, "240", ta.sma(close, 5)) : na
 plot(ref, "ref")
 plot(inb, "inb")
 plot(cond ? 1 : 0, "cond")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const ref = plots['ref'].data.map((p) => p.value);
         const inb = plots['inb'].data.map((p) => p.value);
         const cond = plots['cond'].data.map((p) => p.value);
@@ -300,7 +300,7 @@ plot(cond ? 1 : 0, "cond")`)
             pine(6, `cond = close > open
 d = request.security(syminfo.tickerid, "240", (cond ? ta.cum(1) : na) - ta.cum(cond ? 1 : 0))
 plot(d, "d")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const d = plots['d'].data.map((p) => p.value).filter((v) => !Number.isNaN(v));
         expect(d.length).toBeGreaterThan(10);
         expect(d.every((v) => v === 0)).toBe(true);
@@ -328,7 +328,7 @@ x = switch
     array.size(a) > 0 => array.get(a, 0)
     => na
 plot(x, "x")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['x'].data.every((p) => Number.isNaN(p.value))).toBe(true);
     });
 
@@ -340,7 +340,7 @@ x := switch
     array.size(a) > 0 => array.get(a, 0)
     => -1
 plot(x, "x")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['x'].data.every((p) => p.value === -1)).toBe(true);
     });
 
@@ -352,7 +352,7 @@ plot(x, "x")`)
         => na
 var a = array.new_float()
 plot(f(a), "x")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['x'].data.every((p) => Number.isNaN(p.value))).toBe(true);
     });
 
@@ -362,7 +362,7 @@ plot(f(a), "x")`)
     0 => ta.cum(1)
     => -1
 plot(x, "x")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const x = plots['x'].data.map((p) => p.value);
         expect(x.slice(0, 5)).toEqual([1, -1, 2, -1, 3]);
     });
@@ -378,7 +378,7 @@ describe('PineTS syntax (JavaScript semantics)', () => {
             plot(x, 'x');
             plot(y ? 1 : 0, 'y');
             return { x, y };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['x'].data.every((p) => Number.isNaN(p.value))).toBe(true);
         expect(plots['y'].data.every((p) => p.value === 0)).toBe(true);
     });
@@ -389,7 +389,7 @@ describe('unchanged: eager positions still hoist and run every bar', () => {
         const { plots } = await mk().run(
             pine(5, `x = ta.cum(1) >= 3 ? 1 : 0
 plot(x, "x")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const x = plots['x'].data.map((p) => p.value);
         expect(x.slice(0, 2)).toEqual([0, 0]);
         expect(x[2]).toBe(1);
@@ -400,7 +400,7 @@ plot(x, "x")`)
         const { plots } = await mk().run(
             pine(6, `flag = ta.cum(1) >= 3 and bar_index % 2 == 0
 plot(flag ? 1 : 0, "f")`)
-        );
+        , undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const f = plots['f'].data.map((p) => p.value);
         expect(f[2]).toBe(1);
         expect(f[3]).toBe(0);

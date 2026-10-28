@@ -19,7 +19,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(30, 10, 50, 20, 40);
                 plotchar(array.min(arr), 'min');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['min'].data[0].value).toBe(10);
         });
 
@@ -30,7 +30,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(42);
                 plotchar(array.min(arr), 'min');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['min'].data[0].value).toBe(42);
         });
 
@@ -41,7 +41,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(5, -3, 10, -7, 2);
                 plotchar(array.min(arr), 'min');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['min'].data[0].value).toBe(-7);
         });
 
@@ -52,7 +52,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.new(5, 7.5);
                 plotchar(array.min(arr), 'min');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['min'].data[0].value).toBe(7.5);
         });
 
@@ -63,7 +63,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(1.5, 0.3, 0.7, 2.1);
                 plotchar(array.min(arr), 'min');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['min'].data[0].value).toBeCloseTo(0.3, 10);
         });
 
@@ -74,7 +74,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(30, 10, 50, 20, 40);
                 plotchar(array.min(arr, 1), 'min_nth');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['min_nth'].data[0].value).toBe(20);
         });
 
@@ -85,7 +85,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(30, 10, 50, 20, 40);
                 plotchar(array.min(arr, 2), 'min_nth');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['min_nth'].data[0].value).toBe(30);
         });
 
@@ -96,7 +96,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(30, 10, 50, 20, 40);
                 plotchar(array.min(arr, 4), 'min_last');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // 5th smallest = maximum = 50
             expect(plots['min_last'].data[0].value).toBe(50);
         });
@@ -108,7 +108,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.new_float(0);
                 plotchar(array.min(arr), 'min');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['min'].data[0].value).toBeNaN();
         });
 
@@ -123,7 +123,7 @@ describe('array.min() and array.max()', () => {
                 plotchar(array.min(arr), 'min');
                 plotchar(array.min(arr, 99), 'max_via_nth');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['min'].data[0].value).toBe(1);
             expect(plots['max_via_nth'].data[0].value).toBe(100);
         });
@@ -139,7 +139,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(30, 10, 50, 20, 40);
                 plotchar(array.max(arr), 'max');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['max'].data[0].value).toBe(50);
         });
 
@@ -150,7 +150,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(42);
                 plotchar(array.max(arr), 'max');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['max'].data[0].value).toBe(42);
         });
 
@@ -161,7 +161,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(-5, -3, -10, -7, -2);
                 plotchar(array.max(arr), 'max');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['max'].data[0].value).toBe(-2);
         });
 
@@ -172,7 +172,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.new(5, 7.5);
                 plotchar(array.max(arr), 'max');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['max'].data[0].value).toBe(7.5);
         });
 
@@ -183,7 +183,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(30, 10, 50, 20, 40);
                 plotchar(array.max(arr, 1), 'max_nth');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['max_nth'].data[0].value).toBe(40);
         });
 
@@ -194,7 +194,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(30, 10, 50, 20, 40);
                 plotchar(array.max(arr, 2), 'max_nth');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['max_nth'].data[0].value).toBe(30);
         });
 
@@ -205,7 +205,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.from(30, 10, 50, 20, 40);
                 plotchar(array.max(arr, 4), 'max_last');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // 5th largest = minimum = 10
             expect(plots['max_last'].data[0].value).toBe(10);
         });
@@ -217,7 +217,7 @@ describe('array.min() and array.max()', () => {
                 let arr = array.new_float(0);
                 plotchar(array.max(arr), 'max');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['max'].data[0].value).toBeNaN();
         });
 
@@ -232,7 +232,7 @@ describe('array.min() and array.max()', () => {
                 plotchar(array.max(arr), 'max');
                 plotchar(array.max(arr, 99), 'min_via_nth');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['max'].data[0].value).toBe(100);
             expect(plots['min_via_nth'].data[0].value).toBe(1);
         });
@@ -251,7 +251,7 @@ describe('array.min() and array.max()', () => {
                 plotchar(minVal, 'minVal');
                 plotchar(idx, 'idx');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['minVal'].data[0].value).toBe(2);
             expect(plots['idx'].data[0].value).toBe(1);
         });
@@ -266,7 +266,7 @@ describe('array.min() and array.max()', () => {
                 plotchar(minVal, 'minVal');
                 plotchar(idx, 'idx');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['minVal'].data[0].value).toBe(1);
             // indexof returns first occurrence
             expect(plots['idx'].data[0].value).toBe(1);
