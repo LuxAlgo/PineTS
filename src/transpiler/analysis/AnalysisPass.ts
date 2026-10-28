@@ -541,6 +541,14 @@ function inferUdtTypeFromInit(init: any, scopeManager: ScopeManager): string | u
         if (fnRetType) return fnRetType;
     }
 
+    // A field declared with a UDT type: `keepAl = r.inner` holds an `Inner` when `r` is an `Outer`.
+    if (init.type === 'MemberExpression' && !init.computed && init.property?.type === 'Identifier') {
+        const ownerType =
+            init.object?.type === 'Identifier' ? scopeManager.getVariableUdtType(init.object.name) : inferUdtTypeFromInit(init.object, scopeManager);
+        const fieldType = ownerType ? scopeManager.getUdtTypeFields(ownerType)?.[init.property.name] : undefined;
+        if (fieldType && scopeManager.isUdtTypeName(fieldType)) return fieldType;
+    }
+
     // Conditional / ternary: both branches must resolve to the same UDT type.
     if (init.type === 'ConditionalExpression') {
         const consequentType = inferUdtTypeFromInit(init.consequent, scopeManager);
