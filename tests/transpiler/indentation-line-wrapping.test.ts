@@ -263,6 +263,42 @@ describe('Docs examples, whitespace verbatim (script-structure/#line-wrapping)',
             ])
         ).toEqual([17, 17, 17, 16, 16]);
     });
+
+    it('"Four-space indentation in square brackets demo": any indentation inside [ ], including multiples of four and column 0', async () => {
+        // o / h / l / c stand in for open / high / low / close; length 1 instead of 10.
+        expect(
+            await firstValues([
+                'o = bar_index',
+                'h = bar_index * 2',
+                'l = bar_index * 3',
+                'c = bar_index * 4',
+                'ohlcChange(int length) =>',
+                '    float oChange = o - o[',
+                '        length]                    // Indented by eight spaces.',
+                '    float hChange = h - h[',
+                '        length                     // Indented by eight spaces.',
+                '    ]                              // Indented by four spaces.',
+                '    float lChange = l - l[',
+                '            length                 // Indented by 12 spaces.',
+                '        ]                          // Indented by eight spaces.',
+                '    float cChange = c - c[',
+                '    length                         // Indented by four spaces.',
+                '            ]                      // Indented by 12 spaces.',
+                '    [',
+                'oChange, hChange,                  // No indentation.',
+                '                lChange, cChange   // Indented by 16 spaces.',
+                '    ]                              // Indented by four spaces.',
+                '',
+                '[',
+                '    oc,                            // Indented by four spaces.',
+                '        hc,                        // Indented by eight spaces.',
+                '            lc,                    // Indented by 12 spaces.',
+                '                cc                 // Indented by 16 spaces.',
+                '] = ohlcChange(1)                  // No indentation.',
+                'v = oc + hc * 10 + lc * 100 + cc * 1000',
+            ])
+        ).toEqual([NaN, 4321, 4321, 4321, 4321]);
+    });
 });
 
 describe('A line at the block indent is a new statement', () => {
