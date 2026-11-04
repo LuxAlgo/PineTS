@@ -14,6 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { PineTS } from '../../src/PineTS.class';
 import { Provider } from '../../src/marketData/Provider.class';
+import { isMarketOpenAt } from '../../src/namespaces/marketHours';
 
 const H = 3_600_000;
 const SRC = `//@version=6
@@ -70,10 +71,38 @@ async function load(p: any) {
     return { pine, ctx, perBar };
 }
 
+describe('isMarketOpenAt', () => {
+    // Wed 2026-11-04 and Sat 2026-11-07; New York is UTC-5 then, Chicago UTC-6.
+    const at = (iso: string) => Date.parse(iso);
+
+    it('stock hours without days trade on weekdays only', () => {
+        expect(isMarketOpenAt('0930-1600', 'America/New_York', at('2026-11-04T16:00:00Z'))).toBe(true); // Wed 11:00
+        expect(isMarketOpenAt('0930-1600', 'America/New_York', at('2026-11-04T22:00:00Z'))).toBe(false); // Wed 17:00
+        expect(isMarketOpenAt('0930-1600', 'America/New_York', at('2026-11-07T16:00:00Z'))).toBe(false); // Sat 11:00
+        expect(isMarketOpenAt('0000-0000', 'UTC', at('2026-11-08T12:00:00Z'))).toBe(false); // Sun
+    });
+
+    it('explicit days and 24x7 are kept', () => {
+        expect(isMarketOpenAt('0930-1600:1234567', 'America/New_York', at('2026-11-07T16:00:00Z'))).toBe(true);
+        expect(isMarketOpenAt('24x7', 'UTC', at('2026-11-07T16:00:00Z'))).toBe(true);
+    });
+
+    it('an overnight session opens on Sunday evening and closes on Friday evening', () => {
+        expect(isMarketOpenAt('1700-1600', 'America/Chicago', at('2026-11-09T00:00:00Z'))).toBe(true); // Sun 18:00
+        expect(isMarketOpenAt('1700-1600', 'America/Chicago', at('2026-11-07T00:00:00Z'))).toBe(false); // Fri 18:00
+        expect(isMarketOpenAt('1700-1600', 'America/Chicago', at('2026-11-04T22:30:00Z'))).toBe(false); // Wed 16:30 break
+    });
+
+    it('a session without hours is unknown', () => {
+        expect(isMarketOpenAt('regular', 'UTC', Date.now())).toBeNull();
+        expect(isMarketOpenAt(undefined, undefined, Date.now())).toBeNull();
+    });
+});
+
 describe('barstate.isrealtime', () => {
     const now = Date.now();
-    const closedNow = `${hhmm(now - 4 * H)}-${hhmm(now - 2 * H)}`;
-    const openNow = `${hhmm(now - H)}-${hhmm(now + H)}`;
+    const closedNow = `${hhmm(now - 4 * H)}-${hhmm(now - 2 * H)}:1234567`;
+    const openNow = `${hhmm(now - H)}-${hhmm(now + H)}:1234567`;
 
     it('no bar is realtime when every bar is closed (historical range, market closed)', async () => {
         const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-02').getTime());
