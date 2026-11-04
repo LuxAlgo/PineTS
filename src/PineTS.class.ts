@@ -14,6 +14,7 @@ import { ExecutionBudget } from './security/ExecutionBudget';
 import { PineRuntimeError } from './errors/PineRuntimeError';
 import { compiledArtifactKind } from './transpiler/analysis/VerifiedArtifact';
 import { renderBarAlerts } from './namespaces/alertEvents';
+import { isMarketOpenAt } from './namespaces/marketHours';
 import { processBarOrders, barPath, beginStrategyBar, riskStartBar, riskAtBarClose, processOrdersOnClose, processMarginCall, finalizeStrategyBar, finalizeStrategyRun, applyPendingCloseMarginCall, snapshotStrategyState, restoreStrategyState, snapToTick } from './namespaces/strategy/utils';
 
 import { parseTimeframe, timeframeSeconds } from './timeframe';
@@ -800,6 +801,7 @@ export class PineTS {
             processedUpToIdx = this.data.length - (newCandles + 1);
             // The bar forming when live updates began, and every bar after it, are realtime bars.
             (context as any)._liveFromIdx ??= processedUpToIdx;
+            this._extendRealtime(context, processedUpToIdx, newCandles);
 
             // Roll back drawing objects created during the previous processing of
             // these bars so they don't accumulate on each streaming tick.
@@ -1025,6 +1027,7 @@ export class PineTS {
 
         const processFrom = this.data.length - (newCandles + 1);
         (context as any)._liveFromIdx ??= processFrom;
+        this._extendRealtime(context, processFrom, newCandles);
         context.rollbackDrawings(processFrom);
 
         // Split execution: process bars before last → snapshot → last bar.
@@ -1305,8 +1308,32 @@ export class PineTS {
         context.data.closeTime = new Series([]);
 
         context.length = this.data.length;
+        const last = this.data.length - 1;
+        context._realtimeFromIdx = last >= 0 && this._isLiveBar(last) ? last : this.data.length;
 
         return context;
+    }
+
+    /**
+     * A bar receives live data — it is a realtime bar on TradingView — when it has not closed yet and the
+     * market is open. With the market closed (overnight, weekend) TradingView has no realtime bar, even
+     * when the last bar is still in progress (a weekly bar mid-week). A session without hours counts as open.
+     */
+    private _isLiveBar(index: number): boolean {
+        const now = Date.now();
+        if (!(this.closeTime[index] > now)) return false;
+        return isMarketOpenAt(this._syminfo?.session, this._syminfo?.timezone, now) !== false;
+    }
+
+    /**
+     * After a live update re-executes from `processFrom`: the bars that arrived are realtime, and so is the
+     * re-executed bar when it is still receiving live data (e.g. the market reopened mid-week).
+     */
+    private _extendRealtime(context: Context, processFrom: number, newCandles: number): void {
+        let from = context._realtimeFromIdx ?? this.data.length;
+        if (newCandles > 0) from = Math.min(from, processFrom + 1);
+        if (this._isLiveBar(processFrom)) from = Math.min(from, processFrom);
+        context._realtimeFromIdx = from;
     }
 
     /**

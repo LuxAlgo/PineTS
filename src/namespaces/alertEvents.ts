@@ -39,7 +39,7 @@ export function alertsFireOnBar(context: any): boolean {
     if (context.isSecondaryContext) return false;
     if ((context._alertMode || 'realtime') === 'all') return true;
     if (context._liveFromIdx !== undefined && context.idx >= context._liveFromIdx) return true;
-    return context.pine?.barstate?.isrealtime ?? context.idx === context.length - 1;
+    return context.idx === context.length - 1;
 }
 
 /** Record an alert event; its message is rendered from `template` at the end of the bar. */

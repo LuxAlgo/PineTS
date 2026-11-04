@@ -40,11 +40,11 @@ describe('Alert System', () => {
             expect(ctx.alerts[0].bar_index).toBe(ctx.marketData.length - 1);
         });
 
-        it('should not fire alerts on historical bars', async () => {
+        it('should not fire alerts on the bars before the last one', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
             const code = (context: any) => {
                 const { alert, barstate } = context.pine;
-                if (barstate.ishistory) {
+                if (!barstate.islast) {
                     alert.any('historical alert');
                 }
             };
