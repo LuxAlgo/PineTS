@@ -20,14 +20,16 @@ export class Barstate {
     }
 
     public get ishistory() {
-        // Use context.length (total bar count) instead of incrementally-built
-        // context.data.close.data.length, which only has bars 0..idx during
-        // execution and would always equal idx+1 (making ishistory always false).
-        return this.context.idx < this.context.length - 1;
+        return !this.isrealtime;
     }
 
+    // The last loaded bar is the realtime bar; with live updates, so is every bar from the one that was
+    // last when they began — including the execution that closes a bar after the next one has arrived.
     public get isrealtime() {
-        // Use context.length for same reason as ishistory above.
+        const liveFrom = this.context._liveFromIdx;
+        if (liveFrom !== undefined && this.context.idx >= liveFrom) return true;
+        // Use context.length (total bar count) instead of the incrementally-built
+        // context.data series, which only hold bars 0..idx during execution.
         return this.context.idx === this.context.length - 1;
     }
 

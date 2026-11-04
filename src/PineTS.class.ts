@@ -1153,8 +1153,8 @@ export class PineTS {
 
         snapshot.main = snapContainer(context);
         if (context.lctx) {
-            const lctxSnaps: any[] = [];
-            context.lctx.forEach((lctx: any) => lctxSnaps.push(snapContainer(lctx)));
+            const lctxSnaps = new Map<string, any>();
+            context.lctx.forEach((lctx: any, id: string) => lctxSnaps.set(id, snapContainer(lctx)));
             snapshot.lctx = lctxSnaps;
         }
 
@@ -1180,7 +1180,25 @@ export class PineTS {
         if (!snapshot) return;
         const contextVarNames = ['const', 'var', 'let', 'params'];
 
+        // A variable first declared by the discarded execution (e.g. a `var` in a local block first reached
+        // on the realtime bar, such as the flag of a `once`) is rolled back by removing it, so the next
+        // execution initializes it again. A `varip` keeps whatever the discarded execution left in it.
+        const dropNewVariables = (container: any, snap: any) => {
+            let keptVarip = false;
+            for (const ctxVarName of contextVarNames) {
+                if (!container[ctxVarName]) continue;
+                for (const key of Object.keys(container[ctxVarName])) {
+                    const item = container[ctxVarName][key];
+                    if (!(item instanceof Series) || snap?.[ctxVarName]?.[key]) continue;
+                    if (item.varip) keptVarip = true;
+                    else delete container[ctxVarName][key];
+                }
+            }
+            return keptVarip;
+        };
+
         const restoreContainer = (container: any, snap: any) => {
+            dropNewVariables(container, snap);
             for (const ctxVarName of contextVarNames) {
                 if (!snap[ctxVarName] || !container[ctxVarName]) continue;
                 for (const key in snap[ctxVarName]) {
@@ -1203,11 +1221,11 @@ export class PineTS {
 
         restoreContainer(context, snapshot.main);
         if (context.lctx && snapshot.lctx) {
-            let i = 0;
-            context.lctx.forEach((lctx: any) => {
-                if (snapshot.lctx[i]) restoreContainer(lctx, snapshot.lctx[i]);
-                i++;
-            });
+            for (const [id, lctx] of [...context.lctx]) {
+                const snap = snapshot.lctx.get(id);
+                if (snap) restoreContainer(lctx, snap);
+                else if (!dropNewVariables(lctx, null)) context.lctx.delete(id);
+            }
         }
 
         // Roll the strategy ledger back to its pre-last-bar state (no-op for
