@@ -16,4 +16,4 @@ parent: API Coverage
 | `barstate.islast`                 | ✅     | Last bar of dataset           |
 | `barstate.islastconfirmedhistory` | ✅     | Last confirmed historical bar |
 | `barstate.isnew`                  | ✅     | New bar                       |
-| `barstate.isrealtime`             | ✅     | Bar is real-time              |
+| `barstate.isrealtime`             | ✅     | Bar is real-time (receives live data: not closed, market open) |

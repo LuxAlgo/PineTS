@@ -91,6 +91,9 @@ export class Context {
     /** Alert mode: 'realtime' = only fire on live bars (TV behavior), 'all' = fire on every bar (backtest). */
     public _alertMode: 'realtime' | 'all' = 'realtime';
 
+    /** First realtime bar (barstate.isrealtime); `length` when no loaded bar receives live data. */
+    public _realtimeFromIdx?: number;
+
     /** Input declarations of the running Pine source, read lazily (the default strategy alert message lists them). */
     public _inputsMeta?: () => IPineInput[];
 

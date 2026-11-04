@@ -23,14 +23,15 @@ export class Barstate {
         return !this.isrealtime;
     }
 
-    // The last loaded bar is the realtime bar; with live updates, so is every bar from the one that was
-    // last when they began — including the execution that closes a bar after the next one has arrived.
+    // Realtime bars start at the last loaded bar when it receives live data (not closed yet, market open),
+    // and include every bar that arrives with live updates — also the execution that closes a bar after the
+    // next one has arrived. With the market closed, or a historical range, no bar is realtime.
     public get isrealtime() {
-        const liveFrom = this.context._liveFromIdx;
-        if (liveFrom !== undefined && this.context.idx >= liveFrom) return true;
+        const from = this.context._realtimeFromIdx;
+        if (from !== undefined) return this.context.idx >= from;
         // Use context.length (total bar count) instead of the incrementally-built
         // context.data series, which only hold bars 0..idx during execution.
-        return this.context.idx === this.context.length - 1;
+        return this.context.idx === this.context.length - 1 && !this.isconfirmed;
     }
 
     public get isconfirmed() {
