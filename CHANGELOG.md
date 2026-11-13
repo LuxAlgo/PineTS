@@ -26,6 +26,7 @@ This update closes documented host-access and resource-exhaustion paths in untru
 - **Native operations could exhaust CPU or memory outside loop guards.** Array and map growth, derived matrix sizes and indices, table dimensions and ranges, drawing churn, TA window lengths, and string expansion are validated and charged before expensive work or mutation.
 - **Provider and fixture requests could amplify work.** Binance symbols are URL-encoded and pagination must advance; provider pages, retries, bars and bytes are bounded. Mock-provider fixture matching treats symbols and timeframes as literals rather than regex patterns.
 - **`input.*` option lists remain intact with per-call-site caching.** Named and positional literal `options` arrays are preserved by transpilation, so valid overrides remain available and out-of-list overrides are rejected.
+- **A field read on a history reference compiles as a call argument.** `math.avg((bar[n]).high, (bar[n]).low)`, and any `(obj[n]).field` passed to a built-in or user function, was rejected by the closed-world verifier with `dynamic computed member access is not allowed` (`Undeclared identifier` for a literal offset): the receiver `obj[n]` was emitted as written instead of `$.get(<obj>, n)`.
 
 The Node child is not a complete OS sandbox. Deployments accepting hostile scripts still need a restricted account or container, denied egress, and host-level CPU, memory and process limits.
 
