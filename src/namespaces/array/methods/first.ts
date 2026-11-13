@@ -2,10 +2,12 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { emptyArray } from '../utils';
+import { arrayStore } from '../capacity';
 
 export function first(context: any) {
     return (id: PineArrayObject): any => {
-        if (id.array.length === 0) emptyArray('first');
-        return id.array[0];
+        const plain = arrayStore(id);
+        if (plain.length === 0) emptyArray('first');
+        return plain[0];
     };
 }

@@ -3,13 +3,15 @@
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
 import { assertMatrixIndex } from '../indexValidation';
+import { matrixStore } from '../capacity';
 
 export function set(context: Context) {
     return (id: PineMatrixObject, row: number, col: number, value: any) => {
-        const rows = id.matrix.length;
-        const cols = rows > 0 ? id.matrix[0].length : 0;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
+        const cols = rows > 0 ? idRows[0].length : 0;
         assertMatrixIndex(row, rows, 'row', 'matrix.set');
         assertMatrixIndex(col, cols, 'column', 'matrix.set');
-        id.matrix[row][col] = value;
+        idRows[row][col] = value;
     };
 }

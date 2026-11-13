@@ -2,15 +2,17 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { isArrayOfType } from '../utils';
-import { preflightArrayGrowth } from '../capacity';
+import { arrayStore, chargeArrayGrowth, preflightArrayGrowth } from '../capacity';
 
 export function concat(context: any) {
     return (id: PineArrayObject, other: PineArrayObject): PineArrayObject => {
         // Snapshot first, including the self-concatenation case, and preflight
         // the whole append before changing a single element.
-        const values = Array.from(other.array);
-        preflightArrayGrowth(id.array, values.length, context, 'array.concat');
-        for (const value of values) id.array.push(value);
+        const values = Array.from(arrayStore(other));
+        const store = arrayStore(id);
+        preflightArrayGrowth(store, values.length, context, 'array.concat');
+        chargeArrayGrowth(store, values.length, context);
+        for (const value of values) store.push(value);
         return id;
     };
 }

@@ -60,10 +60,13 @@ ${objectImports}
 import { spreadNamedArgs } from '../namedArgs';
 import { MATRIX_PARAMS } from '../collectionParams';
 import { assertMatrixDimensions, chargeCollectionAllocation } from '../collectionCapacity';
-import { guardMatrix } from './capacity';
+import { MATRIX_STORE, adoptMatrix, guardGrid } from './capacity';
 
 export class PineMatrixObject {
-    private _matrix: any[][];
+    // The plain rows the built-ins read, under a symbol no script can name (see capacity.ts).
+    private [MATRIX_STORE]: any[][];
+    // The guard handed to outside code and to structural built-ins through \`matrix\`, built on first use.
+    private _matrix: any[][] | undefined;
 ${objectPrivateProps}
 
     constructor(
@@ -80,18 +83,23 @@ ${objectPrivateProps}
                 matrix.push(Array(cols).fill(initialValue));
             }
         }
-        this._matrix = guardMatrix(matrix, context, false);
+        this[MATRIX_STORE] = adoptMatrix(matrix, context, false);
+        this._matrix = undefined;
 ${objectInitProps}
     }
 
-    get matrix(): any[][] { return this._matrix; }
-    set matrix(value: any[][]) { this._matrix = guardMatrix(value, this.context, true); }
+    get matrix(): any[][] { return (this._matrix ??= guardGrid(this[MATRIX_STORE], this.context)); }
+    set matrix(value: any[][]) {
+        this[MATRIX_STORE] = adoptMatrix(value, this.context, true);
+        this._matrix = undefined;
+    }
 
     toString(): string {
+        const rows = this[MATRIX_STORE];
         let result = '';
-        for (let i = 0; i < this.matrix.length; i++) {
+        for (let i = 0; i < rows.length; i++) {
             result += result === '' ? '' : '\\n';
-            result += '[' + this.matrix[i].join(', ') + ']';
+            result += '[' + rows[i].join(', ') + ']';
         }
         return result;
     }

@@ -91,17 +91,30 @@ export function assertGeneratedCodeBudget(code: string): void {
     if (code.length > MAX_GENERATED_CODE_UNITS) exceeded('generated code size');
 }
 
-/** Iterative traversal avoids adding recursion to the budget check itself. */
+/**
+ * Iterative traversal avoids adding recursion to the budget check itself.
+ *
+ * This runs several times per compilation (after parsing, after the transformation, on the final
+ * code and on every request slice), over trees of up to MAX_COMPILER_AST_NODES nodes. It therefore
+ * keeps two parallel stacks instead of an object per entry, a `Set` instead of a `WeakSet` (the set
+ * does not outlive the call, and weak insertion is several times slower), and reads keys without
+ * building `[key, value]` pairs.
+ */
 export function assertCompilerAstBudget(ast: unknown): void {
-    const stack: Array<{ node: unknown; depth: number }> = [{ node: ast, depth: 0 }];
-    const seen = new WeakSet<object>();
+    const stack: unknown[] = [ast];
+    const depths: number[] = [0];
+    const seen = new Set<object>();
     let nodes = 0;
     while (stack.length > 0) {
-        const { node, depth } = stack.pop()!;
+        const node = stack.pop();
+        const depth = depths.pop()!;
         if (node === null || typeof node !== 'object' || seen.has(node)) continue;
         seen.add(node);
         if (Array.isArray(node)) {
-            for (const value of node) stack.push({ node: value, depth });
+            for (let i = 0; i < node.length; i++) {
+                stack.push(node[i]);
+                depths.push(depth);
+            }
             continue;
         }
         const record = node as Record<string, unknown>;
@@ -111,9 +124,15 @@ export function assertCompilerAstBudget(ast: unknown): void {
         if (record.type === 'Literal' && typeof record.value === 'string' && record.value.length > MAX_COMPILER_LITERAL_CODE_UNITS) {
             exceeded('literal size');
         }
-        for (const [key, value] of Object.entries(record)) {
+        const keys = Object.keys(record);
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
             if (key === 'loc' || key === 'start' || key === 'end' || key === 'parent') continue;
-            if (value !== null && typeof value === 'object') stack.push({ node: value, depth: depth + 1 });
+            const value = record[key];
+            if (value !== null && typeof value === 'object') {
+                stack.push(value);
+                depths.push(depth + 1);
+            }
         }
     }
 }

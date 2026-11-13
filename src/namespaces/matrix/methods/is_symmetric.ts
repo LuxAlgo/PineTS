@@ -2,17 +2,19 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 export function is_symmetric(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
         if (rows === 0) return false;
-        const cols = id.matrix[0].length;
+        const cols = idRows[0].length;
         if (rows !== cols) return false;
         
         for (let i = 0; i < rows; i++) {
             for (let j = 0; j < i; j++) {
-                if (id.matrix[i][j] !== id.matrix[j][i]) return false;
+                if (idRows[i][j] !== idRows[j][i]) return false;
             }
         }
         return true;

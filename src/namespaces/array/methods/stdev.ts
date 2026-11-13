@@ -2,10 +2,12 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { Context } from '../../../Context.class';
+import { arrayStore } from '../capacity';
 
 export function stdev(context: Context) {
     return (id: PineArrayObject, biased: boolean = true): number => {
-        const array = id.array;
+        const plain = arrayStore(id);
+        const array = plain;
         const n_total = array.length;
 
         if (n_total === 0) return NaN;

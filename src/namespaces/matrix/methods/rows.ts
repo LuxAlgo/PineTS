@@ -2,10 +2,12 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 export function rows(context: Context) {
     return (id: PineMatrixObject) => {
-        return id.matrix.length;
+        const idRows = matrixStore(id);
+        return idRows.length;
     };
 }
 

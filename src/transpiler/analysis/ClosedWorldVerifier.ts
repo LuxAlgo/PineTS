@@ -149,7 +149,7 @@ function isBound(name: string, scope: LexicalScope): boolean {
  * and named expressions remain local. Collecting before checking references
  * preserves JavaScript's forward declarations without accepting sibling names.
  */
-function collectBindings(node: any, scope: LexicalScope, scopeByNode: WeakMap<object, LexicalScope>, seen: WeakSet<object>): void {
+function collectBindings(node: any, scope: LexicalScope, scopeByNode: Map<object, LexicalScope>, seen: Set<object>): void {
     if (!node || typeof node !== 'object' || typeof node.type !== 'string' || seen.has(node)) return;
     seen.add(node);
 
@@ -243,8 +243,8 @@ function verifyNode(
     parent: any,
     keyInParent: string | null,
     scope: LexicalScope,
-    scopeByNode: WeakMap<object, LexicalScope>,
-    seen: WeakSet<object>
+    scopeByNode: Map<object, LexicalScope>,
+    seen: Set<object>
 ): void {
     if (!node || typeof node !== 'object' || typeof node.type !== 'string' || seen.has(node)) return;
     seen.add(node);
@@ -317,7 +317,9 @@ function verifyNode(
  */
 export function verifyClosedWorld(ast: any): void {
     const root: LexicalScope = { parent: null, kind: 'program', bindings: new Set<string>() };
-    const scopeByNode = new WeakMap<object, LexicalScope>();
-    collectBindings(ast, root, scopeByNode, new WeakSet<object>());
-    verifyNode(ast, null, null, root, scopeByNode, new WeakSet<object>());
+    // Plain collections: they live for this call only, and the verifier runs on the final code of
+    // the program and of every request slice, where weak insertion per node was a measurable cost.
+    const scopeByNode = new Map<object, LexicalScope>();
+    collectBindings(ast, root, scopeByNode, new Set<object>());
+    verifyNode(ast, null, null, root, scopeByNode, new Set<object>());
 }

@@ -2,13 +2,15 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { isNa } from '../utils';
+import { arrayStore } from '../capacity';
 
 export function mode(context: any) {
     return (id: PineArrayObject) => {
+        const plain = arrayStore(id);
         const counts = new Map();
         let maxFreq = 0;
 
-        for (const val of id.array) {
+        for (const val of plain) {
             if (isNa(val)) continue;
             // We might need to handle precision/epsilon for floats?
             // Pine Script might use exact match for mode.

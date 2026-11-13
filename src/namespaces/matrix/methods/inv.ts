@@ -2,6 +2,7 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 /**
  * Gauss-Jordan elimination to compute the inverse of an NxN matrix.
@@ -81,11 +82,13 @@ export { inverse };
 
 export function inv(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
-        const cols = rows > 0 ? id.matrix[0].length : 0;
+        // `inverse` only reads its argument.
+        const source = matrixStore(id);
+        const rows = source.length;
+        const cols = rows > 0 ? source[0].length : 0;
         if (rows !== cols) return new PineMatrixObject(rows, cols, NaN, context);
 
-        const invMat = inverse(id.matrix);
+        const invMat = inverse(source);
         const newMatrix = new PineMatrixObject(rows, cols, NaN, context);
         newMatrix.matrix = invMat;
         return newMatrix;

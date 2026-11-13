@@ -5,12 +5,14 @@ import { Context } from '../../../Context.class';
 import { PineArrayObject } from '../../array/PineArrayObject';
 import { inferValueType } from '@pinets/namespaces/array/utils';
 import { assertMatrixIndex } from '../indexValidation';
+import { matrixStore } from '../capacity';
 
 export function row(context: Context) {
     return (id: PineMatrixObject, row: number) => {
-        const rows = id.matrix.length;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
         assertMatrixIndex(row, rows, 'row', 'matrix.row');
-        const rowType = inferValueType(id.matrix[row][0]);
-        return new PineArrayObject([...id.matrix[row]], rowType as any, context);
+        const rowType = inferValueType(idRows[row][0]);
+        return new PineArrayObject([...idRows[row]], rowType as any, context);
     };
 }
