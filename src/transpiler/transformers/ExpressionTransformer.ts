@@ -507,6 +507,29 @@ function transformHistoryValueObject(node: any, scopeManager: ScopeManager): any
 }
 
 /**
+ * Lowers a history reference (`x[n]`) to `$.get(<x>, <n>)` in place, for positions no later
+ * walker visits: the offset of another history reference (`low[a[1]]`) and the receiver of a
+ * field read inside a `param`-wrapped call argument (`math.avg((bar[n]).high, …)`).
+ */
+function lowerHistoryReference(node: any, scopeManager: ScopeManager): void {
+    // A call offset (`bar[math.min(n, 2)]`) is lowered first: the steps below only scope
+    // identifier, history and arithmetic offsets, and would leave the call's arguments bare.
+    const lowerCallOffset = (member: any) => {
+        if (member.type !== 'MemberExpression' || !member.computed) return;
+        if (member.property.type !== 'CallExpression') return lowerCallOffset(member.property);
+        if (!member.property._transformed) transformCallExpression(member.property, scopeManager);
+    };
+    lowerCallOffset(node);
+    transformArrayIndex(node, scopeManager);
+    const lower = (member: any) => {
+        if (member.type !== 'MemberExpression') return;
+        if (member.computed) lower(member.property);
+        transformMemberExpression(member, '', scopeManager);
+    };
+    lower(node);
+}
+
+/**
  * Lowers the offset of a `$.get(<series>, offset)` produced from a history
  * reference, for positions no later identifier walker visits (return values).
  */
@@ -515,13 +538,7 @@ export function transformHistoryOffset(offset: any, scopeManager: ScopeManager):
     const isContextCall = offset.type === 'CallExpression' && offset.callee?.object?.name === CONTEXT_NAME;
     if (isContextCall) return offset;
     if (offset.type === 'MemberExpression' && offset.computed) {
-        transformArrayIndex(offset, scopeManager);
-        const lower = (node: any) => {
-            if (node.type !== 'MemberExpression') return;
-            if (node.computed) lower(node.property);
-            transformMemberExpression(node, '', scopeManager);
-        };
-        lower(offset);
+        lowerHistoryReference(offset, scopeManager);
         return offset;
     }
     if (offset.type === 'CallExpression') {
@@ -929,6 +946,10 @@ function transformOperand(node: any, scopeManager: ScopeManager, namespace: stri
             // (`pts.last().price`, `o.inner.body`, `strategy.opentrades.capital_held`).
             if (!node.computed && node.object.type === 'CallExpression' && !node.object._transformed) {
                 transformCallExpression(node.object, scopeManager);
+            } else if (!node.computed && node.object.type === 'MemberExpression' && node.object.computed) {
+                // `(bar[n]).high + 1`: the receiver is a history reference. Nothing walks into
+                // it once the operand is wrapped, so it would be emitted as a raw `bar[n]`.
+                lowerHistoryReference(node.object, scopeManager);
             } else if (!node.computed && node.object.type === 'MemberExpression' && !node.object.computed) {
                 node.object = transformOperand(node.object, scopeManager, namespace);
                 node.object.parent = node;
@@ -1598,6 +1619,11 @@ export function transformFunctionArgument(arg: any, namespace: string, scopeMana
                 plainId._skipTransformation = true;
                 arg.object = ASTFactory.createGetCall(plainId, 0);
             }
+        } else if (arg.object.type === 'MemberExpression' && arg.object.computed) {
+            // `(bar[n]).high`: the receiver is a history reference, lowered in place to
+            // `$.get(<bar>, n)`. The recursion below would wrap it in a `param` of its own and
+            // return the reference to it, which is dropped here: `bar[n]` stayed as written.
+            lowerHistoryReference(arg.object, scopeManager);
         } else if (arg.object.type === 'MemberExpression') {
             // Recursively handle nested member expressions like obj.prop1.prop2
             transformFunctionArgument(arg.object, namespace, scopeManager);
