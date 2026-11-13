@@ -1,6 +1,8 @@
 # Change Log
 
-## [Unreleased]
+## [0.14.0] - 2026-11-13 - Security Hardening & TradingView Parity
+
+This release hardens the execution of untrusted Pine and brings a batch of TradingView parity fixes. It contains one breaking change: `run()` and the other entry points now accept only versioned Pine Script unless the caller passes `sourceMode: 'trustedJavaScript'`.
 
 ### Security Hardening
 
