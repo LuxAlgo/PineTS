@@ -3,15 +3,17 @@
 import { PineArrayObject } from '../PineArrayObject';
 import { Context } from '../../../Context.class';
 import { checkPercentage, isNa } from '../utils';
+import { arrayStore } from '../capacity';
 
 const METHOD = 'array.percentile_linear_interpolation';
 
 export function percentile_linear_interpolation(context: Context) {
     return (id: PineArrayObject, percentage: number): number => {
+        const plain = arrayStore(id);
         if (isNa(percentage)) return NaN;
         checkPercentage(percentage, METHOD);
 
-        const array = id.array;
+        const array = plain;
         const len = array.length;
         if (len === 0) return NaN;
 

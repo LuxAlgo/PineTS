@@ -2,17 +2,19 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 export function is_stochastic(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
         if (rows === 0) return false;
-        const cols = id.matrix[0].length;
+        const cols = idRows[0].length;
         
         for (let i = 0; i < rows; i++) {
             let sum = 0;
             for (let j = 0; j < cols; j++) {
-                const val = id.matrix[i][j];
+                const val = idRows[i][j];
                 if (val < 0) return false; // Non-negative entries
                 sum += val;
             }

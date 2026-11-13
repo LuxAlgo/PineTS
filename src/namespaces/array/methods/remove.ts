@@ -2,18 +2,20 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { PineRuntimeError } from '../../../errors/PineRuntimeError';
+import { arrayStore } from '../capacity';
 
 export function remove(context: any) {
     return (id: PineArrayObject, index: number): any => {
+        const plain = arrayStore(id);
         // Pine Script v6: negative indices count backwards from the end.
-        const resolved = index < 0 ? id.array.length + index : index;
+        const resolved = index < 0 ? plain.length + index : index;
         // TradingView halts the script with a runtime error on out-of-bounds access.
-        if (resolved < 0 || resolved >= id.array.length) {
+        if (resolved < 0 || resolved >= plain.length) {
             throw new PineRuntimeError(
-                `Index ${index} is out of bounds, array size is ${id.array.length}.`,
+                `Index ${index} is out of bounds, array size is ${plain.length}.`,
                 'array.remove'
             );
         }
-        return id.array.splice(resolved, 1)[0];
+        return plain.splice(resolved, 1)[0];
     };
 }

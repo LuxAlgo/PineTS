@@ -2,9 +2,11 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { elementMatcher } from '../utils';
+import { arrayStore } from '../capacity';
 
 export function includes(context: any) {
     return (id: PineArrayObject, value: any): boolean => {
-        return id.array.some(elementMatcher(id, value));
+        const plain = arrayStore(id);
+        return plain.some(elementMatcher(id, value));
     };
 }

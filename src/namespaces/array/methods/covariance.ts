@@ -2,11 +2,12 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { Context } from '../../../Context.class';
+import { arrayStore } from '../capacity';
 
 export function covariance(context: Context) {
     return (arr1: PineArrayObject, arr2: PineArrayObject, biased: boolean = true): number => {
-        const a1 = arr1.array;
-        const a2 = arr2.array;
+        const a1 = arrayStore(arr1);
+        const a2 = arrayStore(arr2);
 
         if (a1.length !== a2.length) return NaN;
 

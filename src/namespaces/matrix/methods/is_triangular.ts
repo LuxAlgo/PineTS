@@ -2,12 +2,14 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 export function is_triangular(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
         if (rows === 0) return false;
-        const cols = id.matrix[0].length;
+        const cols = idRows[0].length;
         if (rows !== cols) return false;
         
         let isUpper = true;
@@ -15,8 +17,8 @@ export function is_triangular(context: Context) {
         
         for (let i = 0; i < rows; i++) {
             for (let j = 0; j < cols; j++) {
-                if (i > j && id.matrix[i][j] !== 0) isUpper = false;
-                if (i < j && id.matrix[i][j] !== 0) isLower = false;
+                if (i > j && idRows[i][j] !== 0) isUpper = false;
+                if (i < j && idRows[i][j] !== 0) isLower = false;
             }
         }
         

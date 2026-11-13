@@ -2,10 +2,12 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { emptyArray } from '../utils';
+import { arrayStore } from '../capacity';
 
 export function shift(context: any) {
     return (id: PineArrayObject): any => {
-        if (id.array.length === 0) emptyArray('shift');
-        return id.array.shift();
+        const plain = arrayStore(id);
+        if (plain.length === 0) emptyArray('shift');
+        return plain.shift();
     };
 }

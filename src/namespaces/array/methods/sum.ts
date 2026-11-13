@@ -2,13 +2,15 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { Context } from '../../../Context.class';
+import { arrayStore } from '../capacity';
 
 export function sum(context: Context) {
     return (id: PineArrayObject): number => {
+        const plain = arrayStore(id);
         // Sum of the non-na elements; na when there are none (empty array included).
         let total = 0;
         let count = 0;
-        for (const item of id.array) {
+        for (const item of plain) {
             const val = Number(item);
             if (!isNaN(val)) {
                 total += val;

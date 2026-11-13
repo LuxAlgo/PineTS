@@ -3,11 +3,13 @@
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
 import { assertMatrixIndex } from '../indexValidation';
+import { matrixStore } from '../capacity';
 
 export function fill(context: Context) {
     return (id: PineMatrixObject, value: any, from_row?: number, to_row?: number, from_col?: number, to_col?: number) => {
-        const rows = id.matrix.length;
-        const cols = rows > 0 ? id.matrix[0].length : 0;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
+        const cols = rows > 0 ? idRows[0].length : 0;
 
         const r1 = from_row !== undefined ? from_row : 0;
         const r2 = to_row !== undefined ? to_row : rows;
@@ -23,7 +25,7 @@ export function fill(context: Context) {
             if (i >= rows) break;
             for (let j = c1; j < c2; j++) {
                 if (j >= cols) break;
-                id.matrix[i][j] = value;
+                idRows[i][j] = value;
             }
         }
     };

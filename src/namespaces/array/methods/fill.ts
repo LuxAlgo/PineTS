@@ -3,10 +3,12 @@
 import { PineArrayObject } from '../PineArrayObject';
 import { isNa, isValueOfType, outOfBounds } from '../utils';
 import { Context } from '../../../Context.class';
+import { arrayStore } from '../capacity';
 
 export function fill(context: Context) {
     return (id: PineArrayObject, value: any, index_from: number = 0, index_to?: number): void => {
-        const size = id.array.length;
+        const plain = arrayStore(id);
+        const size = plain.length;
         const from = isNa(index_from) ? 0 : index_from;
         const to = index_to === undefined || isNa(index_to) ? size : index_to;
         // `from` must address an element (so filling an empty array is an error); `from > to` fills nothing.
@@ -20,6 +22,6 @@ export function fill(context: Context) {
             );
         }
         const v = typeof value === 'number' ? context.precision(value) : value;
-        for (let i = from; i < to; i++) id.array[i] = v;
+        for (let i = from; i < to; i++) plain[i] = v;
     };
 }

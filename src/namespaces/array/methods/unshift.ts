@@ -3,7 +3,7 @@
 import { PineArrayObject } from '../PineArrayObject';
 import { isValueOfType } from '../utils';
 import { Context } from '../../../Context.class';
-import { preflightArrayGrowth } from '../capacity';
+import { arrayStore, chargeArrayGrowth, preflightArrayGrowth } from '../capacity';
 
 export function unshift(context: Context) {
     return (id: PineArrayObject, value: any): void => {
@@ -14,7 +14,9 @@ export function unshift(context: Context) {
                 }' is expected.`
             );
         }
-        preflightArrayGrowth(id.array, 1, context, 'array.unshift');
-        id.array.unshift(typeof value === 'number' ? context.precision(value) : value);
+        const store = arrayStore(id);
+        preflightArrayGrowth(store, 1, context, 'array.unshift');
+        chargeArrayGrowth(store, 1, context);
+        store.unshift(typeof value === 'number' ? context.precision(value) : value);
     };
 }

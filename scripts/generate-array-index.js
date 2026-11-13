@@ -75,25 +75,32 @@ import { spreadNamedArgs } from '../namedArgs';
 import { ARRAY_PARAMS } from '../collectionParams';
 import { boundedArrayText } from './format';
 import { MAX_STRING_CODE_UNITS } from '../limits';
-import { guardArray } from './capacity';
+import { ARRAY_STORE, adoptArray, guardArray } from './capacity';
 
 ${pineArrayTypeEnum}
 
 export class PineArrayObject {
-    private _array: any[];
+    // What the built-ins operate on, under a symbol no script can name (see capacity.ts).
+    private [ARRAY_STORE]: any[];
+    // The guard handed to outside code through \`array\`, built on first use.
+    private _array: any[] | undefined;
 ${objectPrivateProps}
 
     constructor(array: any[], public type: PineArrayType, public context: any) {
-        this._array = guardArray(array, context);
+        this[ARRAY_STORE] = adoptArray(array, context);
+        this._array = undefined;
 ${objectInitProps}
     }
 
-    get array(): any[] { return this._array; }
-    set array(value: any[]) { this._array = guardArray(value, this.context); }
+    get array(): any[] { return (this._array ??= guardArray(this[ARRAY_STORE], this.context)); }
+    set array(value: any[]) {
+        this[ARRAY_STORE] = adoptArray(value, this.context);
+        this._array = undefined;
+    }
 
     // Element count for JavaScript callers (PineTS syntax: \`line.all.length\`); Pine uses size().
     get length(): number {
-        return this.array.length;
+        return this[ARRAY_STORE].length;
     }
 
     toString(): string {
@@ -104,7 +111,7 @@ ${objectInitProps}
     }
 
     [Symbol.iterator]() {
-        return this.array[Symbol.iterator]();
+        return this[ARRAY_STORE][Symbol.iterator]();
     }
 
 ${objectMethodDefs}

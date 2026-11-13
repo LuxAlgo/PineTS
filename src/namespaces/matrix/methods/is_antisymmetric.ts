@@ -2,18 +2,20 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 export function is_antisymmetric(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
         if (rows === 0) return false;
-        const cols = id.matrix[0].length;
+        const cols = idRows[0].length;
         if (rows !== cols) return false;
         
         for (let i = 0; i < rows; i++) {
             for (let j = 0; j < cols; j++) {
                 // A^T = -A  =>  A[j][i] = -A[i][j]
-                if (id.matrix[j][i] !== -id.matrix[i][j]) return false;
+                if (idRows[j][i] !== -idRows[i][j]) return false;
             }
         }
         return true;

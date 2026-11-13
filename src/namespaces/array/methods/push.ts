@@ -3,7 +3,7 @@
 import { PineArrayObject } from '../PineArrayObject';
 import { isValueOfType } from '../utils';
 import { Context } from '../../../Context.class';
-import { preflightArrayGrowth } from '../capacity';
+import { arrayStore, chargeArrayGrowth, preflightArrayGrowth } from '../capacity';
 
 export function push(context: Context) {
     return (id: PineArrayObject, value: any) => {
@@ -14,8 +14,10 @@ export function push(context: Context) {
                 }' is expected.`
             );
         }
-        preflightArrayGrowth(id.array, 1, context, 'array.push');
+        const store = arrayStore(id);
+        preflightArrayGrowth(store, 1, context, 'array.push');
+        chargeArrayGrowth(store, 1, context);
         // Only apply precision rounding to numbers; UDT objects and other types pass through as-is
-        id.array.push(typeof value === 'number' ? context.precision(value) : value);
+        store.push(typeof value === 'number' ? context.precision(value) : value);
     };
 }
