@@ -2,12 +2,16 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixRestructured, matrixStore } from '../capacity';
 
 export function reverse(context: Context) {
     return (id: PineMatrixObject) => {
-        id.matrix.reverse();
-        for (const row of id.matrix) {
+        // Reorders rows and cells; no dimension changes.
+        const store = matrixStore(id);
+        store.reverse();
+        for (const row of store) {
             row.reverse();
         }
+        matrixRestructured(store);
     };
 }

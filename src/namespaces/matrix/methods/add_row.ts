@@ -4,15 +4,18 @@ import { Series } from '../../../Series';
 import { PineArrayObject } from '../../array/PineArrayObject';
 import { assertMatrixIndex } from '../indexValidation';
 import { assertMatrixDimensions, preflightCollectionGrowth } from '../../collectionCapacity';
+import { arrayStore } from '../../array/capacity';
+import { chargeMatrixGrowth, matrixRestructured, matrixStore } from '../capacity';
 
 export function add_row(context: Context) {
     return (id: PineMatrixObject, row_index?: number, values?: any) => {
-        const rows = id.matrix.length;
+        const store = matrixStore(id);
+        const rows = store.length;
 
         let rowValues: any[] = [];
         if (values) {
             if (values instanceof PineArrayObject) {
-                rowValues = values.array;
+                rowValues = arrayStore(values);
             } else if (Array.isArray(values)) {
                 rowValues = values;
             } else {
@@ -31,7 +34,7 @@ export function add_row(context: Context) {
             }
         }
 
-        const cols = rows > 0 ? id.matrix[0].length : rowValues.length;
+        const cols = rows > 0 ? store[0].length : rowValues.length;
         const index = row_index !== undefined ? row_index : rows;
         assertMatrixIndex(index, rows, 'row', 'matrix.add_row', true);
         const currentSize = assertMatrixDimensions(rows, cols, 'matrix.add_row');
@@ -51,6 +54,9 @@ export function add_row(context: Context) {
             }
         }
 
-        id.matrix.splice(index, 0, newRow);
+        // The new row is built here, never a caller's array, and has the matrix's column count.
+        chargeMatrixGrowth(context, nextSize - currentSize);
+        store.splice(index, 0, newRow);
+        matrixRestructured(store);
     };
 }

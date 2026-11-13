@@ -2,17 +2,19 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 export function rank(context: Context) {
     return (id: PineMatrixObject) => {
         // Rank calculation placeholder
         // Requires Gaussian elimination to row echelon form
-        const rows = id.matrix.length;
+        const source = matrixStore(id);
+        const rows = source.length;
         if (rows === 0) return 0;
-        const cols = id.matrix[0].length;
+        const cols = source[0].length;
         
         let rank = 0;
-        const mat = id.matrix.map(r => [...r]); // clone
+        const mat = source.map(r => [...r]); // clone
         
         // Very basic Gaussian elimination count
         // For full accuracy need proper numerical stability

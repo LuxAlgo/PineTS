@@ -25,15 +25,36 @@ export const MATRIX_STORE: unique symbol = Symbol('pine.matrix.store');
  * Reading cells, and writing a cell at a row and column the built-in has already validated, changes
  * no dimension: the guard has nothing to check or charge, and the plain rows give the same result.
  *
- * NEVER use the result to add, remove, replace or resize rows, or to write past a row's length.
- * The guard counts the matrix's cells and charges their growth; every structural change must go
- * through the guarded grid (`id.matrix`).
+ * A built-in that changes the structure (adds, removes or reorders rows or columns) does what the
+ * guard would have done for it, in this order: validate the new dimensions and preflight the
+ * budget, `chargeMatrixGrowth` for the cells it adds, mutate the plain rows keeping every row the
+ * same length, then `matrixRestructured`. Never write past a row's length otherwise.
  *
  * Never hand the result to code outside the namespace, and never store it on a Pine object under a
  * named property.
  */
 export function matrixStore(id: any): any[][] {
     return id[MATRIX_STORE];
+}
+
+/**
+ * Charge the cells a structural built-in is about to add to the plain rows, exactly as the guard's
+ * traps would have (`matrix.row`). Call after the built-in's own dimension checks and preflight.
+ */
+export function chargeMatrixGrowth(context: any, addedCells: number): void {
+    if (addedCells > 0) chargeCollectionAllocation(context, addedCells, 'matrix.row');
+}
+
+// Plain rows -> resynchronisation of the guard built over them, if one exists.
+const guardSyncs = new WeakMap<any[][], () => void>();
+
+/**
+ * Tell an existing guard that a built-in changed the structure of its rows, so its cell count and
+ * its set of live rows match the matrix again. Without a guard there is nothing to update: one
+ * built later counts the rows as they are then.
+ */
+export function matrixRestructured(store: any[][]): void {
+    guardSyncs.get(store)?.();
 }
 
 /**
@@ -64,15 +85,23 @@ export function guardMatrix(matrix: any[][], context: any, chargeInitial: boolea
 }
 
 /**
- * The guard over rows taken by `adoptMatrix`. Built-ins only read cells or write them in place
- * until a guard exists (see `matrixStore`), so the rows still hold exactly the cells that were
- * validated and charged at adoption: counting them now gives the same total.
+ * The guard over rows taken by `adoptMatrix`. Every cell in them was validated and charged, at
+ * adoption or by the built-in that added it (see `matrixStore`), so counting the rows as they are
+ * now gives the guard the same total it would have kept from the start.
  */
 export function guardGrid(data: any[][], context: any): any[][] {
-    let cells = 0;
-    for (const row of data) cells += row.length;
+    const countCells = () => {
+        let total = 0;
+        for (const row of data) total += row.length;
+        return total;
+    };
+    let cells = countCells();
     const rowProxies = new WeakMap<any[], any[]>();
-    const activeRows = new WeakSet<any[]>(data);
+    let activeRows = new WeakSet<any[]>(data);
+    guardSyncs.set(data, () => {
+        cells = countCells();
+        activeRows = new WeakSet<any[]>(data);
+    });
 
     const reserveCells = (added: number, method: string) => {
         if (added <= 0) return;

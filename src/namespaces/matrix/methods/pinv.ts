@@ -3,6 +3,7 @@
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
 import { inverse } from './inv';
+import { matrixStore } from '../capacity';
 
 /**
  * Moore-Penrose pseudoinverse.
@@ -12,13 +13,15 @@ import { inverse } from './inv';
  */
 export function pinv(context: Context) {
     return (id: PineMatrixObject) => {
-        const m = id.matrix.length;
+        // Only read below: by `inverse` and by the two helpers.
+        const A = matrixStore(id);
+        const m = A.length;
         if (m === 0) return new PineMatrixObject(0, 0, NaN, context);
-        const n = id.matrix[0].length;
+        const n = A[0].length;
 
         if (m === n) {
             // Square matrix — pseudoinverse is just the regular inverse
-            const invMat = inverse(id.matrix);
+            const invMat = inverse(A);
             const result = new PineMatrixObject(m, n, NaN, context);
             result.matrix = invMat;
             return result;
@@ -57,7 +60,6 @@ export function pinv(context: Context) {
             return result;
         };
 
-        const A = id.matrix;
         const AT = transposeRaw(A);
 
         let pinvMat: number[][];

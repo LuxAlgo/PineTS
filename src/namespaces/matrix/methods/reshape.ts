@@ -4,11 +4,13 @@ import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
 import { PineRuntimeError } from '../../../errors/PineRuntimeError';
 import { assertMatrixDimensions, chargeCollectionAllocation, chargeCollectionWork } from '../../collectionCapacity';
+import { matrixStore } from '../capacity';
 
 export function reshape(context: Context) {
     return (id: PineMatrixObject, rows: number, cols: number) => {
-        const currentRows = id.matrix.length;
-        const currentCols = currentRows > 0 ? id.matrix[0].length : 0;
+        const source = matrixStore(id);
+        const currentRows = source.length;
+        const currentCols = currentRows > 0 ? source[0].length : 0;
         const currentSize = currentRows * currentCols;
         const newSize = assertMatrixDimensions(rows, cols, 'matrix.reshape');
 
@@ -21,7 +23,7 @@ export function reshape(context: Context) {
         const elements: any[] = [];
         for (let i = 0; i < currentRows; i++) {
             for (let j = 0; j < currentCols; j++) {
-                elements.push(id.matrix[i][j]);
+                elements.push(source[i][j]);
             }
         }
 

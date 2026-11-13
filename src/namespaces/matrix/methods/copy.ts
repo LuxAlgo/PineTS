@@ -2,15 +2,17 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 export function copy(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
-        const cols = rows > 0 ? id.matrix[0].length : 0;
+        const source = matrixStore(id);
+        const rows = source.length;
+        const cols = rows > 0 ? source[0].length : 0;
         const newMatrix = new PineMatrixObject(rows, cols, NaN, context);
 
-        // Deep copy the array of arrays structure
-        newMatrix.matrix = id.matrix.map((row) => [...row]);
+        // Deep copy the array of arrays structure. Assigning `matrix` validates and charges it.
+        newMatrix.matrix = source.map((row) => [...row]);
         return newMatrix;
     };
 }

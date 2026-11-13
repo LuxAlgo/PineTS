@@ -182,6 +182,80 @@ describe('matrix built-ins and the late guard', () => {
         expect(matrix.columns()).toBe(2);
     });
 
+    it('add_row, add_col and concat charge the added cells like the guarded grid', () => {
+        const a = context(), b = context();
+        const builtin = new PineMatrixObject(2, 3, 1, a);
+        const guarded = new PineMatrixObject(2, 3, 1, b);
+
+        builtin.add_row(1, [7, 8, 9]);
+        guarded.matrix.splice(1, 0, [7, 8, 9]);
+        expect(charged(a)).toBe(charged(b));
+        expect(charged(a)).toBe((6 + 3) * 8);
+
+        builtin.add_col(0, [4, 5, 6]);
+        [4, 5, 6].forEach((value, i) => guarded.matrix[i].splice(0, 0, value));
+        expect(charged(a)).toBe(charged(b));
+        expect(charged(a)).toBe((6 + 3 + 3) * 8);
+
+        const extraA = new PineMatrixObject(2, 4, 2, a);
+        const extraB = new PineMatrixObject(2, 4, 2, b);
+        builtin.concat(extraA);
+        for (const row of extraB.matrix) guarded.matrix.push([...row]);
+        expect(charged(a)).toBe(charged(b));
+        expect(builtin.matrix).toEqual(guarded.matrix);
+        expect(builtin.matrix).toEqual([[4, 1, 1, 1], [5, 7, 8, 9], [6, 1, 1, 1], [2, 2, 2, 2], [2, 2, 2, 2]]);
+    });
+
+    it('removing and reordering built-ins charge nothing', () => {
+        const ctx = context();
+        const matrix = new PineMatrixObject(3, 3, 0, ctx);
+        let n = 9;
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) matrix.set(i, j, n--);
+        const before = charged(ctx);
+        matrix.sort(0);
+        expect(matrix.matrix).toEqual([[3, 2, 1], [6, 5, 4], [9, 8, 7]]);
+        matrix.reverse();
+        expect(matrix.matrix).toEqual([[7, 8, 9], [4, 5, 6], [1, 2, 3]]);
+        matrix.swap_rows(0, 2);
+        expect(matrix.matrix).toEqual([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
+        expect(charged(ctx)).toBe(before);
+        // The removed row and column come back as new arrays, which are allocations of their own.
+        expect([...matrix.remove_row(1).array]).toEqual([4, 5, 6]);
+        expect([...matrix.remove_col(0).array]).toEqual([1, 7]);
+        expect(matrix.matrix).toEqual([[2, 3], [8, 9]]);
+        expect(charged(ctx)).toBe(before + (3 + 2) * 8);
+    });
+
+    it('an existing guard follows what the structural built-ins do', () => {
+        const matrix = new PineMatrixObject(1, 49_999, 1, context());
+        const grid = matrix.matrix;
+        // Through built-ins, with the guard already built: it must now count 2 x 49_999 cells.
+        matrix.add_row(1, Array(49_999).fill(2));
+        grid[0].push(3);
+        grid[1].push(3);
+        expect(() => grid[0].push(4)).toThrow(PineRuntimeError);
+        expect(() => matrix.add_col(0, [5, 5])).toThrow(PineRuntimeError);
+        expect(grid).toHaveLength(2);
+        expect(grid[0]).toHaveLength(50_000);
+        // After a removal through a built-in the guard has room again.
+        matrix.remove_col(0);
+        grid[0].push(6);
+        grid[1].push(6);
+        expect(() => grid[1].push(7)).toThrow(PineRuntimeError);
+        expect(matrix.matrix).toBe(grid);
+    });
+
+    it('structural built-ins keep their preflight and leave the matrix intact on failure', () => {
+        const ctx = context(8 * 8);
+        const matrix = new PineMatrixObject(2, 3, 1, ctx);
+        expect(() => matrix.add_row(0, [9, 9, 9])).toThrow(PineRuntimeError);
+        expect(() => matrix.add_col(0, [9, 9])).not.toThrow();
+        expect(() => matrix.add_col(0, [9, 9])).toThrow(PineRuntimeError);
+        expect(() => matrix.concat(matrix)).toThrow(PineRuntimeError);
+        expect(matrix.matrix).toEqual([[9, 1, 1, 1], [9, 1, 1, 1]]);
+        expect(charged(ctx)).toBe(8 * 8);
+    });
+
     it('mult, kron and transpose give the same cells as the guarded grid', () => {
         const ctx = context();
         const a = new PineMatrixObject(2, 3, 0, ctx);
