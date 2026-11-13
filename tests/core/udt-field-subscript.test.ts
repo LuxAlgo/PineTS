@@ -424,8 +424,9 @@ plot(close)
         `;
         const result = transpile(code);
         const jsCode = result.toString();
-        // Lookback applied to `bar` (the leaf), then `.inner.v` chain follows
-        expect(jsCode).toContain('$.get($.let.glb1_bar, 1).inner.v');
+        // Lookback applied to `bar` (the leaf), then `.inner.v` chain follows; before the first bar the
+        // instance is na, so the nested hop is optional and the read is na
+        expect(jsCode).toContain('$.get($.let.glb1_bar, 1).inner?.v ?? NaN');
     });
 });
 

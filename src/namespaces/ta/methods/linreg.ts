@@ -12,7 +12,7 @@ export function linreg(context: any) {
         // skipped are read from slots written earlier, or repeat the last call's value: LinregCall)
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `linreg_${length}_${offset}`;
-        if (!context.taState[stateKey]) context.taState[stateKey] = new LinregCall();
+        if (!context.taState[stateKey]) context.taState[stateKey] = new LinregCall(context.executionBudget);
         const win: LinregCall = context.taState[stateKey];
         const series = Series.from(source);
         const sums = win.step(context.idx, series.get(0), length, series);

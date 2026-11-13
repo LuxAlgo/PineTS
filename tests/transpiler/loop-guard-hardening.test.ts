@@ -36,7 +36,7 @@ describe('loop guard halts every loop shape with a PineRuntimeError', () => {
                     i = i + 1;
                 } while (true);
                 plot(close);
-            })
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' })
         ).rejects.toBeInstanceOf(PineRuntimeError);
     });
 
@@ -51,7 +51,7 @@ describe('loop guard halts every loop shape with a PineRuntimeError', () => {
                     }
                 }
                 plot(close);
-            })
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' })
         ).rejects.toBeInstanceOf(PineRuntimeError);
     });
 
@@ -63,7 +63,7 @@ describe('loop guard halts every loop shape with a PineRuntimeError', () => {
                 let n = 0;
                 while (true) n = n + 1;
                 plot(close);
-            })
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' })
         ).rejects.toBeInstanceOf(PineRuntimeError);
     });
 

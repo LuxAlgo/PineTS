@@ -15,7 +15,7 @@ describe('FILL Namespace', () => {
             var p2 = plot(open, 'Lower');
             fill(p1, p2, color.new(color.blue, 80));
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Both plots should exist
         expect(plots['Upper']).toBeDefined();
@@ -35,7 +35,7 @@ describe('FILL Namespace', () => {
             var p2 = plot(open, 'Low');
             fill(p1, p2, color.new(color.green, 80));
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const fillEntry = Object.values(plots).find((p: any) => p.options?.style === 'fill') as any;
         expect(fillEntry).toBeDefined();
@@ -57,7 +57,7 @@ describe('FILL Namespace', () => {
             var h2 = hline(30, 'Oversold');
             fill(h1, h2, color.new(color.green, 90));
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Both hlines should exist as plots
         expect(plots['Overbought']).toBeDefined();
@@ -77,7 +77,7 @@ describe('FILL Namespace', () => {
             var p2 = plot(open, 'Beta');
             fill(p1, p2, color.blue);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const fillEntry = Object.values(plots).find((p: any) => p.options?.style === 'fill') as any;
         expect(fillEntry).toBeDefined();
@@ -99,7 +99,7 @@ describe('FILL Namespace', () => {
             var p2 = plot(open, 'Band'); // Same title
             fill(p1, p2, color.new(color.red, 80));
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // First plot uses "Band", second gets "Band#1"
         expect(plots['Band']).toBeDefined();
@@ -128,7 +128,7 @@ describe('FILL Namespace', () => {
             fill(p1, p2, color.blue);
             fill(p2, p3, color.red);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Find all fill entries
         const fillEntries = Object.values(plots).filter((p: any) => p.options?.style === 'fill');
@@ -148,7 +148,7 @@ describe('FILL Namespace', () => {
             var p2 = plot(open, 'Bottom');
             fill(p1, p2, '#ff000080');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const fillEntry = Object.values(plots).find((p: any) => p.options?.style === 'fill') as any;
         expect(fillEntry).toBeDefined();
@@ -164,7 +164,7 @@ describe('FILL Namespace', () => {
             // Dynamic color: flips green/red based on close > open
             fill(p1, p2, close > open ? color.green : color.red);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const fillEntry = Object.values(plots).find((p: any) => p.options?.style === 'fill') as any;
         expect(fillEntry).toBeDefined();
@@ -193,7 +193,7 @@ describe('FILL Namespace', () => {
             var p2 = plot(open, 'Bottom');
             fill(p1, p2, color.new(color.blue, 80));
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const fillEntry = Object.values(plots).find((p: any) => p.options?.style === 'fill') as any;
         expect(fillEntry).toBeDefined();
@@ -216,7 +216,7 @@ describe('FILL Namespace', () => {
             var p2 = plot(open, 'B');
             fill(p1, p2, color.blue, 'MyFill');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // fill should be stored with its title
         expect(plots['MyFill']).toBeDefined();
@@ -247,7 +247,7 @@ plot(close, "Visible")
 plot(close, "Hidden", color(na))
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Visible plot should have default color
         expect(plots['Visible'].data[0].options.color).toBe('#2962ff');
@@ -268,7 +268,7 @@ plot(close, "Normal")
 plot(close, "OverlayHidden", color(na), force_overlay = true)
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Normal plot: overlay = false (indicator is not overlay)
         expect(plots['Normal'].options.overlay).toBe(false);
@@ -293,7 +293,7 @@ p2 = plot(open, "Lower", color(na), force_overlay = true)
 fill(p1, p2, top_value = close, bottom_value = open, top_color = color.new(#089981, 70), bottom_color = color.new(#f23645, 70))
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Both plots should be overlay
         expect(plots['Upper'].options.overlay).toBe(true);
@@ -322,7 +322,7 @@ fill(p1, p2, top_value = close, bottom_value = open, top_color = color.new(#0899
             var p2 = plot(open, 'Lower');
             fill(p1, p2, close, open, color.new(color.green, 80), color.new(color.red, 80));
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const fillEntry = Object.values(plots).find((p: any) => p.options?.style === 'fill') as any;
         expect(fillEntry).toBeDefined();
@@ -347,7 +347,7 @@ plot(close, "B", color.red, force_overlay = true)
 plot(close, "C", force_overlay = true)
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // All three should have overlay = true
         expect(plots['A'].options.overlay).toBe(true);

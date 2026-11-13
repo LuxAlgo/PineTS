@@ -116,12 +116,9 @@ plot(a)
         expect(() => transpile(code)).toThrow('Unsupported Pine Script version 4');
     });
 
-    it('should fail gracefully when version is missing', () => {
+    it('rejects Pine Script without a version marker by default', () => {
         const code = 'indicator("Test")';
-
-        // When version is missing, it's treated as PineTS syntax, which should transpile
-        const result = transpile(code);
-        expect(result).toBeDefined();
+        expect(() => transpile(code)).toThrow(/version marker required/);
     });
 });
 

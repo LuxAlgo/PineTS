@@ -122,6 +122,21 @@ export const FACTORY_METHODS = [
     'linefill.new',
 ];
 
+// Calls that mutate an argument and also return a value. TradingView evaluates a `var`
+// initializer on the first bar only, so when one of these is the whole initializer it is
+// deferred the same way (`var merged = array.concat(a, b)` must not grow `a` every bar).
+export const VAR_INIT_MUTATING_METHODS = [
+    'array.concat',
+    'array.pop',
+    'array.shift',
+    'array.remove',
+    'map.put',
+    'map.remove',
+    'matrix.concat',
+    'matrix.remove_row',
+    'matrix.remove_col',
+];
+
 // Names that function as namespaces — used as function calls (fill(...), plot(...))
 // or member access (size.tiny, label.style_label_down). User variables with these
 // names must be renamed during codegen to avoid shadowing the namespace binding

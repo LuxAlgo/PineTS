@@ -31,7 +31,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val2, 'val2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rows'].data[0].value).toBe(4);
             expect(plots['cols'].data[0].value).toBe(2);
             expect(plots['val1'].data[0].value).toBe(1);
@@ -55,7 +55,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val, 'val');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val'].data[0].value).toBe(7); // 10 - 3
         });
     });
@@ -75,7 +75,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val, 'val');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // [[2,2],[2,2]] * [[2,2],[2,2]] = [[8,8],[8,8]]
             // [[8,8],[8,8]] * [[2,2],[2,2]] = [[32,32],[32,32]]
             expect(plots['val'].data[0].value).toBe(32);
@@ -106,7 +106,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val2, 'val2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(3);
             expect(plots['val0'].data[0].value).toBe(10);
             expect(plots['val1'].data[0].value).toBe(20);
@@ -138,7 +138,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val2, 'val2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(3);
             expect(plots['val0'].data[0].value).toBe(10);
             expect(plots['val1'].data[0].value).toBe(20);
@@ -163,7 +163,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(med, 'median');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['median'].data[0].value).toBe(5);
         });
     });
@@ -191,7 +191,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val2, 'val2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // After sorting by column 1, order should be preserved or sorted
             expect(plots['val0'].data[0].value).toBeDefined();
             expect(plots['val1'].data[0].value).toBeDefined();
@@ -218,7 +218,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val, 'val');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rows'].data[0].value).toBe(3);
             expect(plots['cols'].data[0].value).toBe(2);
             expect(plots['val'].data[0].value).toBe(5);
@@ -249,7 +249,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val20, 'val20');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val00'].data[0].value).toBe(6); // Was at position [2,1]
             expect(plots['val20'].data[0].value).toBe(2); // Was at position [0,1]
         });
@@ -272,7 +272,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isSquare2, 'isSquare2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isSquare1'].data[0].value).toBe(1);
             expect(plots['isSquare2'].data[0].value).toBe(0);
         });
@@ -293,7 +293,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isZero2, 'isZero2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isZero1'].data[0].value).toBe(1);
             expect(plots['isZero2'].data[0].value).toBe(0);
         });
@@ -313,7 +313,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isIdentity, 'isIdentity');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isIdentity'].data[0].value).toBe(1);
         });
 
@@ -333,7 +333,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isDiagonal, 'isDiagonal');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isDiagonal'].data[0].value).toBe(1);
         });
 
@@ -355,7 +355,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isSymmetric, 'isSymmetric');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isSymmetric'].data[0].value).toBe(1);
         });
 
@@ -378,7 +378,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isTriangular, 'isTriangular');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isTriangular'].data[0].value).toBe(1);
         });
 
@@ -401,7 +401,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isBinary2, 'isBinary2');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isBinary1'].data[0].value).toBe(1);
             expect(plots['isBinary2'].data[0].value).toBe(0);
         });
@@ -419,7 +419,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isStochastic, 'isStochastic');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // Stochastic matrix has rows that sum to 1
             expect(plots['isStochastic'].data[0].value).toBeDefined();
         });
@@ -443,7 +443,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isAntisymmetric, 'isAntisymmetric');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isAntisymmetric'].data[0].value).toBe(1);
         });
 
@@ -463,7 +463,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(isAntidiagonal, 'isAntidiagonal');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['isAntidiagonal'].data[0].value).toBe(1);
         });
     });
@@ -496,7 +496,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val12, 'val12');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val00'].data[0].value).toBe(3);
             expect(plots['val02'].data[0].value).toBe(1);
             expect(plots['val10'].data[0].value).toBe(6);
@@ -530,7 +530,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val21, 'val21');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val00'].data[0].value).toBe(5);
             expect(plots['val01'].data[0].value).toBe(6);
             expect(plots['val20'].data[0].value).toBe(1);
@@ -566,7 +566,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val11, 'val11');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['cols'].data[0].value).toBe(2);
             expect(plots['val00'].data[0].value).toBe(1);
             expect(plots['val01'].data[0].value).toBe(3);
@@ -603,7 +603,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val11, 'val11');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rows'].data[0].value).toBe(2);
             expect(plots['val00'].data[0].value).toBe(1);
             expect(plots['val01'].data[0].value).toBe(2);
@@ -643,7 +643,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val20, 'val20');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rows'].data[0].value).toBe(3);
             expect(plots['val00'].data[0].value).toBe(1);
             expect(plots['val10'].data[0].value).toBe(4);
@@ -670,7 +670,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(trace, 'trace');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['trace'].data[0].value).toBe(15);
         });
 
@@ -691,7 +691,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(det, 'det');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['det'].data[0].value).toBe(-2);
         });
 
@@ -717,7 +717,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(det, 'det');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['det'].data[0].value).toBeDefined();
             expect(typeof plots['det'].data[0].value).toBe('number');
         });
@@ -742,7 +742,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(inv, 1, 1), 'v11');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['v00'].data[0].value).toBeCloseTo(0.6, 10);
             expect(plots['v01'].data[0].value).toBeCloseTo(-0.7, 10);
             expect(plots['v10'].data[0].value).toBeCloseTo(-0.2, 10);
@@ -773,7 +773,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(product, 0, 2), 'o02');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // Diagonal elements should be 1
             expect(plots['d00'].data[0].value).toBeCloseTo(1, 8);
             expect(plots['d11'].data[0].value).toBeCloseTo(1, 8);
@@ -808,7 +808,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(product, 2, 1), 'o21');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['d00'].data[0].value).toBeCloseTo(1, 8);
             expect(plots['d11'].data[0].value).toBeCloseTo(1, 8);
             expect(plots['d22'].data[0].value).toBeCloseTo(1, 8);
@@ -836,7 +836,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(inv, 1, 2), 'o12');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['d00'].data[0].value).toBeCloseTo(1, 10);
             expect(plots['d11'].data[0].value).toBeCloseTo(1, 10);
             expect(plots['d22'].data[0].value).toBeCloseTo(1, 10);
@@ -861,7 +861,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(inv, 0, 0), 'v00');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['v00'].data[0].value).toBeNaN();
         });
 
@@ -876,7 +876,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(inv, 0, 0), 'v00');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['v00'].data[0].value).toBeNaN();
         });
 
@@ -899,7 +899,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(inv, 0, 1), 'o01');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['v00'].data[0].value).toBeCloseTo(0.5, 10);
             expect(plots['v11'].data[0].value).toBeCloseTo(0.2, 10);
             expect(plots['v22'].data[0].value).toBeCloseTo(0.25, 10);
@@ -924,7 +924,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(rank, 'rank');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rank'].data[0].value).toBeGreaterThan(0);
         });
 
@@ -945,7 +945,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(cols, 'cols');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rows'].data[0].value).toBe(4); // 2 * 2
             expect(plots['cols'].data[0].value).toBe(4); // 2 * 2
         });
@@ -968,7 +968,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(size, 'size');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBeGreaterThan(0);
         });
 
@@ -990,7 +990,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(rows, 'rows');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rows'].data[0].value).toBeGreaterThan(0);
         });
 
@@ -1014,7 +1014,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.columns(pinv), 'cols');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rows'].data[0].value).toBe(3);
             expect(plots['cols'].data[0].value).toBe(2);
         });
@@ -1036,7 +1036,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.columns(pinv), 'cols');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rows'].data[0].value).toBe(2);
             expect(plots['cols'].data[0].value).toBe(3);
         });
@@ -1064,7 +1064,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(AApA, 2, 1), 'r21');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // A * pinv(A) * A should equal A
             expect(plots['r00'].data[0].value).toBeCloseTo(1, 6);
             expect(plots['r01'].data[0].value).toBeCloseTo(2, 6);
@@ -1095,7 +1095,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(AApA, 1, 2), 'r12');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['r00'].data[0].value).toBeCloseTo(1, 6);
             expect(plots['r01'].data[0].value).toBeCloseTo(2, 6);
             expect(plots['r02'].data[0].value).toBeCloseTo(3, 6);
@@ -1128,7 +1128,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(invM, 1, 1), 'i11');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['p00'].data[0].value).toBeCloseTo(plots['i00'].data[0].value, 8);
             expect(plots['p01'].data[0].value).toBeCloseTo(plots['i01'].data[0].value, 8);
             expect(plots['p10'].data[0].value).toBeCloseTo(plots['i10'].data[0].value, 8);
@@ -1156,7 +1156,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(matrix.get(pinvV, 0, 2), 'v02');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['rows'].data[0].value).toBe(1);
             expect(plots['cols'].data[0].value).toBe(3);
             expect(plots['v00'].data[0].value).toBeCloseTo(1/14, 8);
@@ -1180,7 +1180,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val11, 'val11');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val00'].data[0].value).toBe(12); // 3 * 4
             expect(plots['val11'].data[0].value).toBe(12); // 3 * 4
         });
@@ -1217,7 +1217,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(val11, 'val11');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val00'].data[0].value).toBe(4); // 1*2 + 2*1
             expect(plots['val01'].data[0].value).toBe(4); // 1*0 + 2*2
             expect(plots['val10'].data[0].value).toBe(10); // 3*2 + 4*1
@@ -1244,7 +1244,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(mode, 'mode');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['mode'].data[0].value).toBe(5);
         });
 
@@ -1265,7 +1265,7 @@ describe('Matrix Methods - Advanced Operations', () => {
                 plotchar(mode, 'mode');
             `;
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // Mode should return one of the most frequent values
             expect([1, 2]).toContain(plots['mode'].data[0].value);
         });

@@ -27,4 +27,7 @@ export type InputOptions = {
      * inputs and inputs sharing a variable name.
      */
     __inputId?: string;
+    /** Compile-time type of a bare input() default; source and int are not
+     * distinguishable from the current-bar scalar alone at runtime. */
+    __inputType?: 'int' | 'float' | 'bool' | 'string' | 'color' | 'source';
 };

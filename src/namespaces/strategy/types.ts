@@ -176,6 +176,10 @@ export interface Order {
     // time — if none of the originally-intended trades are still open, the
     // close order is cancelled.
     _intended_trade_ids?: string[];
+
+    // Internal: the order id order-fill alerts report when it differs from `id` (strategy.close:
+    // `Close entry(s) order strategy.close_N`, N the call site; `id` is the trade's exit id).
+    _alertId?: string;
 }
 
 /**
@@ -309,9 +313,9 @@ export interface StrategyState {
     risk_rules: {
         allow_entry_in?: 'long' | 'short' | 'all';
         max_cons_loss_days?: { count: number; alert_message?: string };
-        max_drawdown?: { value: number; type: 'cash' | 'percent_of_equity' };
+        max_drawdown?: { value: number; type: 'cash' | 'percent_of_equity'; alert_message?: string };
         max_intraday_filled_orders?: { count: number; alert_message?: string };
-        max_intraday_loss?: { value: number; type: 'cash' | 'percent_of_equity' };
+        max_intraday_loss?: { value: number; type: 'cash' | 'percent_of_equity'; alert_message?: string };
         max_position_size?: number;
     };
 

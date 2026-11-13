@@ -16,7 +16,7 @@ describe('LABEL Namespace', () => {
             var lbl_xloc = myLabel.xloc;
             var lbl_yloc = myLabel.yloc;
             return { lbl_text, lbl_style, lbl_size, lbl_textalign, lbl_xloc, lbl_yloc };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.lbl_text[0]).toBe('Hello');
         expect(result.lbl_style[0]).toBe('style_label_down');
@@ -45,7 +45,7 @@ describe('LABEL Namespace', () => {
             var lbl_textalign = myLabel.textalign;
             var lbl_tooltip = myLabel.tooltip;
             return { lbl_text, lbl_style, lbl_yloc, lbl_size, lbl_textalign, lbl_tooltip };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.lbl_text[0]).toBe('Full');
         expect(result.lbl_style[0]).toBe('style_label_up');
@@ -64,7 +64,7 @@ describe('LABEL Namespace', () => {
             label.set_text(myLabel, 'Modified');
             var after = myLabel.text;
             return { before, after };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.before[0]).toBe('Original');
         expect(result.after[0]).toBe('Modified');
@@ -80,7 +80,7 @@ describe('LABEL Namespace', () => {
             var lblColor = myLabel.color;
             var txtColor = myLabel.textcolor;
             return { lblColor, txtColor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.lblColor[0]).toBeTruthy();
         expect(result.txtColor[0]).toBeTruthy();
@@ -99,7 +99,7 @@ describe('LABEL Namespace', () => {
             var xAfterSetXY = myLabel.x;
             var yAfterSetXY = myLabel.y;
             return { xAfterSetX, yAfterSetY, xAfterSetXY, yAfterSetXY };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.xAfterSetX[0]).toBe(99);
         expect(result.yAfterSetY[0]).toBe(55000);
@@ -117,7 +117,7 @@ describe('LABEL Namespace', () => {
             var lbl_size = myLabel.size;
             var lbl_style = myLabel.style;
             return { lbl_size, lbl_style };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.lbl_size[0]).toBe('huge');
         expect(result.lbl_style[0]).toBe('style_circle');
@@ -133,7 +133,7 @@ describe('LABEL Namespace', () => {
             var lbl_textalign = myLabel.textalign;
             var lbl_tooltip = myLabel.tooltip;
             return { lbl_textalign, lbl_tooltip };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.lbl_textalign[0]).toBe('right');
         expect(result.lbl_tooltip[0]).toBe('New tooltip');
@@ -148,7 +148,7 @@ describe('LABEL Namespace', () => {
             var getX = label.get_x(myLabel);
             var getY = label.get_y(myLabel);
             return { getText, getX, getY };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.getText[0]).toBe('GetterTest');
         expect(result.getX[0]).toBe(0);
@@ -170,7 +170,7 @@ describe('LABEL Namespace', () => {
             var differentIds = orig.id !== cp.id;
 
             return { origText, copyText, origTextAfter, copyTextAfter, differentIds };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.origText[0]).toBe('Original');
         expect(result.copyText[0]).toBe('Original');
@@ -189,7 +189,7 @@ describe('LABEL Namespace', () => {
             var deletedFlag = myLabel._deleted;
             var countAfter = label.all.length;
             return { deletedFlag, countBefore, countAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.deletedFlag[0]).toBe(true);
         expect(result.countBefore[0]).toBe(1);
@@ -207,7 +207,7 @@ describe('LABEL Namespace', () => {
             label.delete(myLabel3);
             var afterDeleteCount = label.all.length;
             return { totalCount, afterDeleteCount };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.totalCount[0]).toBe(3);
         expect(result.afterDeleteCount[0]).toBe(2);
@@ -222,7 +222,7 @@ describe('LABEL Namespace', () => {
             label.set_text(myLabel, 'ShouldNotChange');
             var textAfterDelete = myLabel.text;
             return { textAfterDelete };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.textAfterDelete[0]).toBe('BeforeDelete');
     });
@@ -238,7 +238,7 @@ describe('LABEL Namespace', () => {
             var yAfter = myLabel.y;
             var xlocAfter = myLabel.xloc;
             return { xAfter, yAfter, xlocAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.xAfter[0]).toBe(42);
         expect(result.yAfter[0]).toBe(75000);
@@ -262,7 +262,7 @@ describe('LABEL Namespace', () => {
                 label.style_none, label.style_text_outline,
             ].join(',');
             return { allStyles };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const styles = result.allStyles[0].split(',');
         expect(styles.length).toBe(21);
@@ -286,7 +286,7 @@ describe('LABEL Namespace', () => {
         const { plots } = await pineTS.run((context) => {
             var myLabel = label.new(bar_index, 50000, 'PlotTest', xloc.bar_index, yloc.price, '#ff0000', label.style_label_down, '#ffffff');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__labels__']).toBeDefined();
         expect(plots['__labels__'].data.length).toBeGreaterThan(0);
@@ -310,7 +310,7 @@ describe('LABEL Namespace', () => {
             label.set_text(myLabel, 'After');
             label.set_color(myLabel, '#00ff00');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const labelEntry = plots['__labels__'].data[0];
         // Labels are now stored as an aggregated array (like lines)
@@ -333,7 +333,7 @@ describe('LABEL Namespace', () => {
             var family_after = myLabel.text_font_family;
             var formatting_after = myLabel.text_formatting;
             return { family_before, formatting_before, family_after, formatting_after };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.family_before[0]).toBe('default');
         expect(result.formatting_before[0]).toBe('none');
@@ -356,7 +356,7 @@ if barstate.islast
     c = label.copy(a)
     label.set_text(c, "c")
 plot(close)
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const labels = plots['__labels__'].data[0].value;
         const byText = (t: string) => labels.find((l: any) => l.text === t);

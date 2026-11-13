@@ -46,7 +46,7 @@ describe('Indicators', () => {
                 direction,
                 supertrend,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const data = plots['direction'].data.reverse().slice(0, 30);
         data.forEach((d) => {

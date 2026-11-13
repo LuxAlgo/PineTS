@@ -18,7 +18,7 @@ describe('Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -79,7 +79,7 @@ describe('Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -143,7 +143,7 @@ describe('Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -205,7 +205,7 @@ describe('Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -266,7 +266,7 @@ describe('Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -322,7 +322,7 @@ describe('Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -393,7 +393,7 @@ describe('Functions', () => {
             return { supertrend, direction };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-07-20').getTime();
@@ -515,7 +515,7 @@ describe('Functions', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-07-29').getTime();
@@ -578,7 +578,7 @@ describe('Functions', () => {
             return { mid, upper, lower };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const midData = plots['mid']?.data;
         const upperData = plots['upper']?.data;
@@ -664,7 +664,7 @@ describe('Functions', () => {
             return { _inner_val, _modified };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const innerData = plots['inner_val']?.data;
         const modifiedData = plots['modified']?.data;

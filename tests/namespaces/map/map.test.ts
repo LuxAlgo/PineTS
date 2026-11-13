@@ -88,7 +88,7 @@ describe('Map Namespace', () => {
             };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.p1)).toBeNaN();

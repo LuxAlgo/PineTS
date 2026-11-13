@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { FootprintBar, Kline } from './types';
+import type { ExecutionBudget } from '../security/ExecutionBudget';
+
+/** One data request's shared run-wide resource and cancellation controls. */
+export interface ProviderRequestOptions {
+    budget?: ExecutionBudget;
+    signal?: AbortSignal;
+    deadline?: number;
+    /** Internal BaseProvider hook: account raw pages before aggregation/trimming. */
+    recordRawBars?: (count: number) => void;
+}
 
 // ── Provider configuration types ────────────────────────────────────────
 
@@ -87,8 +97,8 @@ export type ISymbolInfo = {
  * or the Alpaca Calendar API for exact per-day close times including early closes.
  */
 export interface IProvider extends Partial<IFootprintProvider> {
-    getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number): Promise<Kline[]>;
-    getSymbolInfo(tickerId: string): Promise<ISymbolInfo>;
+    getMarketData(tickerId: string, timeframe: string, limit?: number, sDate?: number, eDate?: number, options?: ProviderRequestOptions): Promise<Kline[]>;
+    getSymbolInfo(tickerId: string, options?: ProviderRequestOptions): Promise<ISymbolInfo>;
     configure(config: any): void;
 }
 

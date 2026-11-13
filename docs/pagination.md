@@ -39,6 +39,7 @@ const evt = pineTS.stream(
         pageSize: 50, // Process data in chunks of 50 bars
         live: true, // Continue with live updates after history
         interval: 1000, // Check for updates every 1 second
+        sourceMode: 'trustedJavaScript', // Required for this JS callback
     }
 );
 
@@ -106,6 +107,9 @@ evt.on('data', (ctx) => {
 | `pageSize` | `number`  | `undefined` (all) | Number of bars per chunk. If not specified, processes all available historical data in one go. |
 | `live`     | `boolean` | `true`            | Whether to continue fetching live data after processing historical data.                       |
 | `interval` | `number`  | `1000`            | Polling interval in milliseconds for live data.                                                |
+| `sourceMode` | `'nativePine' \| 'trustedJavaScript'` | `'nativePine'` | Use `'trustedJavaScript'` only for trusted JS callbacks or markerless JS strings. |
+
+Versioned Pine Script runs in the default `nativePine` mode. For a JavaScript callback, use the explicit `trustedJavaScript` option as in the first example; this option does not isolate untrusted JavaScript. See [Source Modes](source-mode.md).
 
 ---
 

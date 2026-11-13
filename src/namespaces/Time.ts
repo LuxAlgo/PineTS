@@ -4,8 +4,11 @@ import { Series } from '../Series';
 import { parseArgsForPineParams } from './utils';
 import { parseSessionSpec, isInSessionSpec } from './sessionSpec';
 import { PineRuntimeError } from '../errors/PineRuntimeError';
-import { canonicalTimeframe, parseTimeframe } from '../timeframe';
+import { canonicalTimeframe, parseTimeframe, ParsedTimeframe, timeframeBarEnd } from '../timeframe';
 import { tradingPeriodStart } from './tradingPeriod';
+
+// Upper bound on the bars a negative bars_back or a timeframe_bars_back offset walks.
+const MAX_PERIOD_STEPS = 5000;
 
 // Current values of the arguments; named arguments arrive as a trailing plain object
 // whose values may be series too (`time(tf, session = sessionInput)`).
@@ -49,7 +52,7 @@ export function getDatePartsInTimezone(timestamp: number, timezone: string): Dat
     }
 
     // UTC/GMT offset notation: "UTC+5", "GMT-03:30", etc.
-    const offsetMatch = tzNorm.match(/^(?:UTC|GMT)([+-])(\d{1,2})(?::(\d{2}))?$/i);
+    const offsetMatch = tzNorm.match(/^(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?$/i);
     if (offsetMatch) {
         const sign = offsetMatch[1] === '+' ? 1 : -1;
         const offsetHours = parseInt(offsetMatch[2], 10);
@@ -182,32 +185,52 @@ export class TimeHelper {
         const parsed = parseArgsForPineParams<any>(unwrapped, TIME_SIGNATURES, TIME_ARGS_TYPES);
 
         const barsBack = parsed.bars_back ?? 0;
+        const tfBarsBack = parsed.timeframe_bars_back ?? 0;
         const timeframe = parsed.timeframe || '';
+        const isClose = this.dataField === 'closeTime';
+        const sameTf = !timeframe || canonicalTimeframe(timeframe) === canonicalTimeframe(this.context.timeframe);
+        const syminfo = this.context.pine?.syminfo;
+        const exchangeTz = syminfo?.timezone || 'UTC';
+        const session = syminfo?.session;
 
-        // Get the current bar's timestamp (with bars_back offset on the chart TF)
-        const timeSeries = this.context.data[this.dataField];
-        const currentTime = Series.from(timeSeries).get(barsBack);
-        if (isNaN(currentTime) || currentTime == null) return NaN;
+        const inSession = (barOpen: number, value: number) => {
+            if (parsed.session === undefined || parsed.session === '') return value;
+            const timezone = parsed.timezone || exchangeTz;
+            return this._isInSession(barOpen, parsed.session, timezone) ? value : NaN;
+        };
 
-        // If timeframe is empty or matches the chart timeframe, return the bar's own time
-        let htfBarTime: number;
-        if (!timeframe || canonicalTimeframe(timeframe) === canonicalTimeframe(this.context.timeframe)) {
-            htfBarTime = currentTime;
-        } else {
-            const tf = parseTimeframe(timeframe);
-            if (!tf) throw new PineRuntimeError(`Cannot parse resolution '${timeframe}'. - Invalid format`, 'time');
-            // Open time of the bar of `timeframe` that contains this bar
-            const syminfo = this.context.pine?.syminfo;
-            htfBarTime = tradingPeriodStart(currentTime, tf, syminfo?.timezone || 'UTC', syminfo?.session);
+        // The chart bar's own time: read from the data.
+        if (sameTf && barsBack >= 0 && tfBarsBack === 0) {
+            const own = Series.from(this.context.data[this.dataField]).get(barsBack);
+            if (own == null || isNaN(own)) return NaN;
+            return inSession(isClose ? Series.from(this.context.data.openTime).get(barsBack) : own, own);
         }
 
-        // Session filtering
-        if (parsed.session !== undefined && parsed.session !== '') {
-            const timezone = parsed.timezone || this.context.pine?.syminfo?.timezone || 'UTC';
-            return this._isInSession(htfBarTime, parsed.session, timezone) ? htfBarTime : NaN;
+        const chartTf = parseTimeframe(this.context.timeframe);
+        const tf = sameTf ? chartTf : parseTimeframe(timeframe);
+        if (!tf) throw new PineRuntimeError(`Cannot parse resolution '${timeframe}'. - Invalid format`, 'time');
+
+        // Open of the chart bar `bars_back` bars ago; a negative offset projects the expected future bar.
+        const openTime = Series.from(this.context.data.openTime);
+        let barOpen = barsBack >= 0 ? openTime.get(barsBack) : openTime.get(0);
+        if (barOpen == null || isNaN(barOpen)) return NaN;
+        if (barsBack < 0) {
+            if (!chartTf || -barsBack > MAX_PERIOD_STEPS) return NaN;
+            for (let k = 0; k < -barsBack; k++) barOpen = this._periodEnd(barOpen, chartTf);
         }
 
-        return htfBarTime;
+        // Open of the `timeframe` bar holding it, moved by `timeframe_bars_back` bars of that timeframe.
+        let start = sameTf ? barOpen : tradingPeriodStart(barOpen, tf, exchangeTz, session);
+        if (Math.abs(tfBarsBack) > MAX_PERIOD_STEPS) return NaN;
+        for (let k = 0; k < tfBarsBack; k++) start = tradingPeriodStart(start - 1, tf, exchangeTz, session);
+        for (let k = 0; k < -tfBarsBack; k++) start = tradingPeriodStart(this._periodEnd(start, tf), tf, exchangeTz, session);
+
+        return inSession(barOpen, isClose ? this._periodEnd(start, tf) : start);
+    }
+
+    /** Close of the `tf` bar opening at `start`: the next bar's open on a 24/7 calendar. */
+    private _periodEnd(start: number, tf: ParsedTimeframe): number {
+        return timeframeBarEnd(start, tf);
     }
 
     /**

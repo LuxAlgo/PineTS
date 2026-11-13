@@ -2,8 +2,13 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { describe, it, expect } from 'vitest';
-import { transpile } from '../../src/transpiler/index';
+import { transpile as transpileSource } from '../../src/transpiler/index';
 import { Context } from '../../src/Context.class';
+
+// These tests feed JavaScript syntax directly to the compiler by design.
+function transpile(source: string | Function) {
+    return transpileSource(source, { debug: false, sourceMode: 'trustedJavaScript' });
+}
 
 describe('Transpiler - Await Injection', () => {
     let context: Context;

@@ -43,7 +43,7 @@ export function pineToJS(sourceCode: string, options: any = {}) {
         const tokens = lexer.tokenize();
 
         // Step 2: Parse to AST
-        const parser = new Parser(tokens);
+        const parser = new Parser(tokens, { version });
         const ast = parser.parse();
 
         // Step 2a: Link imported libraries
@@ -54,7 +54,7 @@ export function pineToJS(sourceCode: string, options: any = {}) {
         const inputs = analyzeInputs(ast, { version });
 
         // Step 3: Generate JavaScript (pass source code for comments)
-        const codegenOptions = { ...codegenRest, sourceCode };
+        const codegenOptions = { ...codegenRest, sourceCode, version };
         const codegen = new CodeGenerator(codegenOptions);
         const jsCode = codegen.generate(ast);
 

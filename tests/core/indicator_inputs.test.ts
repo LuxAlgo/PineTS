@@ -18,7 +18,7 @@ describe('PineTS Indicator Inputs', () => {
             return $.inputs;
         }, inputs);
 
-        const context = await pineTS.run(indicator);
+        const context = await pineTS.run(indicator, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         
         expect(context.inputs).toBeDefined();
         expect(context.inputs.length).toBe(14);
@@ -48,7 +48,7 @@ describe('PineTS Indicator Inputs', () => {
             return $.inputs;
         });
 
-        const context = await pineTS.run(indicator);
+        const context = await pineTS.run(indicator, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         
         expect(context.inputs).toBeDefined();
         expect(Object.keys(context.inputs).length).toBe(0);
@@ -65,7 +65,7 @@ describe('PineTS Indicator Inputs', () => {
             return $.inputs.threshold;
         }, inputs);
 
-        const iterator = pineTS.run(indicator, undefined, 10);
+        const iterator = pineTS.run(indicator, undefined, 10, { sourceMode: 'trustedJavaScript' });
         let count = 0;
         
         for await (const ctx of iterator) {

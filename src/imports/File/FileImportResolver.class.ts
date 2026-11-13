@@ -5,6 +5,8 @@ import * as fs from 'fs';
 import { BaseImportResolver } from '../BaseImportResolver';
 import type { BaseImportResolverConfig, ImportInfo } from '../IImportResolver';
 import { fillTemplate } from '../utils';
+import { PineRuntimeError } from '../../errors/PineRuntimeError';
+import { MAX_COMPILER_SOURCE_BYTES, assertCompilerSourceBudget } from '../../transpiler/analysis/CompilerBudget';
 
 /** Configuration for FileImportResolver. */
 export interface FileImportResolverConfig extends BaseImportResolverConfig {
@@ -57,7 +59,13 @@ export class FileImportResolver extends BaseImportResolver<FileImportResolverCon
         const base = dir.includes('{') ? fillTemplate(dir, info) : `${dir.replace(/[\\/]+$/, '')}/${info.name}`;
         return this.firstFound(base, this._extensions, async (file) => {
             try {
-                return await fs.promises.readFile(file, 'utf8');
+                const metadata = await fs.promises.stat(file);
+                if (metadata.size > MAX_COMPILER_SOURCE_BYTES) {
+                    throw new PineRuntimeError('Pine compilation budget exceeded: source bytes.', 'compiler.budget', 'RESOURCE_LIMIT');
+                }
+                const source = await fs.promises.readFile(file, { encoding: 'utf8', signal: info.signal });
+                assertCompilerSourceBudget(source);
+                return source;
             } catch (e) {
                 if (['ENOENT', 'EISDIR', 'ENOTDIR'].includes((e as any)?.code)) return null;
                 throw e;

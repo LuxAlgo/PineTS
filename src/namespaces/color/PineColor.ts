@@ -71,6 +71,17 @@ const COLOR_CONSTANTS = {
     yellow:  '#FDD835',
 } as const;
 
+// Pine v6 changed three named colors; scripts on earlier versions still get the previous values.
+const PRE_V6_COLORS: Record<string, string> = { red: '#FF5252', teal: '#00897B', yellow: '#FFEB3B' };
+
+/** Hex value of a named color (`red` or `color.red`) for a script's Pine version; undefined for other strings. */
+export function namedColor(name: string, pineVersion?: number | null): string | undefined {
+    const key = name.startsWith('color.') ? name.slice(6) : name;
+    if (!Object.prototype.hasOwnProperty.call(COLOR_CONSTANTS, key)) return undefined;
+    if (pineVersion != null && pineVersion < 6 && key in PRE_V6_COLORS) return PRE_V6_COLORS[key];
+    return (COLOR_CONSTANTS as Record<string, string>)[key];
+}
+
 /**
  * Resolve any static color value to its `[r, g, b, a]` components (a in
  * 0..1). Accepts:
@@ -79,15 +90,10 @@ const COLOR_CONSTANTS = {
  *   - a named constant, with or without the namespace: `color.red` / `red`
  * Returns null for anything it can't parse as a color.
  */
-export function resolveColorToRgba(value: unknown): [number, number, number, number] | null {
+export function resolveColorToRgba(value: unknown, pineVersion?: number | null): [number, number, number, number] | null {
     if (typeof value !== 'string') return null;
-    let s = value.trim();
-    // Resolve a named constant first: "color.red" → "#F23645", or a bare "red".
-    const name = s.startsWith('color.') ? s.slice(6) : s;
-    if (Object.prototype.hasOwnProperty.call(COLOR_CONSTANTS, name)) {
-        s = (COLOR_CONSTANTS as Record<string, string>)[name];
-    }
-    return parseColorToRGBA(s);
+    const s = value.trim();
+    return parseColorToRGBA(namedColor(s, pineVersion) ?? s);
 }
 
 /**
@@ -110,8 +116,8 @@ export function rgbaToHex8(r: number, g: number, b: number, a: number): string {
  * untouched. Used by `Indicator.getInputsMeta()` to present color-input
  * defaults in a single canonical form.
  */
-export function normalizeColorToRgbaHex(value: unknown): unknown {
-    const rgba = resolveColorToRgba(value);
+export function normalizeColorToRgbaHex(value: unknown, pineVersion?: number | null): unknown {
+    const rgba = resolveColorToRgba(value, pineVersion);
     if (!rgba) return value;
     return rgbaToHex8(rgba[0], rgba[1], rgba[2], rgba[3]);
 }
@@ -138,10 +144,10 @@ const TRANSPARENT_BLACK = '#00000000';
  * `[r, g, b, a]` of a color argument as TradingView holds it: alpha is a byte (a = A / 255) and an na
  * color is transparent black. Returns null for a value that is not a color.
  */
-function colorComponents(color: any): [number, number, number, number] | null {
+function colorComponents(color: any, pineVersion?: number | null): [number, number, number, number] | null {
     color = resolveColor(color);
     if (isNa(color)) return [0, 0, 0, 0];
-    const rgba = resolveColorToRgba(color);
+    const rgba = resolveColorToRgba(color, pineVersion);
     if (!rgba) return null;
     return [rgba[0], rgba[1], rgba[2], Math.round(rgba[3] * 255) / 255];
 }
@@ -179,8 +185,9 @@ export class PineColor {
         a = resolveColor(a);
         if (a === undefined) return color;
 
-        // TradingView truncates the transparency to an integer in 0..100; na is fully transparent.
-        a = isNa(a) ? 100 : clamp(Math.trunc(a), 0, 100);
+        // The transparency is kept fractional, clamped to 0..100 (TV: 6.5 reads back as 7 and 50.4 as 51
+        // through the alpha byte); na is fully transparent.
+        a = isNa(a) ? 100 : clamp(a, 0, 100);
         // An na color is transparent black, so color.new(na, 50) is half-transparent black.
         if (isNa(color)) color = '#000000';
         if (typeof color !== 'string') return color;
@@ -195,7 +202,7 @@ export class PineColor {
             const hexRgb = hex.length === 8 ? hex.slice(0, 6) : hex;
             return `#${hexRgb}${alpha}`;
         }
-        const named = COLOR_CONSTANTS[color];
+        const named = namedColor(color, this.context?.pineVersion);
         if (named) return `#${named.slice(1)}${alpha}`;
 
         // Handle rgb(r,g,b) and rgba(r,g,b,a) strings — extract components
@@ -239,8 +246,8 @@ export class PineColor {
             return isNa(bottom_color) ? TRANSPARENT_BLACK : bottom_color;
         }
 
-        const bc = colorComponents(bottom_color) ?? [0, 0, 0, 0];
-        const tc = colorComponents(top_color) ?? [0, 0, 0, 0];
+        const bc = colorComponents(bottom_color, this.context?.pineVersion) ?? [0, 0, 0, 0];
+        const tc = colorComponents(top_color, this.context?.pineVersion) ?? [0, 0, 0, 0];
 
         // Premultiplied-alpha interpolation, channels and alpha truncated. The weights are computed as
         // w0 = 1 - t, w1 = 1 - w0 to reproduce TradingView's rounding at exact integer results.
@@ -260,22 +267,22 @@ export class PineColor {
 
     /** Extract red component (0-255). Returns na if the value is not a color. */
     r(color: any): number {
-        return colorComponents(color)?.[0] ?? NaN;
+        return colorComponents(color, this.context?.pineVersion)?.[0] ?? NaN;
     }
 
     /** Extract green component (0-255). Returns na if the value is not a color. */
     g(color: any): number {
-        return colorComponents(color)?.[1] ?? NaN;
+        return colorComponents(color, this.context?.pineVersion)?.[1] ?? NaN;
     }
 
     /** Extract blue component (0-255). Returns na if the value is not a color. */
     b(color: any): number {
-        return colorComponents(color)?.[2] ?? NaN;
+        return colorComponents(color, this.context?.pineVersion)?.[2] ?? NaN;
     }
 
     /** Extract transparency (0-100, Pine scale), rounded from the alpha byte. Returns na if the value is not a color. */
     t(color: any): number {
-        const rgba = colorComponents(color);
+        const rgba = colorComponents(color, this.context?.pineVersion);
         return rgba ? Math.round((1 - rgba[3]) * 100) : NaN;
     }
 
@@ -320,18 +327,18 @@ export class PineColor {
         return COLOR_CONSTANTS.purple;
     }
     red() {
-        return COLOR_CONSTANTS.red;
+        return namedColor('red', this.context?.pineVersion)!;
     }
     silver() {
         return COLOR_CONSTANTS.silver;
     }
     teal() {
-        return COLOR_CONSTANTS.teal;
+        return namedColor('teal', this.context?.pineVersion)!;
     }
     white() {
         return COLOR_CONSTANTS.white;
     }
     yellow() {
-        return COLOR_CONSTANTS.yellow;
+        return namedColor('yellow', this.context?.pineVersion)!;
     }
 }

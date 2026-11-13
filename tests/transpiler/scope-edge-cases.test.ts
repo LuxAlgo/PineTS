@@ -33,7 +33,7 @@ describe('Transpiler Scope Edge Cases', () => {
             plotchar(x, 'global');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['global']).toBeDefined();
         expect(plots['if']).toBeDefined();
@@ -58,7 +58,7 @@ describe('Transpiler Scope Edge Cases', () => {
             plotchar(result, 'result');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['result']).toBeDefined();
         expect(plots['result'].data[0].value).toBe(10); // 5 * 2
@@ -81,7 +81,7 @@ describe('Transpiler Scope Edge Cases', () => {
             plotchar(sum, 'sum');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['sum']).toBeDefined();
         // Expected: (0+0) + (0+1) + (1+0) + (1+1) + (2+0) + (2+1) = 0 + 1 + 1 + 2 + 2 + 3 = 9
@@ -112,7 +112,7 @@ describe('Transpiler Scope Edge Cases', () => {
             plotchar(ema_result, 'ema');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['sma']).toBeDefined();
         expect(plots['ema']).toBeDefined();
@@ -136,7 +136,7 @@ describe('Transpiler Scope Edge Cases', () => {
             plotchar(outer, 'result');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['result']).toBeDefined();
         // Expected: 10 + (0*2) + (1*2) + (2*2) = 10 + 0 + 2 + 4 = 16
@@ -163,7 +163,7 @@ describe('Transpiler Scope Edge Cases', () => {
             plotchar(result, 'result');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['result']).toBeDefined();
         expect(typeof plots['result'].data[0].value).toBe('number');
@@ -190,7 +190,7 @@ describe('Transpiler Scope Edge Cases', () => {
             plotchar(x + y + z, 'outer');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['inner']).toBeDefined();
         expect(plots['outer']).toBeDefined();
@@ -228,7 +228,7 @@ plot(level2, "L2")
 plot(level3, "L3")
 `;
 
-        const { plots } = await pineTS.run(pineCode);
+        const { plots } = await pineTS.run(pineCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['L1']).toBeDefined();
         expect(plots['L2']).toBeDefined();
@@ -257,7 +257,7 @@ plot(val1, "V1")
 plot(val2, "V2")
 `;
 
-        const { plots } = await pineTS.run(pineCode);
+        const { plots } = await pineTS.run(pineCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['V1']).toBeDefined();
         expect(plots['V2']).toBeDefined();
@@ -300,7 +300,7 @@ plot(val2, "V2")
             plotchar(result, 'result');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
         expect(plots['result']).toBeDefined();
         expect(plots['result'].data[0].value).toBe(200);

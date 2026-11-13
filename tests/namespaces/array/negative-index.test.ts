@@ -27,7 +27,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 let a = array.from(10, 20, 30, 40, 50);
                 plotchar(array.get(a, -1), 'val');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val'].data[0].value).toBe(50);
         });
 
@@ -38,7 +38,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 let a = array.from(10, 20, 30, 40, 50);
                 plotchar(array.get(a, -5), 'val');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val'].data[0].value).toBe(10);
         });
 
@@ -51,7 +51,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 plotchar(array.get(a, -3), 'neg3');
                 plotchar(array.get(a, -4), 'neg4');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['neg2'].data[0].value).toBe(40);
             expect(plots['neg3'].data[0].value).toBe(30);
             expect(plots['neg4'].data[0].value).toBe(20);
@@ -65,7 +65,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 let oob = array.get(a, -4);
                 plotchar(oob, 'oob');
             `;
-            await expect(pineTS.run(code)).rejects.toThrow(PineRuntimeError);
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
         });
 
         it('should throw PineRuntimeError for negative index on empty array', async () => {
@@ -76,7 +76,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 let val = array.get(a, -1);
                 plotchar(val, 'val');
             `;
-            await expect(pineTS.run(code)).rejects.toThrow(/out of bounds/);
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(/out of bounds/);
         });
 
         it('should work with method syntax (a.get(-1))', async () => {
@@ -86,7 +86,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 let a = array.from(100, 200, 300);
                 plotchar(a.get(-1), 'val');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val'].data[0].value).toBe(300);
         });
 
@@ -97,7 +97,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 let a = array.from(42);
                 plotchar(array.get(a, -1), 'neg1');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['neg1'].data[0].value).toBe(42);
         });
 
@@ -109,7 +109,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 let oob = array.get(a, -2);
                 plotchar(oob, 'oob');
             `;
-            await expect(pineTS.run(code)).rejects.toThrow(PineRuntimeError);
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
         });
     });
 
@@ -124,7 +124,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 array.set(a, -1, 99);
                 plotchar(array.get(a, 4), 'val');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val'].data[0].value).toBe(99);
         });
 
@@ -136,7 +136,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 array.set(a, -3, 77);
                 plotchar(array.get(a, 0), 'val');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['val'].data[0].value).toBe(77);
         });
 
@@ -148,7 +148,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 array.set(a, -4, 99);
                 plotchar(array.get(a, 0), 'v0');
             `;
-            await expect(pineTS.run(code)).rejects.toThrow(PineRuntimeError);
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
         });
     });
 
@@ -165,7 +165,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 plotchar(array.size(a), 'size');
                 plotchar(array.last(a), 'last');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['removed'].data[0].value).toBe(400);
             expect(plots['size'].data[0].value).toBe(3);
             expect(plots['last'].data[0].value).toBe(300);
@@ -181,7 +181,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 plotchar(array.size(a), 'size');
                 plotchar(array.first(a), 'first');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['removed'].data[0].value).toBe(10);
             expect(plots['size'].data[0].value).toBe(2);
             expect(plots['first'].data[0].value).toBe(20);
@@ -195,7 +195,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 let removed = array.remove(a, -4);
                 plotchar(removed, 'removed');
             `;
-            await expect(pineTS.run(code)).rejects.toThrow(PineRuntimeError);
+            await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
         });
     });
 
@@ -214,7 +214,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 plotchar(array.get(a, 2), 'v2');
                 plotchar(array.get(a, 3), 'v3');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(4);
             expect(plots['v0'].data[0].value).toBe(10);
             expect(plots['v1'].data[0].value).toBe(20);
@@ -231,7 +231,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 plotchar(array.size(a), 'size');
                 plotchar(array.first(a), 'first');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['size'].data[0].value).toBe(4);
             expect(plots['first'].data[0].value).toBe(5);
         });
@@ -254,7 +254,7 @@ describe('Array Negative Index (v6 semantics)', () => {
                 plotchar(newLast, 'newLast');
                 plotchar(array.size(a), 'size');
             `;
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['secondLast'].data[0].value).toBe(4);
             expect(plots['removed'].data[0].value).toBe(50);
             expect(plots['newLast'].data[0].value).toBe(4);

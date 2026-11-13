@@ -20,7 +20,7 @@ describe('Strategy Namespace', () => {
                 // Access netprofit
                 const np = strategy.netprofit;
                 plotchar(np, 'NetProfit');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['Equity']).toBeDefined();
             expect(plots['NetProfit']).toBeDefined();
@@ -34,7 +34,7 @@ describe('Strategy Namespace', () => {
 
                 const posSize = strategy.position_size;
                 plotchar(posSize, 'PosSize');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['PosSize']).toBeDefined();
         });
@@ -53,7 +53,7 @@ describe('Strategy Namespace', () => {
                 plotchar(strategy.cash, 'CashConst');
                 plotchar(strategy.percent_of_equity, 'PercentConst');
                 plotchar(strategy.fixed, 'FixedConst');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['LongConst']).toBeDefined();
             expect(plots['ShortConst']).toBeDefined();

@@ -89,7 +89,7 @@ describe('request.footprint — bar-level aggregates', () => {
             const total = missing ? NaN : footprint.total_volume(fp);
             const delta = missing ? NaN : footprint.delta(fp);
             return { missing, buy, sell, total, delta };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(ctx.result.missing).toEqual([true, false, false, false, false, true]);
         expect(nth(ctx, 'buy', 2)).toBe(115);
@@ -111,7 +111,7 @@ describe('request.footprint — bar-level aggregates', () => {
             const fp = request.footprint(2);
             const missing = na(fp);
             return { missing };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(ctx.result.missing).toEqual([true, true, true, true]);
         expect(ctx.warnings.filter((w: any) => w.method === 'request.footprint')).toHaveLength(1);
@@ -123,7 +123,7 @@ describe('request.footprint — rows, POC, value area, imbalances', () => {
         const candles = Array.from({ length: 6 }, (_, i) => makeCandle(i));
         const pine = new PineTS(makeProvider(candles, makeFootprints()) as any, 'TEST', '1');
         await pine.ready();
-        return pine.run(script);
+        return pine.run(script, undefined, undefined, { sourceMode: 'trustedJavaScript' });
     }
 
     it('bins levels into ticks_per_row × mintick rows, contiguous from the lowest to the highest level', async () => {
@@ -315,7 +315,7 @@ describe('request.footprint — rows, POC, value area, imbalances', () => {
                 vah = volume_row.up_price(footprint.vah(fp));
             }
             return { n, poc, val, vah };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(last(ctx.result.n)).toBe(5);
         // POC: rows 1 and 2 tie at 30; the middle of the 5 rows is index 2 → row 101.0-101.5.
         expect(last(ctx.result.poc)).toBe(101);
@@ -349,7 +349,7 @@ indicator("va tolerance")
 fp = request.footprint(1, 70)
 plot(na(fp) ? na : fp.val().down_price(), "val")
 plot(na(fp) ? na : fp.vah().up_price(), "vah")
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             return { val: ctx.plots['val'].data[1].value, vah: ctx.plots['vah'].data[1].value };
         };
         expect(await valOf(0.009)).toEqual({ val: 100, vah: 101 });
@@ -384,7 +384,7 @@ plot(na(fp) ? na : fp.vah().up_price(), "vah")
                 vah = volume_row.up_price(footprint.vah(fp));
             }
             return { poc, val, vah };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         // Rows 1 and 2 are equidistant from the middle (1.5) → the lower one, 100.5-101.0.
         expect(last(ctx.result.poc)).toBe(100.5);
         // VA (target 70): POC 30, remaining 40 → above (30) beats below (20) → remaining 10
@@ -401,7 +401,7 @@ describe('request.footprint — Pine Script v6 syntax', () => {
         const candles = Array.from({ length: 6 }, (_, i) => makeCandle(i));
         const pine = new PineTS(makeProvider(candles, makeFootprints()) as any, 'TEST', '1');
         await pine.ready();
-        return pine.run(source);
+        return pine.run(source, undefined, undefined, { sourceMode: 'trustedJavaScript' });
     }
 
     it('supports the typed declarations, method-call syntax and row iteration of the reference manual', async () => {
@@ -575,7 +575,7 @@ describe('request.footprint — TradingView argument and runtime rules', () => {
     async function run(script: any, candles = Array.from({ length: 6 }, (_, i) => makeCandle(i)), footprints = makeFootprints()) {
         const pine = new PineTS(makeProvider(candles, footprints) as any, 'TEST', '1');
         await pine.ready();
-        return pine.run(script);
+        return pine.run(script, undefined, undefined, { sourceMode: 'trustedJavaScript' });
     }
 
     it('answers na on every bar for ticks_per_row = 0 or na, without an error', async () => {
@@ -755,7 +755,7 @@ g() =>
     fp = request.footprint(2)
     na(fp) ? -1.0 : fp.delta()
 plot(request.security("OTHER", "1", g()), "other")
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(ctx.plots['other'].data.map((p: any) => p.value)).toEqual([99, 100, 101, 102]);
     });
 });
@@ -801,7 +801,7 @@ describe('request.footprint — live updates', () => {
             const delta = na(fp) ? NaN : footprint.delta(fp);
             const total = na(fp) ? NaN : footprint.total_volume(fp);
             return { delta, total };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(last(ctx.result.delta)).toBe(6);
         expect(last(ctx.result.total)).toBe(14);
         // The initial load spans the whole history, from the first bar's openTime.

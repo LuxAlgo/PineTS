@@ -12,7 +12,7 @@ describe('Array indexOf with NaN/na Values', () => {
             let a = array.new_float(3, na);
             let idx = a.indexof(na);
             return { idx };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.idx[0]).toBe(-1);
     });
@@ -29,7 +29,7 @@ describe('Array indexOf with NaN/na Values', () => {
             a.push(4.0);
             let idx = a.indexof(na);
             return { idx };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.idx[0]).toBe(-1);
     });
@@ -44,7 +44,7 @@ describe('Array indexOf with NaN/na Values', () => {
             a.push(3.0);
             let idx = a.indexof(na);
             return { idx };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // No NaN in array, should return -1
         expect(result.idx[0]).toBe(-1);
@@ -60,7 +60,7 @@ describe('Array indexOf with NaN/na Values', () => {
             a.push(30.0);
             let idx = a.indexof(20.0);
             return { idx };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // 20.0 is at index 1
         expect(result.idx[0]).toBe(1);
@@ -78,7 +78,7 @@ describe('Array indexOf with NaN/na Values', () => {
             let minVal = dist.min();
             let idx = dist.indexof(minVal);
             return { idx, minVal };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // min is 0 (|0.5 - 0.5|), at index 1
         expect(result.idx[0]).toBe(1);
@@ -96,7 +96,7 @@ describe('Array indexOf with NaN/na Values', () => {
             let minVal = dist.min();
             let idx = dist.indexof(minVal);
             return { idx, minVal };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // min skips na on TradingView, so indexof finds the smallest value
         expect(result.minVal[0]).toBe(0.1);

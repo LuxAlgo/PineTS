@@ -54,6 +54,6 @@ export class UrlImportResolver extends BaseImportResolver<UrlImportResolverConfi
     protected _resolveNative(info: ImportInfo): Promise<string | null> {
         const url = this._url;
         if (!url) throw new Error('The Url import resolver has no "url" configured');
-        return fetchText(this._fetch, typeof url === 'function' ? url(info) : fillTemplate(url, info), this._headers);
+        return fetchText(this._fetch, typeof url === 'function' ? url(info) : fillTemplate(url, info), this._headers, info.signal);
     }
 }

@@ -14,7 +14,7 @@ import { Provider } from '../../src/marketData/Provider.class';
 
 async function lastValues(source: (context: any) => Record<string, string>) {
     const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, new Date('2019-01-01').getTime(), new Date('2019-01-02').getTime());
-    const { result } = await pineTS.run(source);
+    const { result } = await pineTS.run(source, undefined, undefined, { sourceMode: 'trustedJavaScript' });
     return Object.fromEntries(Object.entries(result).map(([k, v]: [string, any]) => [k, v[v.length - 1]]));
 }
 

@@ -12,8 +12,9 @@ export function pivotlow(context: any) {
             _leftbars = source;
             source = context.data.low;
         }
-        const leftbars = Series.from(_leftbars).get(0);
-        const rightbars = Series.from(_rightbars).get(0);
+        // TradingView truncates fractional strengths: (2.9, 1.9) behaves as (2, 1).
+        const leftbars = Math.trunc(Series.from(_leftbars).get(0));
+        const rightbars = Math.trunc(Series.from(_rightbars).get(0));
 
         // Only the candidate confirmed on the current bar is examined
         return context.precision(pivot(context, _callId, source, leftbars, rightbars, false));

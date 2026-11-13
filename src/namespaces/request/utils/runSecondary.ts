@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { compiledArtifactKind } from '../../../transpiler/analysis/VerifiedArtifact';
+
 /**
  * Run the script of a request.security / request.security_lower_tf secondary
  * context (`pineTS`, already built on the requested symbol + timeframe).
@@ -17,5 +19,9 @@ export async function runSecondary(context: any, pineTS: any, expressionName: un
     const exprNameStr = typeof expressionName === 'string' ? expressionName : '';
     const sliceKey = exprNameStr.match(/p\d+$/)?.[0] ?? exprNameStr;
     const slice = context._ltfTruncatedBodies?.[sliceKey];
-    return pineTS.runPretranspiled(slice ?? context.transpiledFn, context.inputs);
+    const compiled = slice ?? context.transpiledFn;
+    // A trusted-JavaScript run can still produce a verified Pine artifact.
+    // Its provenance, not the parent's requested mode, selects native Pine.
+    const sourceMode = compiledArtifactKind(compiled) === 'verifiedPine' ? 'nativePine' : context.sourceMode;
+    return pineTS.runPretranspiled(compiled, context.inputs, undefined, { sourceMode });
 }

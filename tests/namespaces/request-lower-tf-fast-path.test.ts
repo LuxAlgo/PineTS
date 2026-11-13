@@ -41,7 +41,7 @@ describe('request.security_lower_tf fast path for pure-builtin expressions', () 
             for (let i = 0; i < sz; i++) sum += res.get(i);
             plotchar(sum, 'sum');
             plotchar(sz, 'sz');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Cache shape: fast-path entries set `_fastPath: true` and
         // `pineTS: null`. This is the contract the fast-path streaming
@@ -82,7 +82,7 @@ describe('request.security_lower_tf fast path for pure-builtin expressions', () 
             const r = await request.security_lower_tf('BTCUSDC', 'D', [open, high, low, close, volume]);
             // r is a 5-element array of PineArrayObjects per chart bar.
             plotchar(r?.[0]?.size?.() ?? 0, 'sz');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const cacheKeys = Object.keys((context as any).cache || {});
         const ltfKey = cacheKeys.find((k) => k.includes('_lower'));
@@ -112,7 +112,7 @@ describe('request.security_lower_tf fast path for pure-builtin expressions', () 
             const { request, ta, plotchar } = context.pine;
             const res = await request.security_lower_tf('BTCUSDC', 'D', ta.sma(close, 3));
             plotchar(res?.size?.() ?? 0, 'sz');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const cacheKeys = Object.keys((context as any).cache || {});
         const ltfKey = cacheKeys.find((k) => k.includes('_lower'));
@@ -132,7 +132,7 @@ describe('request.security_lower_tf fast path for pure-builtin expressions', () 
             const { request, ta, plotchar } = context.pine;
             const r = await request.security_lower_tf('BTCUSDC', 'D', [close, ta.sma(close, 3)]);
             plotchar(r?.[0]?.size?.() ?? 0, 'sz');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const cacheKeys = Object.keys((context as any).cache || {});
         const ltfKey = cacheKeys.find((k) => k.includes('_lower'));
@@ -154,7 +154,7 @@ describe('request.security_lower_tf fast path for pure-builtin expressions', () 
             const sz = res?.size?.() ?? 0;
             for (let i = 0; i < sz; i++) s += res.get(i);
             plotchar(s, 'sum');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const slow = await makePineTS().run(async (context) => {
             const { close } = context.data;
@@ -164,7 +164,7 @@ describe('request.security_lower_tf fast path for pure-builtin expressions', () 
             const sz = res?.size?.() ?? 0;
             for (let i = 0; i < sz; i++) s += res.get(i);
             plotchar(s, 'sum');
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const fastData = (fast as any).plots['sum'].data;
         const slowData = (slow as any).plots['sum'].data;
@@ -200,7 +200,7 @@ mycandle = candle.new()
 ltf = request.security_lower_tf(syminfo.tickerid, "D", mycandle)
 plot(ltf.size(), "sz")
 `;
-        const context: any = await pineTS.run(code);
+        const context: any = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const cacheKeys = Object.keys(context.cache || {});
         const ltfKey = cacheKeys.find((k) => k.includes('_lower'));
         expect(ltfKey, 'cache entry expected').toBeDefined();
@@ -242,7 +242,7 @@ mycandle = candle.new()
 ltf = request.security_lower_tf(syminfo.tickerid, "D", mycandle)
 plot(ltf.size(), "sz")
 `;
-        const context: any = await pineTS.run(code);
+        const context: any = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const cacheKeys = Object.keys(context.cache || {});
         const ltfKey = cacheKeys.find((k) => k.includes('_lower'));
         const cached = context.cache[ltfKey!];
@@ -263,7 +263,7 @@ mycandle = candle.new()
 ltf = request.security_lower_tf(syminfo.tickerid, "D", mycandle)
 plot(ltf.size(), "sz")
 `;
-        const context: any = await pineTS.run(code);
+        const context: any = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const cacheKeys = Object.keys(context.cache || {});
         const ltfKey = cacheKeys.find((k) => k.includes('_lower'));
         const cached = context.cache[ltfKey!];

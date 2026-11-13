@@ -19,6 +19,14 @@
  * }
  * ```
  */
+export type PineRuntimeErrorCode =
+    | 'RUNTIME_ERROR'
+    | 'INVALID_ARGUMENT'
+    | 'RESOURCE_LIMIT'
+    | 'CANCELLED'
+    | 'DEADLINE_EXCEEDED'
+    | 'PROVIDER_FAILURE';
+
 export class PineRuntimeError extends Error {
     /**
      * The Pine Script method that caused the error (e.g. 'array.get', 'matrix.set').
@@ -26,9 +34,13 @@ export class PineRuntimeError extends Error {
      */
     public method?: string;
 
-    constructor(message: string, method?: string) {
+    /** Stable category for hosts; never infer control flow from message text. */
+    public readonly code: PineRuntimeErrorCode;
+
+    constructor(message: string, method?: string, code: PineRuntimeErrorCode = 'RUNTIME_ERROR') {
         super(message);
         this.name = 'PineRuntimeError';
         this.method = method;
+        this.code = code;
     }
 }

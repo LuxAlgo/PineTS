@@ -37,6 +37,8 @@ export interface ConstEnv {
     enums: Map<string, unknown>;
     /** Pine v5 truncates `const int / const int`; v6 divides fractionally. */
     truncatingIntDivision: boolean;
+    /** Script version: named colors differ before v6. */
+    pineVersion?: number | null;
 }
 
 export { SOURCE_BUILTINS };
@@ -267,7 +269,7 @@ function evalCall(node: any, env: ConstEnv): ConstValue | undefined {
         return { value: callee === 'str.upper' ? s.toUpperCase() : s.toLowerCase(), type: 'string', exact: vals[0].exact };
     }
 
-    if (callee === 'color.new' || callee === 'color.rgb') return evalColorCall(callee, vals);
+    if (callee === 'color.new' || callee === 'color.rgb') return evalColorCall(callee, vals, env.pineVersion);
 
     if (callee === 'timestamp' && vals.length === 1 && vals[0].type === 'string') return evalTimestamp(String(vals[0].value));
 
@@ -275,7 +277,7 @@ function evalCall(node: any, env: ConstEnv): ConstValue | undefined {
 }
 
 /** `color.new(col, transp)` / `color.rgb(r, g, b, transp?)` → #RRGGBBAA. transp is 0..100 (0 = opaque). */
-function evalColorCall(callee: string, vals: ConstValue[]): ConstValue | undefined {
+function evalColorCall(callee: string, vals: ConstValue[], pineVersion?: number | null): ConstValue | undefined {
     const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
     if (callee === 'color.rgb') {
         const [r, g, b, transp] = vals.map((v) => v.value);
@@ -284,7 +286,7 @@ function evalColorCall(callee: string, vals: ConstValue[]): ConstValue | undefin
         const a = clamp01((100 - (typeof transp === 'number' ? transp : 0)) / 100);
         return { value: rgbaToHex8(r, g, b, a), type: 'color', exact: false };
     }
-    const base = resolveColorToRgba(vals[0]?.value);
+    const base = resolveColorToRgba(vals[0]?.value, pineVersion);
     const transp = vals[1]?.value;
     if (!base || typeof transp !== 'number') return undefined;
     return { value: rgbaToHex8(base[0], base[1], base[2], clamp01((100 - transp) / 100)), type: 'color', exact: false };

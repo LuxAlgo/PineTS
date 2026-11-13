@@ -24,7 +24,7 @@ describe('Array Methods - Edge Cases', () => {
             plotchar(third, 'third');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['size'].data[0].value).toBe(5);
         expect(plots['first'].data[0].value).toBe(1);
         expect(plots['last'].data[0].value).toBe(5);
@@ -47,7 +47,7 @@ describe('Array Methods - Edge Cases', () => {
             plotchar(last, 'last');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['size'].data[0].value).toBe(5);
         expect(plots['first'].data[0].value).toBe(42.5);
         expect(plots['last'].data[0].value).toBe(42.5);
@@ -70,7 +70,7 @@ describe('Array Methods - Edge Cases', () => {
             plotchar(range_val, 'range');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['range'].data[0].value).toBe(7);
     });
 
@@ -87,7 +87,7 @@ describe('Array Methods - Edge Cases', () => {
             plotchar(size, 'size');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['size'].data[0].value).toBe(0);
     });
 
@@ -112,7 +112,7 @@ describe('Array Methods - Edge Cases', () => {
             plotchar(last, 'last');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['first'].data[0].value).toBe(1);
         expect(plots['last'].data[0].value).toBe(5);
     });
@@ -137,7 +137,7 @@ describe('Array Methods - Edge Cases', () => {
             plotchar(first_idx, 'first_idx');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['first_idx']).toBeDefined();
         // First index should point to smallest value (1 is at index 3)
         expect(plots['first_idx'].data[0].value).toBe(3);
@@ -158,7 +158,7 @@ describe('Array Methods - Edge Cases', () => {
             plotchar(first, 'standardized');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['standardized']).toBeDefined();
         const val = plots['standardized'].data[0].value;
         expect(val === 1).toBe(true);
@@ -182,7 +182,7 @@ describe('Array Methods - Edge Cases', () => {
         `;
 
         // TradingView: "In 'array.slice()' function. Index -2 is out of bounds, array size is 5."
-        await expect(pineTS.run(code)).rejects.toThrow('Index -2 is out of bounds, array size is 5.');
+        await expect(pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow('Index -2 is out of bounds, array size is 5.');
     });
 
     it('array operations should handle boundary conditions', async () => {
@@ -202,7 +202,7 @@ describe('Array Methods - Edge Cases', () => {
             plotchar(sum, 'sum');
         `;
 
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['sum']).toBeDefined();
         // Sum of empty array should be 0 or NaN
         const val = plots['sum'].data[0].value;

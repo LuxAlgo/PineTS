@@ -20,7 +20,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const { result, plots } = context;
 
         const plotdata = plots['_plotchar']?.data;
@@ -63,7 +63,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata = plots['_plotchar']?.data;
         const sDate = new Date('2025-10-01').getTime();
@@ -106,7 +106,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const plotdata = plots['_plotchar']?.data;
 
@@ -148,7 +148,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const plotdata = plots['_plotchar']?.data;
 
@@ -189,7 +189,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const plotdata = plots['_plotchar']?.data;
 
@@ -231,7 +231,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const plotdata = plots['_plotchar']?.data;
 
@@ -278,7 +278,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const plotdata = plots['_plotchar']?.data;
 
@@ -326,7 +326,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata = plots['_plotchar']?.data;
         const sDate = new Date('2025-08-01').getTime();
@@ -382,7 +382,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata = plots['_plotchar']?.data;
         const sDate = new Date('2025-08-01').getTime();
@@ -436,7 +436,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata = plots['_plotchar']?.data;
         const sDate = new Date('2025-08-01').getTime();
@@ -486,7 +486,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const plotdata = plots['_plotchar']?.data;
 
@@ -533,7 +533,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const plotdata = plots['_plotchar']?.data;
 
@@ -580,7 +580,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -626,7 +626,7 @@ describe('Request ', () => {
             return {
                 res,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -696,7 +696,7 @@ describe('Request (Binance - transpiled Pine Script)', () => {
 indicator("Test")
 _daily_close = request.security(syminfo.tickerid, "D", close)
 plot(_daily_close, "_dc")
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const data = extractPlot(plots, '_dc', sDate, eDate);
 
@@ -726,7 +726,7 @@ plot(_daily_close, "_dc")
 indicator("Test")
 _monthly_close = request.security(syminfo.tickerid, "M", close)
 plot(_monthly_close, "_mc")
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const data = extractPlot(plots, '_mc', sDate, eDate);
 
@@ -767,7 +767,7 @@ plot(sec_open, "_so")
 plot(sec_close, "_sc")
 plot(open, "_o")
 plot(close, "_c")
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const secOpen = extractPlot(plots, '_so', sDate, eDate);
         const secClose = extractPlot(plots, '_sc', sDate, eDate);
@@ -806,7 +806,7 @@ plot(sec_vol, "_sv")
 plot(high, "_h")
 plot(low, "_l")
 plot(volume, "_v")
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const secHigh = extractPlot(plots, '_sh', sDate, eDate);
         const secLow = extractPlot(plots, '_sl', sDate, eDate);
@@ -850,7 +850,7 @@ int maLenInput = input.int(20, "MA Length", minval = 5)
 [ltfV, ltfVma] = request.security_lower_tf(syminfo.tickerid, "60", [volume, ta.sma(volume, maLenInput)])
 plot(not na(ltfV) ? ltfV.size() : 0,   "_n")
 plot(not na(ltfVma) ? ltfVma.size() : 0, "_m")
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const sizes = plots['_n']?.data || [];
         const matchedSizes = plots['_m']?.data || [];
@@ -885,7 +885,7 @@ float chart_close_self  = request.security(syminfo.tickerid, timeframe.period, c
 plot(close,            "_btc")
 plot(eth_close_chartTF, "_eth")
 plot(chart_close_self,  "_self")
-`);
+`, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const btc  = extractPlot(plots, '_btc',  sDate, eDate);
         const eth  = extractPlot(plots, '_eth',  sDate, eDate);
@@ -941,7 +941,7 @@ plot(v, "v")
             new Date('2025-10-01').getTime(),
             new Date('2025-10-05').getTime(),
         );
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const data = plots['v'].data;
         expect(data.length).toBeGreaterThan(0);
         // Same-TF with `close` expression — every bar's value must equal close on that bar.
@@ -977,8 +977,8 @@ plot(v, "v")
                 new Date('2025-10-15').getTime(),
             );
 
-        const { plots: posPlots } = await mk().run(positionalCode);
-        const { plots: namPlots } = await mk().run(namedCode);
+        const { plots: posPlots } = await mk().run(positionalCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
+        const { plots: namPlots } = await mk().run(namedCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const pos = posPlots['v'].data;
         const nam = namPlots['v'].data;
@@ -1007,7 +1007,7 @@ plot(v, "v")
             new Date('2025-09-01').getTime(),
             new Date('2025-10-15').getTime(),
         );
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['v'].data.length).toBeGreaterThan(0);
     });
 
@@ -1036,7 +1036,7 @@ plot(v, "v")
             new Date('2025-09-01').getTime(),
             new Date('2025-10-15').getTime(),
         );
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const data = plots['v'].data;
         expect(data.length).toBeGreaterThan(0);
         // The chart's last bar must read 42 (the gated value at the secondary's
@@ -1065,7 +1065,7 @@ plot(c, "c")
             new Date('2025-10-01').getTime(),
             new Date('2025-10-05').getTime(),
         );
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots['o'].data.length).toBeGreaterThan(0);
         expect(plots['c'].data.length).toBeGreaterThan(0);
         // Both should be valid numbers (same-TF shortcut returns open/close as-is)

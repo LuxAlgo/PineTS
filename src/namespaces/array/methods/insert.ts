@@ -3,6 +3,7 @@
 import { PineArrayObject } from '../PineArrayObject';
 import { isValueOfType } from '../utils';
 import { PineRuntimeError } from '../../../errors/PineRuntimeError';
+import { preflightArrayGrowth } from '../capacity';
 
 export function insert(context: any) {
     return (id: PineArrayObject, index: number, value: any): void => {
@@ -23,6 +24,7 @@ export function insert(context: any) {
                 'array.insert'
             );
         }
+        preflightArrayGrowth(id.array, 1, context, 'array.insert');
         id.array.splice(resolved, 0, value);
     };
 }

@@ -32,6 +32,8 @@
  */
 
 import * as astring from 'astring';
+import { ClosedWorldViolation } from '../analysis/ClosedWorldVerifier';
+import { compilePineArtifact } from '../analysis/VerifiedArtifact';
 
 const SLICING_TARGETS = new Set(['security_lower_tf', 'security']);
 
@@ -308,7 +310,7 @@ function buildPhase3SliceStmts(wrapperBody: any, path: any[]): any[] | null {
 }
 
 /** Wrap a sliced statement list back into an async arrow Function. */
-function buildSliceFunction(wrapperFn: any, slicedStmts: any[]): Function {
+function buildSliceFunction(wrapperFn: any, slicedStmts: any[], compileFinal: (code: string) => Function): Function {
     const slicedAst = {
         type: 'Program',
         sourceType: 'module',
@@ -323,11 +325,10 @@ function buildSliceFunction(wrapperFn: any, slicedStmts: any[]): Function {
         }],
     };
     const code = astring.generate(slicedAst as any);
-    const wrapped = `var _r = ${code}\n; return _r;`;
-    return new Function('', wrapped)();
+    return compileFinal(code);
 }
 
-export function buildLtfSlices(ast: any): Record<string, Function> {
+export function buildLtfSlices(ast: any, compileFinal: (code: string) => Function = compilePineArtifact): Record<string, Function> {
     const slices: Record<string, Function> = {};
 
     if (!ast || ast.type !== 'Program' || !Array.isArray(ast.body) || ast.body.length === 0) {
@@ -365,8 +366,14 @@ export function buildLtfSlices(ast: any): Record<string, Function> {
         }
         if (!stmts || stmts.length === 0) continue;
 
-        const sliceFn = buildSliceFunction(wrapperFn, stmts);
-        slices[exprName] = sliceFn;
+        try {
+            slices[exprName] = buildSliceFunction(wrapperFn, stmts, compileFinal);
+        } catch (error) {
+            // A slice may omit a later declaration that the full script needs.
+            // Leave that call on the verified full-script path rather than
+            // compiling a fragment with a free host-realm reference.
+            if (!(error instanceof ClosedWorldViolation || error instanceof SyntaxError)) throw error;
+        }
     }
 
     return slices;

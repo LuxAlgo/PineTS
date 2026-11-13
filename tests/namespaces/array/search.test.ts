@@ -21,7 +21,7 @@ describe('Array Search & Lookup', () => {
             return { a, i, li, res };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -80,7 +80,7 @@ describe('Array Search & Lookup', () => {
             return { a, res, p, plm, prm };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {

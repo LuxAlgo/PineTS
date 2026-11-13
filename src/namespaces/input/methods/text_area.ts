@@ -5,6 +5,6 @@ import { parseInputOptionsCached, resolveInput } from '../utils';
 export function text_area(context: any) {
     return (...args: any[]) => {
         const options = parseInputOptionsCached(context, args);
-        return resolveInput(context, options);
+        return resolveInput(context, options, 'text_area');
     };
 }

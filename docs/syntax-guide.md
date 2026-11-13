@@ -8,6 +8,8 @@ nav_order: 8
 
 This guide explains how to write PineTS code that is equivalent to Pine Script. PineTS is designed to be written in JavaScript/TypeScript but behaves like Pine Script's runtime execution model.
 
+These JavaScript examples require an explicit trusted source mode when passed to `run()`: `await pine.run(jsFunction, undefined, undefined, { sourceMode: 'trustedJavaScript' })`. Native Pine Script with a `//@version` marker remains the default; see [Source Modes](source-mode.md). Do not use the trusted mode for code from an untrusted source.
+
 ## Variable Declarations
 
 PineTS distinguishes between `let` and `var` declarations to mimic Pine Script's behavior. This is a critical difference from standard JavaScript.

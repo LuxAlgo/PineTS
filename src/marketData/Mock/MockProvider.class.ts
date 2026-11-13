@@ -10,6 +10,17 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const MAX_FIXTURE_DIRECTORY_ENTRIES = 10_000;
+const MAX_FIXTURE_NAME_LENGTH = 255;
+
+function parseFixtureTimestamp(value: string): number | null {
+    if (!value) return null;
+    for (const char of value) {
+        if (char < '0' || char > '9') return null;
+    }
+    const timestamp = Number(value);
+    return Number.isSafeInteger(timestamp) ? timestamp : null;
+}
 
 /** Config for MockProvider. */
 export interface MockProviderConfig {
@@ -109,44 +120,43 @@ export class MockProvider extends BaseProvider<MockProviderConfig> {
             return null;
         }
 
-        const files = fs.readdirSync(this.dataDirectory).filter((file) => file.endsWith('.json'));
+        if (tickerId.length + timeframe.length + 2 + '0-0.json'.length > MAX_FIXTURE_NAME_LENGTH) return null;
+        const prefix = `${tickerId}-${timeframe}-`;
+        const exactMatch = sDate && eDate ? `${prefix}${sDate}-${eDate}.json` : null;
+        let mostRecent: { file: string; endTime: number } | null = null;
+        let containing: { file: string; endTime: number } | null = null;
+        let scanned = 0;
+        const directory = fs.opendirSync(this.dataDirectory);
 
-        // If we have date range, try exact match first
-        if (sDate && eDate) {
-            const exactMatch = `${tickerId}-${timeframe}-${sDate}-${eDate}.json`;
-            if (files.includes(exactMatch)) {
-                return exactMatch;
+        try {
+            let entry: fs.Dirent | null;
+            while ((entry = directory.readSync()) !== null) {
+                if (++scanned > MAX_FIXTURE_DIRECTORY_ENTRIES) {
+                    throw new Error('Mock fixture directory entry limit exceeded');
+                }
+                const file = entry.name;
+                if (file.length > MAX_FIXTURE_NAME_LENGTH || !file.startsWith(prefix) || !file.endsWith('.json')) continue;
+                if (file === exactMatch) return file;
+
+                const dates = file.slice(prefix.length, -'.json'.length);
+                const separator = dates.indexOf('-');
+                if (separator < 0 || separator !== dates.lastIndexOf('-')) continue;
+                const startTime = parseFixtureTimestamp(dates.slice(0, separator));
+                const endTime = parseFixtureTimestamp(dates.slice(separator + 1));
+                if (startTime === null || endTime === null || startTime > endTime) continue;
+
+                if (!mostRecent || endTime > mostRecent.endTime) mostRecent = { file, endTime };
+                if (sDate && eDate && startTime <= sDate && endTime >= eDate &&
+                    (!containing || endTime > containing.endTime)) {
+                    containing = { file, endTime };
+                }
             }
+        } finally {
+            directory.closeSync();
         }
 
-        // Find files matching symbol and timeframe pattern
-        const pattern = new RegExp(`^${tickerId}-${timeframe}-(\\d+)-(\\d+)\\.json$`);
-        const matchingFiles = files
-            .filter((file) => pattern.test(file))
-            .map((file) => {
-                const match = file.match(pattern)!;
-                return {
-                    file,
-                    startTime: parseInt(match[1]),
-                    endTime: parseInt(match[2]),
-                };
-            })
-            .sort((a, b) => b.endTime - a.endTime); // Sort by endTime descending (most recent first)
-
-        if (matchingFiles.length === 0) {
-            return null;
-        }
-
-        // If we have date range, find file that contains it
-        if (sDate && eDate) {
-            const containingFile = matchingFiles.find((f) => f.startTime <= sDate && f.endTime >= eDate);
-            if (containingFile) {
-                return containingFile.file;
-            }
-        }
-
-        // Return the most recent file (likely contains the data we need)
-        return matchingFiles[0].file;
+        // Prefer a containing range; otherwise use the most recent fixture.
+        return containing?.file ?? mostRecent?.file ?? null;
     }
 
     /**

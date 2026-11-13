@@ -49,7 +49,7 @@ fill(a, b, 100, 90, color.green, color.red, title="Grad2")`);
         expect(plots['G3']).toBeDefined();
         expect(plots['G3'].options.gradient).toBe(true);
         expect(plots['G3'].data[0].options.top_color).toMatch(/^#4caf50/i);
-        expect(plots['G3'].data[0].options.bottom_color).toMatch(/^#f23645/i);
+        expect(plots['G3'].data[0].options.bottom_color).toMatch(/^#ff5252/i); // v5 color.red
     });
 
     it('named display / fillgaps reach the gradient fill options', async () => {
@@ -73,6 +73,6 @@ fill(a, b, color.red, title="Plain")`);
         expect(plots['AllNamed'].options.gradient).toBe(true);
         expect(plots['AllNamed'].data[0].options).toMatchObject({ top_value: 100, bottom_value: 90 });
         expect(plots['Plain'].options.gradient).toBeUndefined();
-        expect(plots['Plain'].data[0].options.color).toMatch(/^#f23645/i);
+        expect(plots['Plain'].data[0].options.color).toMatch(/^#ff5252/i); // v5 color.red
     });
 });

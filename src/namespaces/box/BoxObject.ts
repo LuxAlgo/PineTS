@@ -114,7 +114,8 @@ export class BoxObject {
     get_bottom(): number { return this._deleted ? NaN : this.bottom; }
 
     delete(): void {
-        this._deleted = true;
+        if (this._helper) this._helper.delete(this);
+        else this._deleted = true;
     }
 
     toPlotData(): any {

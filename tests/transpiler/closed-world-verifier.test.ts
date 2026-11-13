@@ -9,8 +9,10 @@
 // case is an ordinary script that must keep transpiling unchanged.
 
 import { describe, it, expect } from 'vitest';
+import * as acorn from 'acorn';
 import { transpile } from '../../src/transpiler/index';
-import { ClosedWorldViolation } from '../../src/transpiler/analysis/ClosedWorldVerifier';
+import { ClosedWorldViolation, verifyClosedWorld } from '../../src/transpiler/analysis/ClosedWorldVerifier';
+import { buildLtfSlices } from '../../src/transpiler/slicing/buildLtfSlices';
 import { PineTS } from '../../src/PineTS.class';
 import { Provider } from '../../src/marketData/Provider.class';
 
@@ -21,6 +23,45 @@ indicator("t")
 function newPineTS() {
     return new PineTS(Provider.Mock, 'BTCUSDC', '60', null, new Date('2024-01-01').getTime(), new Date('2024-01-10').getTime());
 }
+
+describe('closed-world verifier — lexical bindings', () => {
+    const verify = (code: string) => verifyClosedWorld(acorn.parse(code, { ecmaVersion: 'latest' }));
+
+    it('does not let a parameter authorize a reference outside its function', () => {
+        expect(() => verify('(() => { function unused(hiddenValue) { return hiddenValue; } return hiddenValue; })();'))
+            .toThrow(/Undeclared identifier "hiddenValue"/);
+    });
+
+    it('does not let a sibling block or catch binding authorize a reference', () => {
+        expect(() => verify('(() => { { let hiddenValue = 1; } return hiddenValue; })();'))
+            .toThrow(/Undeclared identifier "hiddenValue"/);
+        expect(() => verify('(() => { try {} catch (hiddenValue) {} return hiddenValue; })();'))
+            .toThrow(/Undeclared identifier "hiddenValue"/);
+    });
+
+    it('still accepts bindings visible through lexical or var scope', () => {
+        expect(() => verify('(() => { let value = 1; { value; } return value; })();')).not.toThrow();
+        expect(() => verify('(() => { { var value = 1; } return value; })();')).not.toThrow();
+    });
+
+    it('rejects a disjoint parameter in native Pine output', () => {
+        expect(() => transpile(H + 'unused(hiddenValue) => hiddenValue\nplot(hiddenValue)'))
+            .toThrow(/Undeclared identifier "hiddenValue"/);
+    });
+});
+
+describe('request slices — final artifact verification', () => {
+    it('does not register a slice that lost a later var binding', () => {
+        const ast = acorn.parse(`async ($) => {
+            const request = $.pine.request;
+            const result = await request.security_lower_tf('X', '1', hiddenValue);
+            var hiddenValue = 1;
+            return result;
+        };`, { ecmaVersion: 'latest' });
+        const slices = buildLtfSlices(ast);
+        expect(slices).not.toHaveProperty('hiddenValue');
+    });
+});
 
 describe('closed-world verifier — rejects host / prototype / internal escapes', () => {
     it('rejects a bare host global (globalThis / process / fetch)', () => {
@@ -50,6 +91,10 @@ describe('closed-world verifier — rejects host / prototype / internal escapes'
 
     it('rejects __proto__ / prototype access', () => {
         expect(() => transpile(H + `p = close.__proto__\nplot(close)`)).toThrow(/reserved property "__proto__"/);
+        expect(() => transpile(H + `m = matrix.new<float>(1, 1, 0)\nplot(m.matrix.length)`)).toThrow(/reserved property "matrix"/);
+        expect(() => transpile(H + `m = matrix.new<float>(1, 1, 0)\nplot(m._matrix.length)`)).toThrow(/reserved property "(?:_)?matrix"/);
+        expect(() => transpile(H + `a = array.new<float>(1, 0)\nplot(a.array.concat(a.array).length)`)).toThrow(/reserved property "array"/);
+        expect(() => transpile(H + `m = map.new<string, float>()\nplot(m.map.size)`)).toThrow(/reserved property "map"/);
     });
 
     it('rejects `this`', () => {
@@ -105,8 +150,8 @@ plot(strategy.closedtrades)`,
         });
     }
 
-    it('can be disabled with verify:false (escape hatch)', () => {
-        expect(() => transpile(H + `x = process.version\nplot(close)`, { debug: false, verify: false })).not.toThrow();
+    it('does not allow verify:false to bypass versioned Pine verification', () => {
+        expect(() => transpile(H + `x = process.version\nplot(close)`, { debug: false, verify: false })).toThrow(/verification/);
     });
 });
 
@@ -115,8 +160,9 @@ describe('pineOnly — rejects markerless source (treated as raw JavaScript)', (
     it('rejects a markerless string when pineOnly is set', () => {
         expect(() => transpile(rawJs, { debug: false, pineOnly: true })).toThrow(/version marker required/);
     });
-    it('still accepts markerless source by default (PineTS-syntax contract)', () => {
-        expect(() => transpile(rawJs)).not.toThrow();
+    it('accepts markerless source only under explicit trusted JavaScript mode', () => {
+        expect(() => transpile(rawJs)).toThrow(/version marker required/);
+        expect(() => transpile(rawJs, { debug: false, sourceMode: 'trustedJavaScript' })).not.toThrow();
     });
     it('accepts Pine Script with a version marker under pineOnly', () => {
         expect(() => transpile(H + `plot(close)`, { debug: false, pineOnly: true })).not.toThrow();

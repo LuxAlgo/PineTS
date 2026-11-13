@@ -13,7 +13,7 @@ function getTimezoneOffsetMinutes(timestamp: number, timezone: string): number {
     if (tz === 'UTC' || tz === 'GMT' || tz === 'Etc/UTC') return 0;
 
     // UTC/GMT offset notation: "UTC+5", "GMT-03:30"
-    const offsetMatch = tz.match(/^(?:UTC|GMT)([+-])(\d{1,2})(?::(\d{2}))?$/i);
+    const offsetMatch = tz.match(/^(?:UTC|GMT)([+-])(\d{1,2})(?::?(\d{2}))?$/i);
     if (offsetMatch) {
         const sign = offsetMatch[1] === '+' ? 1 : -1;
         const hours = parseInt(offsetMatch[2], 10);

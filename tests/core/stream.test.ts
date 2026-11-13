@@ -18,7 +18,7 @@ describe('Stream API', () => {
             };
 
             // Use larger interval to ensure price changes in mock
-            const evt = pineTS.stream(indicator, { pageSize: 10, live: true, interval: 1000 });
+            const evt = pineTS.stream(indicator, { pageSize: 10, live: true, interval: 1000 , sourceMode: 'trustedJavaScript'});
 
             let pageCount = 0;
             let distinctCloseValues: any[] = [];
@@ -91,7 +91,7 @@ describe('Stream API', () => {
                 return { close };
             };
 
-            const evt = pineTS.stream(indicator, { pageSize: 50, live: false });
+            const evt = pineTS.stream(indicator, { pageSize: 50, live: false , sourceMode: 'trustedJavaScript'});
 
             let eventCount = 0;
             let lastEventTime = Date.now();
@@ -141,7 +141,7 @@ describe('Stream API', () => {
         const pageSizes: number[] = [];
 
         return new Promise<void>((resolve, reject) => {
-            const evt = pineTS.stream(sourceCode, { pageSize, live: false, interval: 0 });
+            const evt = pineTS.stream(sourceCode, { pageSize, live: false, interval: 0 , sourceMode: 'trustedJavaScript'});
 
             evt.on('data', (pageContext: any) => {
                 const currentPageSize = pageContext.result.sma.length;
@@ -159,7 +159,7 @@ describe('Stream API', () => {
                     // We reuse the same pineTS instance which already has data loaded ideally,
                     // or it will refetch/use cached.
                     // Important: ensure run() uses same periods
-                    const completeContext = (await pineTS.run(sourceCode, periods)) as any;
+                    const completeContext = (await pineTS.run(sourceCode, periods, undefined, { sourceMode: 'trustedJavaScript' })) as any;
                     const completeSma = completeContext.result.sma;
 
                     // Verify page structure

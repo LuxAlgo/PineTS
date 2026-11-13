@@ -28,7 +28,7 @@ describe('MATH Namespace', () => {
                     abs_var,
                     abs_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -89,7 +89,7 @@ describe('MATH Namespace', () => {
                     avg_var,
                     avg_single,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -148,7 +148,7 @@ describe('MATH Namespace', () => {
                     log_var,
                     log_thousand,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -209,7 +209,7 @@ describe('MATH Namespace', () => {
                     max_var,
                     max_three,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -270,7 +270,7 @@ describe('MATH Namespace', () => {
                     min_var,
                     min_three,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -329,7 +329,7 @@ describe('MATH Namespace', () => {
                     pow_var,
                     pow_ten,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -388,7 +388,7 @@ describe('MATH Namespace', () => {
                     sqrt_var,
                     sqrt_sixteen,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();
@@ -448,7 +448,7 @@ describe('MATH Namespace', () => {
                     sum_var,
                     sum_open,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();

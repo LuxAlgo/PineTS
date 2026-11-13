@@ -73,6 +73,8 @@ import { wma } from './methods/wma';
 import { wpr } from './methods/wpr';
 import { wvad } from './methods/wvad';
 
+import { wrapTaLengthPolicy } from './lengthPolicy';
+
 const getters = {
 
 };
@@ -226,7 +228,7 @@ export class TechnicalAnalysis {
     
     // Install methods
     Object.entries(methods).forEach(([name, factory]) => {
-      this[name] = factory(context);
+      this[name] = wrapTaLengthPolicy(name, factory(context));
     });
   }
 }

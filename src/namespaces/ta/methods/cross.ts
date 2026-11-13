@@ -9,9 +9,8 @@ import { crossPair } from '../utils/naAware';
  * Detects when two series cross each other (either direction).
  * Returns true if series1 crosses series2 (either above or below).
  *
- * Formula:
- * cross = (source1[0] > source2[0] && source1[1] <= source2[1]) ||
- *         (source1[0] < source2[0] && source1[1] >= source2[1])
+ * Formula (as TradingView evaluates it):
+ * cross = (source1[0] > source2[0]) != (source1[1] > source2[1])
  *
  * @param source1 - First data series
  * @param source2 - Second data series
@@ -27,12 +26,8 @@ export function cross(context: any) {
             return false;
         }
 
-        // Check if series1 crossed above series2 (crossover)
-        const crossedOver = current1 > current2 && prev1 <= prev2;
-
-        // Check if series1 crossed below series2 (crossunder)
-        const crossedUnder = current1 < current2 && prev1 >= prev2;
-
-        return crossedOver || crossedUnder;
+        // TradingView reports a change of `source1 > source2`, which is not crossover || crossunder:
+        // 3 -> 4 against 3 crosses, but 3 -> 2 against 3 does not (crossunder alone fires).
+        return current1 > current2 !== prev1 > prev2;
     };
 }

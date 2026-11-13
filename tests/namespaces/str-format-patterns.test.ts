@@ -35,7 +35,7 @@ describe('Str.tostring Format Patterns', () => {
             return { r1, r2, r3 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('123');
@@ -54,7 +54,7 @@ describe('Str.tostring Format Patterns', () => {
             return { r1, r2, r3 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('123.5');
@@ -73,7 +73,7 @@ describe('Str.tostring Format Patterns', () => {
             return { r1, r2, r3 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('123.46');
@@ -90,7 +90,7 @@ describe('Str.tostring Format Patterns', () => {
             return { r1 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('3.1416');
@@ -108,7 +108,7 @@ describe('Str.tostring Format Patterns', () => {
             return { r1, r2 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('integer124');
@@ -126,7 +126,7 @@ describe('Str.tostring Format Patterns', () => {
             return { r1, r2 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('0.46%');
@@ -142,7 +142,7 @@ describe('Str.tostring Format Patterns', () => {
             return { r1 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('1.235M');
@@ -157,7 +157,7 @@ describe('Str.tostring Format Patterns', () => {
             return { r1 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('NaN');
@@ -173,7 +173,7 @@ describe('Str.tostring Format Patterns', () => {
             return { r1, r2 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('42.5');
@@ -194,7 +194,7 @@ describe('Str.format Extended Patterns', () => {
             return { r1 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('123.46');
@@ -209,7 +209,7 @@ describe('Str.format Extended Patterns', () => {
             return { r1 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         // A plain {N} number is grouped like TradingView's "#,##0.###" ("1,000")
@@ -225,7 +225,7 @@ describe('Str.format Extended Patterns', () => {
             return { r1 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('Count: 100');
@@ -240,7 +240,7 @@ describe('Str.format Extended Patterns', () => {
             return { r1 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('3.1 / 2.718');
@@ -255,7 +255,7 @@ describe('Str.format Extended Patterns', () => {
             return { r1 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.r1)).toBe('not_a_number');

@@ -165,7 +165,7 @@ class Linker {
         }
         let ast: any;
         try {
-            ast = new Parser(new Lexer(source).tokenize()).parse();
+            ast = new Parser(new Lexer(source).tokenize(), { version }).parse();
         } catch (e) {
             throw new Error(`Failed to parse library "${spec.path}": ${(e as Error).message}`);
         }

@@ -125,6 +125,8 @@ export function order(context: any) {
             oca_name: ocaName,
             oca_type: ocaType as 'cancel' | 'reduce' | 'none' | undefined,
             comment: commentValue,
+            alert_message: extractValue(parsed.alert_message),
+            disable_alert: extractValue(parsed.disable_alert),
         };
 
         // An order with the id of an unfilled strategy.order / strategy.entry modifies it instead of

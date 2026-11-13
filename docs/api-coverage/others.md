@@ -42,5 +42,5 @@ parent: API Coverage
 
 | Function           | Status |
 | ------------------ | ------ |
-| `alert()`          |        |
-| `alertcondition()` |        |
+| `alert()`          | ✅     |
+| `alertcondition()` | ✅     |

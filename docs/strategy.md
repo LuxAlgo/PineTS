@@ -11,6 +11,8 @@ PineTS implements Pine Script's full `strategy.*` surface so you can run Trading
 
 This page is the developer reference. For the surface checklist (every `strategy.*` entry mapped to its implementation status) see the **[Strategy API coverage page](api-coverage/strategy.md)**.
 
+The JavaScript callback examples below opt into `trustedJavaScript` explicitly. Use that mode only for code you trust; versioned Pine Script needs no mode option. See [Source Modes](source-mode.md).
+
 Every example below is exercised by a verification harness at `PineTS/.scratchpad/strategy-doc-examples.cjs` (kept in lock-step with the docs during authoring). If something doesn't behave as documented, the harness fails.
 
 ## Table of Contents
@@ -64,7 +66,7 @@ const ctx = await pine.run(($) => {
     if ($.idx === 10) {
         strategy.close('long');
     }
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
 // 3. Inspect the final state.
 const s = ctx.strategy;
@@ -117,7 +119,7 @@ await pine.run(($) => {
         slippage: 2,                            // in ticks of syminfo.mintick
         pyramiding: 3,
     });
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 After the call, `context.strategy.config` holds the merged options (defaults + your overrides) and the rest of `context.strategy` is initialized — see the [object reference below](#the-contextstrategy-object).
@@ -165,7 +167,7 @@ await pine.run(($) => {
         // Pine: strategy.order(id, direction, qty, limit?, stop?, ...)
         strategy.order('long1', strategy.long, 1);
     }
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 After this run, `context.strategy.opentrades[0]` is `{ entry_id: 'long1', size: 1, entry_price: <bar-2 open>, ... }`.
@@ -389,7 +391,7 @@ await pine.run(($) => {
 
     // Used as a namespace (per-trade getter):
     // const lastProfit = strategy.closedtrades.profit(0);
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 **From plain JS code outside the callback** (and on the returned context), it's an array — use index access:
@@ -603,7 +605,7 @@ await pine.run(($) => {
         r.max_intraday_filled_orders(10);   // halt for the day after 10 fills
         r.max_cons_loss_days(3);            // halt after 3 consecutive losing days
     }
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
 // Inspect after the run:
 const ctx = /* ... */;
@@ -628,7 +630,7 @@ await pine.run(($) => {
     const inUsd  = strategy.convert_to_account(100);  // 100 (passthrough for same-currency)
     const inSym  = strategy.convert_to_symbol(100);   // 100
     const qty    = strategy.default_entry_qty(50000); // (equity * 10%) / 50000
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 ---

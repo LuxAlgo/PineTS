@@ -17,7 +17,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -72,7 +72,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -127,7 +127,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -182,7 +182,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -237,7 +237,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -292,7 +292,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -347,7 +347,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -403,7 +403,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             plotchar(volume, 'volume');
         };
 
-        const { plots } = await pineTS.run(sourceCode);
+        const { plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const values = (key: string) => plots[key].data.map((d) => d.value);
         const [iii, c, h, l, v] = ['plot', 'close', 'high', 'low', 'volume'].map(values);
 

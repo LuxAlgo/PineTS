@@ -18,7 +18,7 @@ describe('Timeframe Namespace', () => {
         // But we still need to pass 'tf' as timeframe to constructor so context.timeframe is set correctly
         const pineTS = new PineTS(mockData, 'BTCUSDC', tf, null, sDate, eDate);
 
-        const resultContext = await pineTS.run(code);
+        const resultContext = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         return resultContext.result;
     };
 

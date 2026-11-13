@@ -6,6 +6,8 @@ import { Context } from './Context.class';
 import { Provider } from './marketData/Provider.class';
 import { Indicator } from './Indicator';
 import { PineRuntimeError } from './errors/PineRuntimeError';
+export type { PineRuntimeErrorCode } from './errors/PineRuntimeError';
+export type { SourceMode } from './security/SourceMode';
 
 // Provider classes for direct instantiation
 export { BaseProvider } from './marketData/BaseProvider';

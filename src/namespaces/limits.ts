@@ -15,6 +15,16 @@ import { PineRuntimeError } from '../errors/PineRuntimeError';
  */
 export const MAX_COLLECTION_ELEMENTS = 100_000;
 
+/** Maximum UTF-16 code units in one Pine string (at most 2 MiB of string data). */
+export const MAX_STRING_CODE_UNITS = 1_000_000;
+
+export function assertStringLength(length: number, method: string): void {
+    if (!Number.isSafeInteger(length) || length < 0 || length > MAX_STRING_CODE_UNITS) {
+        throw new PineRuntimeError(`The requested string exceeds the ${MAX_STRING_CODE_UNITS} character limit.`, method,
+            Number.isSafeInteger(length) && length > MAX_STRING_CODE_UNITS ? 'RESOURCE_LIMIT' : 'INVALID_ARGUMENT');
+    }
+}
+
 /**
  * Throw a Pine runtime error when a requested element count exceeds the cap.
  * `method` names the Pine built-in (`array.new`, `matrix.new`, …) so a host can
@@ -24,7 +34,8 @@ export function assertElementCount(count: number, method: string): void {
     if (!Number.isFinite(count) || count > MAX_COLLECTION_ELEMENTS) {
         throw new PineRuntimeError(
             `The requested size exceeds the ${MAX_COLLECTION_ELEMENTS} element limit.`,
-            method
+            method,
+            Number.isFinite(count) ? 'RESOURCE_LIMIT' : 'INVALID_ARGUMENT'
         );
     }
 }
@@ -46,10 +57,11 @@ export const MAX_REQUEST_CONTEXTS = 40;
  * secondary returns early), so the counter it carries is the run-wide total.
  */
 export function trackRequestContext(context: any, method: string): void {
-    context.secondaryContextCount = (context.secondaryContextCount || 0) + 1;
-    if (context.secondaryContextCount > MAX_REQUEST_CONTEXTS) {
-        throw new PineRuntimeError('The script executes too many request.*() function calls.', method);
+    const nextCount = (context.secondaryContextCount || 0) + 1;
+    if (nextCount > MAX_REQUEST_CONTEXTS) {
+        throw new PineRuntimeError('The script executes too many request.*() function calls.', method, 'RESOURCE_LIMIT');
     }
+    context.secondaryContextCount = nextCount;
 }
 
 /**

@@ -17,16 +17,21 @@ export function change(context: any) {
         // The value `length` bars back (in a local block, a skipped bar repeating the last call's value)
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `change_${length}`;
-        const carry: CarryHistory = (context.taState[stateKey] ??= new CarryHistory());
+        const carry: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, true, context.executionBudget));
         const series = Series.from(source);
         const currentValue = series.get(0);
-        carry.push(context.idx, currentValue, length, series);
+        carry.push(context.idx, currentValue, length, series, context.executionBudget);
 
         if (!(length >= 0) || carry.h.size <= length) {
             return NaN;
         }
 
-        const change = currentValue - carry.h.at(length);
+        const previous = carry.h.at(length);
+        // The bool overload reports whether the value changed.
+        if (typeof currentValue === 'boolean') {
+            return previous === undefined || previous === null || Number.isNaN(Number(previous)) ? NaN : Number(currentValue) !== Number(previous);
+        }
+        const change = currentValue - previous;
         return context.precision(change);
     };
 }

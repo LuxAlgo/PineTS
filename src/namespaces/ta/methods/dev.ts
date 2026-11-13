@@ -3,6 +3,7 @@
 import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
 import { CarryHistory } from '../utils/history';
+import { chargeTaWork } from '../utils/assertTaLength';
 
 export function dev(context: any) {
     return (source: any, _length: any, _callId?: string) => {
@@ -15,8 +16,8 @@ export function dev(context: any) {
         // gives na.
         if (!context.taState) context.taState = {};
         const stateKey = _callId || `dev_${length}`;
-        const bars: CarryHistory = (context.taState[stateKey] ??= new CarryHistory());
-        bars.push(context.idx, series.get(0), length, series);
+        const bars: CarryHistory = (context.taState[stateKey] ??= new CarryHistory(0, undefined, true, context.executionBudget));
+        bars.push(context.idx, series.get(0), length, series, context.executionBudget);
         const sma = nonNaWindow(context, `${stateKey}_mean`, series, length);
 
         if (!sma || bars.h.size < length) {
@@ -26,6 +27,7 @@ export function dev(context: any) {
         // The mean moves every bar, so every |x - mean| changes: no running form
         const mean = sma.sum / length;
         const values = bars.h.view(length);
+        chargeTaWork(context, length, 'ta.dev');
         let sumDeviation = 0;
         for (let i = 0; i < length; i++) {
             sumDeviation += Math.abs(values[length - 1 - i] - mean);

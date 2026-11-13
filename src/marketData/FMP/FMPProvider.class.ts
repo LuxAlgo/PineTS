@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { ISymbolInfo, ApiKeyProviderConfig } from '@pinets/marketData/IProvider';
+import { ISymbolInfo, ApiKeyProviderConfig, ProviderRequestOptions } from '@pinets/marketData/IProvider';
 import { BaseProvider } from '@pinets/marketData/BaseProvider';
 import { stripTickerModifier } from '../../tickerModifier';
 import { Kline, PeriodType, computeNextPeriodStart, computeSessionClose } from '@pinets/marketData/types';
+import { readBudgetedJson, readBudgetedText } from '../readBudgetedJson';
+import { requestProviderPage } from '../requestProviderPage';
+import { PineRuntimeError } from '../../errors/PineRuntimeError';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -236,6 +239,7 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
         limit?: number,
         sDate?: number,
         eDate?: number,
+        options?: ProviderRequestOptions,
     ): Promise<Kline[]> {
         this.ensureConfigured();
 
@@ -250,9 +254,9 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
 
             let klines: Kline[];
             if (mapping.type === 'intraday') {
-                klines = await this._fetchIntradayData(tickerId, mapping.endpoint, mapping.interval!, sDate, eDate, limit);
+                klines = await this._fetchIntradayData(tickerId, mapping.endpoint, mapping.interval!, sDate, eDate, limit, options);
             } else {
-                klines = await this._fetchDailyData(tickerId, sDate, eDate, limit);
+                klines = await this._fetchDailyData(tickerId, sDate, eDate, limit, options);
             }
 
             // Compute and cache mintick from historical data if not already cached
@@ -265,6 +269,7 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
 
             return klines;
         } catch (error) {
+            if (error instanceof PineRuntimeError) throw error;
             console.error('Error in FMPProvider.getMarketData:', error);
             return [];
         }
@@ -278,21 +283,23 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
         sDate?: number,
         eDate?: number,
         limit?: number,
+        options?: ProviderRequestOptions,
     ): Promise<Kline[]> {
         let url = `${this._baseUrl}/stable/historical-price-eod/full?symbol=${encodeURIComponent(tickerId)}&apikey=${this._apiKey}`;
 
         if (sDate) url += `&from=${this._msToDateStr(sDate)}`;
         if (eDate) url += `&to=${this._msToDateStr(eDate)}`;
 
-        const response = await fetch(url);
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(`FMP HTTP ${response.status}: ${text}`);
-        }
-
-        const data: FMPDailyBar[] = await response.json();
+        const data = await requestProviderPage(url, {}, options, async (response) => {
+            if (!response.ok) {
+                const text = await readBudgetedText(response, options?.budget);
+                throw new Error(`FMP HTTP ${response.status}: ${text}`);
+            }
+            return readBudgetedJson<FMPDailyBar[]>(response, options?.budget);
+        });
 
         if (!Array.isArray(data) || data.length === 0) return [];
+        options?.recordRawBars?.(data.length);
 
         // FMP returns data in DESCENDING order (newest first) — reverse to oldest first
         data.reverse();
@@ -303,7 +310,7 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
             : data;
 
         // Resolve session info for closeTime computation
-        const { session, timezone } = await this._resolveSessionInfo(tickerId);
+        const { session, timezone } = await this._resolveSessionInfo(tickerId, options);
 
         // Convert to Kline
         const klines: Kline[] = bars.map((bar) => {
@@ -340,29 +347,31 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
         sDate?: number,
         eDate?: number,
         limit?: number,
+        options?: ProviderRequestOptions,
     ): Promise<Kline[]> {
         let url = `${this._baseUrl}${endpoint}?symbol=${encodeURIComponent(tickerId)}&apikey=${this._apiKey}`;
 
         if (sDate) url += `&from=${this._msToDateStr(sDate)}`;
         if (eDate) url += `&to=${this._msToDateStr(eDate)}`;
 
-        const response = await fetch(url);
-        if (!response.ok) {
-            const text = await response.text();
-            // Check for restricted endpoint error (free plan)
-            if (response.status === 403 || text.includes('Restricted Endpoint')) {
-                console.error(
-                    `FMP: Intraday data (${interval}) requires a paid plan. ` +
-                    `Use daily timeframe ('D') with a free API key, or upgrade at https://financialmodelingprep.com/`
-                );
-                return [];
+        const data = await requestProviderPage(url, {}, options, async (response) => {
+            if (!response.ok) {
+                const text = await readBudgetedText(response, options?.budget);
+                // Check for restricted endpoint error (free plan)
+                if (response.status === 403 || text.includes('Restricted Endpoint')) {
+                    console.error(
+                        `FMP: Intraday data (${interval}) requires a paid plan. ` +
+                        `Use daily timeframe ('D') with a free API key, or upgrade at https://financialmodelingprep.com/`
+                    );
+                    return [] as FMPIntradayBar[];
+                }
+                throw new Error(`FMP HTTP ${response.status}: ${text}`);
             }
-            throw new Error(`FMP HTTP ${response.status}: ${text}`);
-        }
-
-        const data: FMPIntradayBar[] = await response.json();
+            return readBudgetedJson<FMPIntradayBar[]>(response, options?.budget);
+        });
 
         if (!Array.isArray(data) || data.length === 0) return [];
+        options?.recordRawBars?.(data.length);
 
         // FMP returns intraday data in DESCENDING order — reverse
         data.reverse();
@@ -374,7 +383,7 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
         const { periodType, multiplier } = FMP_INTERVAL_PERIOD[interval] || { periodType: 'minute' as const, multiplier: 1 };
 
         // Resolve session info for closeTime computation
-        const { session, timezone } = await this._resolveSessionInfo(tickerId);
+        const { session, timezone } = await this._resolveSessionInfo(tickerId, options);
 
         const klines: Kline[] = bars.map((bar) => {
             const openTime = this._dateTimeStrToMs(bar.date);
@@ -401,7 +410,7 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
 
     // ── Symbol Info ──────────────────────────────────────────────────────
 
-    async getSymbolInfo(tickerId: string): Promise<ISymbolInfo> {
+    async getSymbolInfo(tickerId: string, options?: ProviderRequestOptions): Promise<ISymbolInfo> {
         this.ensureConfigured();
         tickerId = stripTickerModifier(tickerId); // chart-type modifiers never reach the venue API
 
@@ -411,7 +420,7 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
         }
 
         try {
-            const profile = await this._fetchProfile(tickerId);
+            const profile = await this._fetchProfile(tickerId, options);
 
             // Determine asset type from profile or ticker heuristics
             // Check forex BEFORE crypto since EURUSD matches both patterns
@@ -497,6 +506,7 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
 
             return symbolInfo;
         } catch (error) {
+            if (error instanceof PineRuntimeError) throw error;
             console.error('Error in FMPProvider.getSymbolInfo:', error);
             return null;
         }
@@ -542,17 +552,17 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
         return bucketed;
     }
 
-    private async _fetchProfile(tickerId: string): Promise<FMPProfile | null> {
+    private async _fetchProfile(tickerId: string, options?: ProviderRequestOptions): Promise<FMPProfile | null> {
         // Check cache
         if (this._profileCache.has(tickerId)) {
             return this._profileCache.get(tickerId)!;
         }
 
         const url = `${this._baseUrl}/stable/profile?symbol=${encodeURIComponent(tickerId)}&apikey=${this._apiKey}`;
-        const response = await fetch(url);
-        if (!response.ok) return null;
-
-        const data = await response.json();
+        const data = await requestProviderPage(url, {}, options, async (response) => {
+            if (!response.ok) return [] as FMPProfile[];
+            return readBudgetedJson<FMPProfile[]>(response, options?.budget);
+        });
         if (!Array.isArray(data) || data.length === 0) return null;
 
         const profile = data[0] as FMPProfile;
@@ -564,9 +574,9 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
      * Resolve session string and timezone for a ticker by fetching its profile.
      * Falls back to NYSE defaults if profile is unavailable.
      */
-    private async _resolveSessionInfo(tickerId: string): Promise<{ session: string; timezone: string }> {
+    private async _resolveSessionInfo(tickerId: string, options?: ProviderRequestOptions): Promise<{ session: string; timezone: string }> {
         try {
-            const profile = await this._fetchProfile(tickerId);
+            const profile = await this._fetchProfile(tickerId, options);
             if (profile) {
                 const exchange = profile.exchange || '';
                 const isCrypto = this._isCrypto(tickerId);
@@ -574,7 +584,8 @@ export class FMPProvider extends BaseProvider<FMPProviderConfig> {
                 const session = isCrypto ? '24x7' : (EXCHANGE_SESSION[exchange] || '0930-1600');
                 return { session, timezone };
             }
-        } catch {
+        } catch (error) {
+            if (error instanceof PineRuntimeError) throw error;
             // Ignore — fall through to defaults
         }
         return { session: '0930-1600', timezone: 'America/New_York' };

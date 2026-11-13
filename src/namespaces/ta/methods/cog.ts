@@ -3,6 +3,7 @@
 import { Series } from '../../../Series';
 import { nonNaWindow } from '../utils/nonNaWindow';
 import { CarryHistory } from '../utils/history';
+import { chargeTaWork } from '../utils/assertTaLength';
 
 /**
  * Center of Gravity (COG)
@@ -33,8 +34,8 @@ export function cog(context: any) {
         let num = 0;
         if (_callId && length >= 1) {
             if (!context.taState) context.taState = {};
-            const bars: CarryHistory = (context.taState[_callId] ??= new CarryHistory(2));
-            bars.push(context.idx, sourceSeries.get(0), length, sourceSeries);
+            const bars: CarryHistory = (context.taState[_callId] ??= new CarryHistory(2, undefined, true, context.executionBudget));
+            bars.push(context.idx, sourceSeries.get(0), length, sourceSeries, context.executionBudget);
             const calls = nonNaWindow(context, `${_callId}_sum`, sourceSeries, length);
             // S and N weighing the newest value `length`: Σ x_i * (i + 1) = (length + 1) * S - N
             const h = bars.h;
@@ -42,6 +43,7 @@ export function cog(context: any) {
             sum = calls.sum;
             num = (length + 1) * h.sum(length) - h.wsum(length);
         } else {
+            chargeTaWork(context, length, 'ta.cog');
             for (let i = 0; i < length; i++) {
                 const value = sourceSeries.get(i);
                 if (isNaN(value)) {

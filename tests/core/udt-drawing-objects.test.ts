@@ -34,7 +34,7 @@ container.ln.set_xy1(bar_index, high)
 container.ln.set_xy2(bar_index, low)
 plot(close)
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Line should be created and accessible
         expect(plots['__lines__']).toBeDefined();
@@ -70,7 +70,7 @@ container.lb.set_xy(bar_index, high)
 container.lb.set_text("Price: " + str.tostring(close, "#.##"))
 plot(close)
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__labels__']).toBeDefined();
         const labels = plots['__labels__'].data[0].value;
@@ -99,7 +99,7 @@ container.bx.set_lefttop(bar_index - 5, high)
 container.bx.set_rightbottom(bar_index, low)
 plot(close)
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__boxes__']).toBeDefined();
         const boxes = plots['__boxes__'].data[0].value;
@@ -141,7 +141,7 @@ myContainer.bx.set_lefttop(bar_index - 4, ta.highest(high, 5))
 myContainer.bx.set_rightbottom(bar_index, ta.lowest(low, 5))
 plot(close, "Price Plot", color=color.new(#5b9cf6, 50))
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // All three drawing object types should exist
         expect(plots['__lines__']).toBeDefined();
@@ -188,7 +188,7 @@ plot(close, "Price Plot", color=color.new(#5b9cf6, 50))
             var y2 = container.ln.get_y2();
 
             return { x1, y1, x2, y2 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.x1[0]).toBe(42);
         expect(result.y1[0]).toBe(500);
@@ -213,7 +213,7 @@ plot(close, "Price Plot", color=color.new(#5b9cf6, 50))
             var y = container.lb.get_y();
 
             return { text, x, y };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.text[0]).toBe('updated');
         expect(result.x[0]).toBe(42);
@@ -238,7 +238,7 @@ plot(close, "Price Plot", color=color.new(#5b9cf6, 50))
             var bottom = container.bx.get_bottom();
 
             return { left, top, right, bottom };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.left[0]).toBe(42);
         expect(result.top[0]).toBe(500);
@@ -266,7 +266,7 @@ container.ln.set_x1(bar_index)
 container.ln.set_y1(close)
 plot(close)
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const lines = plots['__lines__'].data[0].value;
         // Should still be 1 line (var persists, not recreated)
@@ -296,7 +296,7 @@ plot(obj.bx.get_top())
 `;
         // In Pine Script, obj.bx is na → get_top() returns na → plot shows gap (no crash)
         // The key assertion is that run() completes without throwing
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
     });
 
@@ -310,7 +310,7 @@ type MyObj
 var MyObj obj = MyObj.new()
 plot(obj.ln.get_x1())
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
     });
 
@@ -324,7 +324,7 @@ type MyObj
 var MyObj obj = MyObj.new()
 plot(obj.lb.get_x())
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
     });
 
@@ -353,7 +353,7 @@ plot(obj.lb.get_x())
             const newColor = lf.color;
 
             return { isSameLine1, isSameLine2, newColor };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.isSameLine1[0]).toBe(true);
         expect(result.isSameLine2[0]).toBe(true);
@@ -378,7 +378,7 @@ obj.lf.get_line2().set_xy1(bar_index - 5, open)
 obj.lf.set_color("#ff0000")
 plot(close)
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         expect(plots).toBeDefined();
     });
 
@@ -400,7 +400,7 @@ plot(close)
             var y1 = container.ln.get_y1();
 
             return { x1, y1 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.x1[0]).toBe(42);
         expect(result.y1[0]).toBe(500);
@@ -424,7 +424,7 @@ describe('var Drawing Objects (non-UDT, regression)', () => {
             line.set_xy1(myLine, bar_index, high);
             line.set_xy2(myLine, bar_index, low);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const lines = plots['__lines__'].data[0].value;
         expect(lines.filter((l: any) => !l._deleted).length).toBe(1);
@@ -437,7 +437,7 @@ describe('var Drawing Objects (non-UDT, regression)', () => {
             var myLabel = label.new(0, 100, 'test');
             label.set_xy(myLabel, bar_index, high);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const labels = plots['__labels__'].data[0].value;
         expect(labels.filter((l: any) => !l._deleted).length).toBe(1);
@@ -451,7 +451,7 @@ describe('var Drawing Objects (non-UDT, regression)', () => {
             box.set_lefttop(myBox, bar_index - 5, high);
             box.set_rightbottom(myBox, bar_index, low);
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const boxes = plots['__boxes__'].data[0].value;
         expect(boxes.filter((b: any) => !b._deleted).length).toBe(1);
@@ -483,7 +483,7 @@ plot(m.size(), "size")
 plot(m.get("b"), "val_b")
 plot(m.contains("a") ? 1 : 0, "has_a")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const lastVal = (plotName: string) => {
             const data = plots[plotName]?.data;
@@ -508,7 +508,7 @@ if bar_index == 0
 plot(m.size(), "size")
 plot(m.contains(1) ? 1 : 0, "has_1")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const lastVal = (plotName: string) => {
             const data = plots[plotName]?.data;
@@ -558,7 +558,7 @@ myContainer.bx.set_lefttop(bar_index - lookback + 1, top)
 myContainer.bx.set_rightbottom(bar_index, bottom)
 plot(close, "Price Plot", color = color.new(MAIN_COLOR, 50))
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // All drawing types present
         expect(plots['__lines__']).toBeDefined();
@@ -611,7 +611,7 @@ container.persistent_lb.set_xy(bar_index, high)
 container.persistent_lb.set_text(str.tostring(bar_index))
 plot(close)
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const lines = plots['__lines__'].data[0].value.filter((l: any) => !l._deleted);
         const labels = plots['__labels__'].data[0].value.filter((l: any) => !l._deleted);
@@ -639,7 +639,7 @@ level.ln.set_xy1(0, level.price)
 level.ln.set_xy2(bar_index, level.price)
 plot(level.price, "level_price")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__lines__']).toBeDefined();
         const lines = plots['__lines__'].data[0].value.filter((l: any) => !l._deleted);

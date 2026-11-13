@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { transpile } from 'transpiler';
+import { transpile as transpileSource } from 'transpiler';
+
+// These fixtures intentionally exercise the legacy PineTS/JavaScript syntax.
+function transpile(source: string | Function) {
+    return transpileSource(source, { debug: false, sourceMode: 'trustedJavaScript' });
+}
 
 /**
  * The goal of this test is to ensure the stability of the transpiler.
@@ -546,7 +551,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   const temp_3 = ta.pivothigh(p4, p5, "_ta2");
   const p6 = $.param(temp_3, undefined, 'p6');
   const p7 = $.param($.get(p6, 1), undefined, 'p7');
-  $.let.glb1_highUsePivot = $.init($.let.glb1_highUsePivot, fixnan(p7));
+  $.let.glb1_highUsePivot = $.init($.let.glb1_highUsePivot, fixnan(p7, "fixnan#0"));
 }`;
 
         expect(result).toBe(expected_code);
@@ -891,6 +896,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   $.let.glb1__cc = $.init($.let.glb1__cc, close);
   let __lg0 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, 1); i++) {
+    $.chargeLoopIteration();
     if (++__lg0 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg0)");
     $.let.for2_bb = $.init($.let.for2_bb, 1);
     $.let.for2_cc = $.init($.let.for2_cc, close);
@@ -909,60 +915,70 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   ;
   let __lg1 = 0;
   for (let i = 0; i < 10; i++) {
+    $.chargeLoopIteration();
     if (++__lg1 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg1)");
     $.set($.let.glb1_aa, i);
   }
   ;
   let __lg2 = 0;
   for (let i = 0; i < $.get($.let.glb1_aa, 0); i++) {
+    $.chargeLoopIteration();
     if (++__lg2 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg2)");
     $.set($.let.glb1__cc, $.get($.let.glb1__cc, i));
   }
   ;
   let __lg3 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, 0); i++) {
+    $.chargeLoopIteration();
     if (++__lg3 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg3)");
     $.set($.let.glb1_aa, i);
   }
   ;
   let __lg4 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, 1); i++) {
+    $.chargeLoopIteration();
     if (++__lg4 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg4)");
     $.set($.let.glb1_aa, i);
   }
   ;
   let __lg5 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, $.get($.let.glb1_aa, 0)); i++) {
+    $.chargeLoopIteration();
     if (++__lg5 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg5)");
     $.set($.let.glb1_aa, i);
   }
   ;
   let __lg6 = 0;
   for (let i = 0; i < $.get($.let.glb1__cc, $.let.glb1_aa[99]); i++) {
+    $.chargeLoopIteration();
     if (++__lg6 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg6)");
     $.set($.let.glb1_aa, i);
   }
   ;
   let __lg7 = 0;
   for (let i = 0; i < $.get(close, 0); i++) {
+    $.chargeLoopIteration();
     if (++__lg7 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg7)");
     $.set($.let.glb1_aa, i);
   }
   ;
   let __lg8 = 0;
   for (let i = 0; i < $.get(close, 1); i++) {
+    $.chargeLoopIteration();
     if (++__lg8 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg8)");
     $.set($.let.glb1_aa, i);
   }
   ;
   let __lg9 = 0;
   for (let i = 0; i < $.get(close, $.get($.let.glb1_aa, 0)); i++) {
+    $.chargeLoopIteration();
     if (++__lg9 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg9)");
     $.set($.let.glb1_aa, i);
   }
   ;
   let __lg10 = 0;
   for (let i = 0; i < $.get(close, $.let.glb1_aa[99]); i++) {
+    $.chargeLoopIteration();
     if (++__lg10 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg10)");
     $.set($.let.glb1_aa, i);
   }
@@ -1036,6 +1052,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   $.const.glb1_aa = $.init($.const.glb1_aa, 1);
   function angle(src) {
     const $$ = $.peekCtx();
+    src = $.callParam(src, $$.id + "_cp_src");
     $$.const.fn1_rad2degree = $.init($$.const.fn1_rad2degree, 180 / Math.PI);
     const p0 = ta.param(14, undefined, $$.id + 'p0');
     const temp_1 = ta.atr(p0, $$.id + "_ta0");
@@ -1046,6 +1063,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   }
   function get_average(avg_src, avg_len) {
     const $$ = $.peekCtx();
+    avg_src = $.callParam(avg_src, $$.id + "_cp_avg_src");
     $$.let.fn2_bb = $.init($$.let.fn2_bb, 1);
     $$.let.fn2_cc = $.init($$.let.fn2_cc, close);
     $.set($$.let.fn2_cc, $.get(close, 1));
@@ -1061,6 +1079,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $$.let.fn2_ret_val = $.init($$.let.fn2_ret_val, 0);
     let __lg0 = 0;
     for (let i = 1; i <= $.get(avg_len, 0); i++) {
+      $.chargeLoopIteration();
       if (++__lg0 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg0)");
       $.set($$.let.fn2_ret_val, $.get($$.let.fn2_ret_val, 0) + $.get(avg_src, i));
     }
@@ -1246,6 +1265,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
   $.const.glb1_aa = $.init($.const.glb1_aa, 1);
   function get_average(avg_src, avg_len) {
     const $$ = $.peekCtx();
+    avg_src = $.callParam(avg_src, $$.id + "_cp_avg_src");
     $$.let.fn1_bb = $.init($$.let.fn1_bb, 1);
     $$.let.fn1_cc = $.init($$.let.fn1_cc, close);
     $.set($$.let.fn1_cc, $.get(close, 1));
@@ -1261,6 +1281,7 @@ let src_open = input.any({ title: 'Open Source', defval: open });
     $$.let.fn1_ret_val = $.init($$.let.fn1_ret_val, 0);
     let __lg0 = 0;
     for (let i = 1; i <= $.get(avg_len, 0); i++) {
+      $.chargeLoopIteration();
       if (++__lg0 > __maxLoops) $.loopError("Loop exceeded maximum iterations (__lg0)");
       $.set($$.let.fn1_ret_val, $.get($$.let.fn1_ret_val, 0) + $.get(avg_src, i));
     }

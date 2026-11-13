@@ -73,6 +73,34 @@ describe('input options', () => {
         expect(last(plots, 'flag')).toBe(0);
     });
 
+    it('preserves named and positional option lists while rejecting out-of-list overrides', async () => {
+        const optionCode = `//@version=6
+indicator("option lists")
+named = input.string("A", "Named", options = ["A", "B"])
+positional = input.int(1, "Positional", [1, 2])
+plot(named == "B" ? 1 : 0, "named")
+plot(positional, "positional")`;
+        const run = (inputs: Record<string, unknown>) =>
+            new PineTS(bars.slice(0, 3), 'TEST', '1').run(new Indicator(optionCode, inputs));
+
+        const { plots } = await run({ Named: 'B', Positional: 2 });
+        expect(last(plots, 'named')).toBe(1);
+        expect(last(plots, 'positional')).toBe(2);
+        await expect(run({ Named: 'C' })).rejects.toThrow(RangeError);
+        await expect(run({ Positional: 3 })).rejects.toThrow(RangeError);
+    });
+
+    it('compares overrides with constant values in an option list', async () => {
+        const optionCode = `//@version=6
+indicator("constant options")
+first = "high/low"
+second = "close"
+kind = input.string(first, "Kind", options = [first, second])
+plot(kind == second ? 1 : 0, "kind")`;
+        const { plots } = await new PineTS(bars.slice(0, 3), 'TEST', '1').run(new Indicator(optionCode, { Kind: 'close' }));
+        expect(last(plots, 'kind')).toBe(1);
+    });
+
     it('are not shared between runs with different overrides', async () => {
         const a = await new PineTS(bars, 'TEST', '1').run(new Indicator(code, { Length: 5 }));
         const b = await new PineTS(bars, 'TEST', '1').run(new Indicator(code, { Length: 9 }));

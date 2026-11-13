@@ -25,7 +25,7 @@ describe('PineScript Language', () => {
                 val,
                 container,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: History');
         console.log('>>> result: ', context.result);
@@ -64,7 +64,7 @@ describe('PineScript Language', () => {
             return {
                 _avg,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Compound Assignment');
         console.log('>>> result: ', context.result);
@@ -100,7 +100,7 @@ describe('PineScript Language', () => {
                 letVar,
                 constVar,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Variable Declaration Types (var, let, const)');
         console.log('>>> result: ', context.result);
@@ -136,7 +136,7 @@ describe('PineScript Language', () => {
                 res,
                 data,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata = plots['_plotchar']?.data;
         const sDate = new Date('2025-08-01').getTime();
@@ -192,7 +192,7 @@ describe('PineScript Language', () => {
                 strVal,
                 floatVal,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Variable Type Inference');
         console.log('>>> result: ', context.result);
@@ -247,7 +247,7 @@ describe('PineScript Language', () => {
                 flag,
                 value,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Variable Initialization with Default Values');
         console.log('>>> result: ', context.result);
@@ -305,7 +305,7 @@ describe('PineScript Language', () => {
                 letVar,
                 varVar,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Variable Reassignment');
         console.log('>>> result: ', context.result);
@@ -344,7 +344,7 @@ describe('PineScript Language', () => {
                 globalVar,
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Global Scope Variables');
         console.log('>>> result: ', context.result);
@@ -381,7 +381,7 @@ describe('PineScript Language', () => {
                 outerVar,
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Block Scope Isolation');
         console.log('>>> result: ', context.result);
@@ -416,7 +416,7 @@ describe('PineScript Language', () => {
             return {
                 outerResult,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Variable Shadowing');
         console.log('>>> result: ', context.result);
@@ -450,7 +450,7 @@ describe('PineScript Language', () => {
                 globalVar,
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Function Parameter Scope');
         console.log('>>> result: ', context.result);
@@ -485,7 +485,7 @@ describe('PineScript Language', () => {
             return {
                 outer,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Nested Scope Variable Access');
         console.log('>>> result: ', context.result);
@@ -519,7 +519,7 @@ describe('PineScript Language', () => {
                 prev1,
                 prev5,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: History Access with Literal Index');
         console.log('>>> result: ', context.result);
@@ -553,7 +553,7 @@ describe('PineScript Language', () => {
                 val,
                 prevAtIndex,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: History Access with Variable Index');
         console.log('>>> result: ', context.result);
@@ -586,7 +586,7 @@ describe('PineScript Language', () => {
                 val,
                 nestedAccess,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: History Access with Nested Index');
         console.log('>>> result: ', context.result);
@@ -621,7 +621,7 @@ describe('PineScript Language', () => {
                 farBack,
                 zeroIndex,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: History Access Edge Cases');
         console.log('>>> result: ', context.result);
@@ -656,7 +656,7 @@ describe('PineScript Language', () => {
                 val,
                 firstBarAccess,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Series Initialization on First Bar');
         console.log('>>> result: ', context.result);
@@ -695,7 +695,7 @@ describe('PineScript Language', () => {
                 mod,
                 pow,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Arithmetic Operators');
         console.log('>>> result: ', context.result);
@@ -725,7 +725,7 @@ describe('PineScript Language', () => {
                 gte,
                 lte,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Comparison Operators');
         console.log('>>> result: ', context.result);
@@ -824,7 +824,7 @@ describe('PineScript Language', () => {
                 orOp,
                 notOp,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Logical Operators');
         console.log('>>> result: ', context.result);
@@ -898,7 +898,7 @@ describe('PineScript Language', () => {
                 result,
                 nested,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Ternary Operator');
         console.log('>>> result: ', context.result);
@@ -930,7 +930,7 @@ describe('PineScript Language', () => {
                 neg,
                 not,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Unary Operators');
         console.log('>>> result: ', context.result);
@@ -976,7 +976,7 @@ describe('PineScript Language', () => {
                 divAssign,
                 modAssign,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Compound Assignment Operators');
         console.log('>>> result: ', context.result);
@@ -1011,7 +1011,7 @@ describe('PineScript Language', () => {
                 parenOverride,
                 andBeforeOr,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Operator Precedence');
         console.log('>>> result: ', context.result);
@@ -1045,7 +1045,7 @@ describe('PineScript Language', () => {
                 nanCompare,
                 nanCompare2,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: NaN Comparisons');
         console.log('>>> result: ', context.result);
@@ -1079,7 +1079,7 @@ describe('PineScript Language', () => {
                 shortAnd,
                 shortOr,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Short-Circuit Evaluation');
         console.log('>>> result: ', context.result);
@@ -1133,7 +1133,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: If Statement');
         console.log('>>> result: ', context.result);
@@ -1165,7 +1165,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: If-Else Statement');
         console.log('>>> result: ', context.result);
@@ -1201,7 +1201,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: If-Else If-Else Chain');
         console.log('>>> result: ', context.result);
@@ -1237,7 +1237,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Nested If Statements');
         console.log('>>> result: ', context.result);
@@ -1266,7 +1266,7 @@ describe('PineScript Language', () => {
                 result,
                 nested,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Ternary Operator as Expression');
         console.log('>>> result: ', context.result);
@@ -1307,7 +1307,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Switch Statement');
         console.log('>>> result: ', context.result);
@@ -1338,7 +1338,7 @@ describe('PineScript Language', () => {
             return {
                 sum,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: For Loop with Literal Range');
         console.log('>>> result: ', context.result);
@@ -1372,7 +1372,7 @@ describe('PineScript Language', () => {
             return {
                 sum,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: For Loop with Series Range');
         console.log('>>> result: ', context.result);
@@ -1403,7 +1403,7 @@ describe('PineScript Language', () => {
             return {
                 outer,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: For Loop Variable Scope');
         console.log('>>> result: ', context.result);
@@ -1436,7 +1436,7 @@ describe('PineScript Language', () => {
                 val,
                 sum,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: For Loop History Access');
         console.log('>>> result: ', context.result);
@@ -1469,7 +1469,7 @@ describe('PineScript Language', () => {
             return {
                 sum,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Nested For Loops');
         console.log('>>> result: ', context.result);
@@ -1502,7 +1502,7 @@ describe('PineScript Language', () => {
             return {
                 sum,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: While Loop');
         console.log('>>> result: ', context.result);
@@ -1535,7 +1535,7 @@ describe('PineScript Language', () => {
             return {
                 sum,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Break Statement');
         console.log('>>> result: ', context.result);
@@ -1568,7 +1568,7 @@ describe('PineScript Language', () => {
             return {
                 sum,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Continue Statement');
         console.log('>>> result: ', context.result);
@@ -1600,7 +1600,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Function Definition');
         console.log('>>> result: ', context.result);
@@ -1631,7 +1631,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Function Call with Literal Arguments');
         console.log('>>> result: ', context.result);
@@ -1662,7 +1662,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Function Call with Series Arguments');
         console.log('>>> result: ', context.result);
@@ -1702,7 +1702,7 @@ describe('PineScript Language', () => {
                 literalResult,
                 seriesResult,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Function Return Values');
         console.log('>>> result: ', context.result);
@@ -1741,7 +1741,7 @@ describe('PineScript Language', () => {
                 val,
                 prev,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Function Parameter History Access');
         console.log('>>> result: ', context.result);
@@ -1777,7 +1777,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Recursive Functions');
         console.log('>>> result: ', context.result);
@@ -1805,7 +1805,7 @@ describe('PineScript Language', () => {
                 globalVar,
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Function Scope Variables');
         console.log('>>> result: ', context.result);
@@ -1839,7 +1839,7 @@ describe('PineScript Language', () => {
                 result1,
                 result2,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Default Parameter Values');
         console.log('>>> result: ', context.result);
@@ -1876,7 +1876,7 @@ describe('PineScript Language', () => {
                 result1,
                 result2,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Multiple Return Statements');
         console.log('>>> result: ', context.result);
@@ -1909,7 +1909,7 @@ describe('PineScript Language', () => {
             return {
                 arrLength: array.size(arr),
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Array Creation');
         console.log('>>> result: ', context.result);
@@ -1939,7 +1939,7 @@ describe('PineScript Language', () => {
                 second,
                 seventh,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Array Indexing');
         console.log('>>> result: ', context.result);
@@ -1974,7 +1974,7 @@ describe('PineScript Language', () => {
             return {
                 value,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Array Assignment');
         console.log('>>> result: ', context.result);
@@ -2006,7 +2006,7 @@ describe('PineScript Language', () => {
                 a,
                 b,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Array Destructuring');
         console.log('>>> result: ', context.result);
@@ -2039,7 +2039,7 @@ describe('PineScript Language', () => {
             return {
                 arrSize: array.size(arr),
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Array History Access');
         console.log('>>> result: ', context.result);
@@ -2063,7 +2063,7 @@ describe('PineScript Language', () => {
                 boolFromNum,
                 numFromBool,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Type Coercion');
         console.log('>>> result: ', context.result);
@@ -2098,7 +2098,7 @@ describe('PineScript Language', () => {
                 nanCompare,
                 nzResult,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: NaN and na Handling');
         console.log('>>> result: ', context.result);
@@ -2133,7 +2133,7 @@ describe('PineScript Language', () => {
                 nullDefault,
                 undefinedDefault,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Null and Undefined Handling');
         console.log('>>> result: ', context.result);
@@ -2168,7 +2168,7 @@ describe('PineScript Language', () => {
                 zeroToBool,
                 strToBool,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Boolean Conversion');
         console.log('>>> result: ', context.result);
@@ -2222,7 +2222,7 @@ describe('PineScript Language', () => {
                 concat,
                 compare,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: String Operations');
         console.log('>>> result: ', context.result);
@@ -2295,7 +2295,7 @@ describe('PineScript Language', () => {
                 complex,
                 nested,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Nested Expressions');
         console.log('>>> result: ', context.result);
@@ -2327,7 +2327,7 @@ describe('PineScript Language', () => {
                 val,
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Expression Side Effects');
         console.log('>>> result: ', context.result);
@@ -2357,7 +2357,7 @@ describe('PineScript Language', () => {
                 withoutParen,
                 withParen,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Parentheses Precedence');
         console.log('>>> result: ', context.result);
@@ -2387,7 +2387,7 @@ describe('PineScript Language', () => {
                 ternary,
                 orDefault,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Conditional Assignment Patterns');
         console.log('>>> result: ', context.result);
@@ -2426,7 +2426,7 @@ describe('PineScript Language', () => {
             return {
                 result,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Empty Blocks');
         console.log('>>> result: ', context.result);
@@ -2456,7 +2456,7 @@ describe('PineScript Language', () => {
                 return {
                     result,
                 };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         } catch (error) {
             expect(error).toBeDefined();
         }
@@ -2481,7 +2481,7 @@ describe('PineScript Language', () => {
                     a,
                     b,
                 };
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         } catch (error) {
             expect(error).toBeDefined();
         }
@@ -2509,7 +2509,7 @@ describe('PineScript Language', () => {
                 b,
                 c,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Multiple Assignments in Sequence');
         console.log('>>> result: ', context.result);
@@ -2546,7 +2546,7 @@ describe('PineScript Language', () => {
                 val2,
                 val3,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Series Length Consistency');
         console.log('>>> result: ', context.result);
@@ -2580,7 +2580,7 @@ describe('PineScript Language', () => {
                 firstBarHistory,
                 val,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: First Bar Special Handling');
         console.log('>>> result: ', context.result);
@@ -2613,7 +2613,7 @@ describe('PineScript Language', () => {
                 counter,
                 state,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Bar-by-Bar Execution');
         console.log('>>> result: ', context.result);
@@ -2647,7 +2647,7 @@ describe('PineScript Language', () => {
                 complex3,
                 complex4,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         console.log('>>> TEST: Operator Precedence Complex');
         console.log('>>> result: ', context.result);

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../Series';
+import { PineRuntimeError } from '../../errors/PineRuntimeError';
+import { assertElementCount } from '../limits';
 import { TableObject, truncCoord } from './TableObject';
 import { silentInSecondary } from '../silentInSecondary';
 import { spreadNamedArgs } from '../namedArgs';
@@ -18,6 +20,15 @@ const TABLE_CELL_PARAMS = [
     'text_valign', 'text_size', 'bgcolor', 'tooltip', 'text_font_family', 'text_formatting',
 ];
 const TABLE_RANGE_PARAMS = ['table_id', 'start_column', 'start_row', 'end_column', 'end_row'];
+
+interface TableRange {
+    startCol: number;
+    startRow: number;
+    endCol: number;
+    endRow: number;
+    cellCount: number;
+}
+
 export class TableHelper {
     private _tables: TableObject[] = [];
 
@@ -64,6 +75,26 @@ export class TableHelper {
         return val;
     }
 
+    private _validatedRange(tbl: TableObject, method: string, values: any[]): TableRange | null {
+        // Pine's `na` coordinates have historically been silent no-ops here.
+        if (values.some(value => typeof value === 'number' && Number.isNaN(value))) return null;
+        const coordinates = values.map(value => {
+            const coordinate = truncCoord(value);
+            if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isSafeInteger(coordinate)) {
+                throw new PineRuntimeError('Invalid table range coordinate.', method);
+            }
+            return coordinate;
+        });
+        const [startCol, startRow, endCol, endRow] = coordinates;
+        if (startCol < 0 || startRow < 0 || startCol > endCol || startRow > endRow ||
+            endCol >= tbl.columns || endRow >= tbl.rows) {
+            throw new PineRuntimeError('Table range is outside the table bounds.', method);
+        }
+        const cellCount = (endCol - startCol + 1) * (endRow - startRow + 1);
+        assertElementCount(cellCount, method);
+        return { startCol, startRow, endCol, endRow, cellCount };
+    }
+
     // ── table.new ──────────────────────────────────────────────
 
     @silentInSecondary
@@ -92,14 +123,15 @@ export class TableHelper {
 
         const tbl = new TableObject(
             this._resolve(position) || 'top_right',
-            this._resolve(columns) || 1,
-            this._resolve(rows) || 1,
+            this._resolve(columns) ?? 1,
+            this._resolve(rows) ?? 1,
             this._resolve(bgcolor) || '',
             this._resolve(frame_color) || '',
             this._resolve(frame_width) || 0,
             this._resolve(border_color) || '',
             this._resolve(border_width) || 0,
             this._resolve(force_overlay) ?? false,
+            this.context.executionBudget,
         );
         tbl._setHelper(this);
         this._takePosition(tbl);
@@ -212,14 +244,18 @@ export class TableHelper {
 
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
+        if (!(tbl instanceof TableObject)) throw new PineRuntimeError('Invalid table id.', 'table.clear');
 
-        const sc = truncCoord(this._resolve(start_column) ?? 0);
-        const sr = truncCoord(this._resolve(start_row) ?? 0);
-        const ec = truncCoord(this._resolve(end_column) ?? sc);
-        const er = truncCoord(this._resolve(end_row) ?? sr);
+        const sc = this._resolve(start_column) ?? 0;
+        const sr = this._resolve(start_row) ?? 0;
+        const ec = this._resolve(end_column) ?? sc;
+        const er = this._resolve(end_row) ?? sr;
+        const range = this._validatedRange(tbl, 'table.clear', [sc, sr, ec, er]);
+        if (!range) return;
+        this.context.executionBudget?.chargeWork(range.cellCount, 'table.clear');
 
-        for (let r = sr; r <= er; r++) {
-            for (let c = sc; c <= ec; c++) {
+        for (let r = range.startRow; r <= range.endRow; r++) {
+            for (let c = range.startCol; c <= range.endCol; c++) {
                 tbl.clearCell(c, r);
             }
         }
@@ -244,25 +280,33 @@ export class TableHelper {
 
         const tbl = this._resolve(table_id) as TableObject;
         if (!tbl || tbl._deleted) return;
+        if (!(tbl instanceof TableObject)) throw new PineRuntimeError('Invalid table id.', 'table.merge_cells');
 
-        const sc = truncCoord(this._resolve(start_column) ?? 0);
-        const sr = truncCoord(this._resolve(start_row) ?? 0);
-        const ec = truncCoord(this._resolve(end_column) ?? 0);
-        const er = truncCoord(this._resolve(end_row) ?? 0);
-
-        // na coordinates: silent no-op (matches the cell-access behavior).
-        if (isNaN(sc) || isNaN(sr) || isNaN(ec) || isNaN(er)) return;
+        const sc = this._resolve(start_column) ?? 0;
+        const sr = this._resolve(start_row) ?? 0;
+        const ec = this._resolve(end_column) ?? 0;
+        const er = this._resolve(end_row) ?? 0;
+        const range = this._validatedRange(tbl, 'table.merge_cells', [sc, sr, ec, er]);
+        if (!range) return;
+        this.context.executionBudget?.chargeWork(range.cellCount, 'table.merge_cells');
+        // Merges may create cell objects and always append one region descriptor.
+        this.context.executionBudget?.chargeMemory(range.cellCount * 128 + 64, 'table.merge_cells');
 
         // Mark all cells in the region as merged, pointing to the start cell. Written to the
         // cells themselves: a cell already merged by an overlapping region is re-pointed.
-        for (let r = sr; r <= er; r++) {
-            for (let c = sc; c <= ec; c++) {
-                if (r === sr && c === sc) continue; // Skip the origin cell
-                tbl.markMerged(c, r, sc, sr);
+        for (let r = range.startRow; r <= range.endRow; r++) {
+            for (let c = range.startCol; c <= range.endCol; c++) {
+                if (r === range.startRow && c === range.startCol) continue; // Skip the origin cell
+                tbl.markMerged(c, r, range.startCol, range.startRow);
             }
         }
 
-        tbl.merges.push({ startCol: sc, startRow: sr, endCol: ec, endRow: er });
+        tbl.merges.push({
+            startCol: range.startCol,
+            startRow: range.startRow,
+            endCol: range.endCol,
+            endRow: range.endRow,
+        });
     }
 
     // ── Cell setter methods ────────────────────────────────────

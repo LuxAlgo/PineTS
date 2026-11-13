@@ -27,7 +27,7 @@ describe('Constants', () => {
                 triangleup: shape.triangleup,
                 xcross: shape.xcross,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.arrowdown[0]).toBe('shape_arrow_down');
         expect(result.arrowup[0]).toBe('shape_arrow_up');
@@ -55,7 +55,7 @@ describe('Constants', () => {
                 bottom: location.bottom,
                 top: location.top,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.abovebar[0]).toBe('AboveBar');
         expect(result.belowbar[0]).toBe('BelowBar');
@@ -77,7 +77,7 @@ describe('Constants', () => {
                 large: size.large,
                 huge: size.huge,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.auto[0]).toBe('auto');
         expect(result.tiny[0]).toBe('tiny');
@@ -99,7 +99,7 @@ describe('Constants', () => {
                 price: format.price,
                 volume: format.volume,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.inherit[0]).toBe('inherit');
         expect(result.mintick[0]).toBe('mintick');
@@ -117,7 +117,7 @@ describe('Constants', () => {
                 bar_index: xloc.bar_index,
                 bar_time: xloc.bar_time,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.bar_index[0]).toBe('bi');
         expect(result.bar_time[0]).toBe('bt');
@@ -133,7 +133,7 @@ describe('Constants', () => {
                 abovebar: yloc.abovebar,
                 belowbar: yloc.belowbar,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.price[0]).toBe('pr');
         expect(result.abovebar[0]).toBe('ab');
@@ -152,7 +152,7 @@ describe('Constants', () => {
                 wrap_auto: text.wrap_auto,
                 wrap_none: text.wrap_none,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.align_left[0]).toBe('left');
         expect(result.align_center[0]).toBe('center');
@@ -170,7 +170,7 @@ describe('Constants', () => {
                 family_default: font.family_default,
                 family_monospace: font.family_monospace,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.family_default[0]).toBe('default');
         expect(result.family_monospace[0]).toBe('monospace');
@@ -186,7 +186,7 @@ describe('Constants', () => {
                 splits: adjustment.splits,
                 dividends: adjustment.dividends,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.none[0]).toBe('none');
         expect(result.splits[0]).toBe('splits');
@@ -203,7 +203,7 @@ describe('Constants', () => {
                 off: backadjustment.off,
                 on: backadjustment.on,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.inherit[0]).toBe('inherit');
         expect(result.off[0]).toBe('off');
@@ -224,7 +224,7 @@ describe('Constants', () => {
                 future_revenue: earnings.future_revenue,
                 future_time: earnings.future_time,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.actual[0]).toBe('earnings_actual');
         expect(result.estimate[0]).toBe('earnings_estimate');
@@ -247,7 +247,7 @@ describe('Constants', () => {
                 future_ex_date: dividends.future_ex_date,
                 future_pay_date: dividends.future_pay_date,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.gross[0]).toBe('dividends_gross');
         expect(result.net[0]).toBe('dividends_net');
@@ -265,7 +265,7 @@ describe('Constants', () => {
                 denominator: splits.denominator,
                 numerator: splits.numerator,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.denominator[0]).toBe('splits_denominator');
         expect(result.numerator[0]).toBe('splits_numerator');
@@ -285,7 +285,7 @@ describe('Constants', () => {
                 friday: dayofweek.friday,
                 saturday: dayofweek.saturday,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.sunday[0]).toBe(1);
         expect(result.monday[0]).toBe(2);
@@ -305,7 +305,7 @@ describe('Constants', () => {
                 ascending: order.ascending,
                 descending: order.descending,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.ascending[0]).toBe(1);
         expect(result.descending[0]).toBe(0);
@@ -324,7 +324,7 @@ describe('Constants', () => {
                 price_scale: display.price_scale,
                 status_line: display.status_line,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.all[0]).toBe('all');
         expect(result.data_window[0]).toBe('data_window');
@@ -345,7 +345,7 @@ describe('Constants', () => {
                 lookahead_on: barmerge.lookahead_on,
                 lookahead_off: barmerge.lookahead_off,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.gaps_on[0]).toBe('gaps_on');
         expect(result.gaps_off[0]).toBe('gaps_off');
@@ -364,7 +364,7 @@ describe('Constants', () => {
                 both: extend.both,
                 none: extend.none,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.left[0]).toBe('l');
         expect(result.right[0]).toBe('r');
@@ -388,7 +388,7 @@ describe('Constants', () => {
                 bottom_center: position.bottom_center,
                 bottom_right: position.bottom_right,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.top_left[0]).toBe('top_left');
         expect(result.top_center[0]).toBe('top_center');
@@ -422,7 +422,7 @@ describe('Constants', () => {
                 linestyle_dotted: plot.linestyle_dotted,
                 linestyle_dashed: plot.linestyle_dashed,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.style_line[0]).toBe('style_line');
         expect(result.style_linebr[0]).toBe('style_linebr');
@@ -450,7 +450,7 @@ describe('Constants', () => {
                 none: scale.none,
                 right: scale.right,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.left[0]).toBe('left');
         expect(result.none[0]).toBe('none');
@@ -467,7 +467,7 @@ describe('Constants', () => {
                 off: settlement_as_close.off,
                 on: settlement_as_close.on,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.inherit[0]).toBe('inherit');
         expect(result.off[0]).toBe('off');

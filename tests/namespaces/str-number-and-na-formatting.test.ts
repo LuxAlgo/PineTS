@@ -337,7 +337,8 @@ plot(close)
           "a=NaN NaN NaN NaN NaN 12 NaN 4",
           "b=0.5 5 7 NaN NaN NaN -3.5 NaN",
           "c=-2 NaN NaN NaN NaN NaN 5 5",
-          "d=-0.5 0.5 0 0 0.1 1.2345678901E29 NaN NaN"
+          // TradingView reads "1.2.3" up to its second dot (1.2), in v5 and v6.
+          "d=-0.5 0.5 0 0 0.1 1.2345678901E29 1.2 NaN"
         ];
         for (const line of expected) expect(lines).toContain(line);
     });

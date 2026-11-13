@@ -10,6 +10,9 @@ export function hma(context: any) {
         // Hull Moving Average: HMA = WMA(2*WMA(n/2) - WMA(n), sqrt(n))
         const halfPeriod = Math.floor(period / 2);
         const sqrtPeriod = Math.floor(Math.sqrt(period));
+        // The previous implementation returned na for length 1 because its half-window is zero.
+        // Avoid sending that internal zero through the public length validator.
+        if (halfPeriod < 1) return NaN;
 
         // Get wma function from context.ta
         const wmaFn = context.pine.ta.wma;

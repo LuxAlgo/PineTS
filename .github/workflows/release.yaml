@@ -24,6 +24,12 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
+            - name: Security audit (critical and high)
+              run: npm audit --audit-level=high
+
+            - name: Test
+              run: npm test -- --run
+
             - name: Build project
               run: npm run build:prod:all
 
@@ -33,6 +39,7 @@ jobs:
                   files: |
                       dist/**/*.js
                       dist/**/*.cjs
+                      dist/**/*.mjs
                   overwrite: true
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

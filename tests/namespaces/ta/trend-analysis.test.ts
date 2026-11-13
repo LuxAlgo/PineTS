@@ -27,7 +27,7 @@ describe('Technical Analysis - Trend Analysis', () => {
             return { supertrend, direction };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-07-20').getTime();
@@ -87,7 +87,7 @@ describe('Technical Analysis - Trend Analysis', () => {
             return { crossover };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const plotdata = plots['crossover'].data;
 
@@ -146,7 +146,7 @@ describe('Technical Analysis - Trend Analysis', () => {
             return { crossunder };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const plotdata = plots['crossunder']?.data;
 
@@ -198,7 +198,7 @@ describe('Technical Analysis - Trend Analysis', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-07-20').getTime();
@@ -254,7 +254,7 @@ describe('Technical Analysis - Trend Analysis', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-01-28').getTime();
@@ -310,7 +310,7 @@ describe('Technical Analysis - Trend Analysis', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-07-29').getTime();
@@ -366,7 +366,7 @@ describe('Technical Analysis - Trend Analysis', () => {
             return { diplus, diminus, adx };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-07-29').getTime();
@@ -423,7 +423,7 @@ describe('Technical Analysis - Trend Analysis', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['_plot']?.data;
         const startDate = new Date('2019-07-29').getTime();

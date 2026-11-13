@@ -1,6 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { assertCollectionSize, preflightCollectionGrowth } from '../collectionCapacity';
+
 const MAX_INDEX = 2 ** 32 - 2;
+const parents = new WeakMap<any[], any[]>();
+
+/** A capacity guard around a view retains the same backing-array identity. */
+export function registerSliceAlias(alias: any[], view: any[]): void {
+    parents.set(alias, view);
+}
+
+export function isSliceView(array: any[]): boolean {
+    return parents.has(array);
+}
+
+export function backingArray(array: any[]): any[] {
+    let current = array;
+    while (parents.has(current)) current = parents.get(current)!;
+    return current;
+}
 
 function toIndex(prop: string | symbol): number {
     if (typeof prop !== 'string' || !/^(0|[1-9]\d*)$/.test(prop)) return -1;
@@ -16,18 +34,31 @@ function toIndex(prop: string | symbol): number {
  *
  * Structural changes made to the parent directly do not move the window: it keeps its start and length.
  */
-export function createSliceView(parent: any[], start: number, length: number): any[] {
+export function createSliceView(parent: any[], start: number, length: number, context?: any): any[] {
     const target: any[] = [];
     target.length = length;
 
     const resize = (newLength: number) => {
         const len = target.length;
+        assertCollectionSize(newLength, 'array.slice');
+        if (newLength > len) {
+            const backing = backingArray(parent);
+            preflightCollectionGrowth(context, backing.length, backing.length + newLength - len, 'array.slice');
+        }
         if (newLength < len) parent.splice(start + newLength, len - newLength);
-        else if (newLength > len) parent.splice(start + len, 0, ...new Array(newLength - len));
+        else if (newLength > len) {
+            // Keep the argument list below engine limits even for a legal large view.
+            let inserted = 0;
+            while (inserted < newLength - len) {
+                const count = Math.min(8192, newLength - len - inserted);
+                parent.splice(start + len + inserted, 0, ...Array(count).fill(undefined));
+                inserted += count;
+            }
+        }
         target.length = newLength;
     };
 
-    return new Proxy(target, {
+    const view = new Proxy(target, {
         get(t, prop, receiver) {
             const i = toIndex(prop);
             if (i !== -1) return i < t.length ? parent[start + i] : undefined;
@@ -73,4 +104,6 @@ export function createSliceView(parent: any[], start: number, length: number): a
             return Reflect.getOwnPropertyDescriptor(t, prop);
         },
     });
+    parents.set(view, parent);
+    return view;
 }

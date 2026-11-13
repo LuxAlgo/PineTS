@@ -82,7 +82,7 @@ describe('Str Namespace', () => {
             };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Check results from the last bar
         const last = (arr: any[]) => arr[arr.length - 1];
@@ -159,7 +159,7 @@ describe('Str Namespace', () => {
             };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.empty_len)).toBe(0);
@@ -197,7 +197,7 @@ describe('Str Namespace', () => {
             };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.date_only)).toBe('2024-03-19');

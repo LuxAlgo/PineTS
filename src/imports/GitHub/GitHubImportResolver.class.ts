@@ -100,13 +100,13 @@ export class GitHubImportResolver extends BaseImportResolver<GitHubImportResolve
                 .split('/')
                 .pop()
                 ?.replace(/\.[^.]*$/, '');
-            return info.name === fileName ? this._get(loc, loc.file) : Promise.resolve(null);
+            return info.name === fileName ? this._get(loc, loc.file, info.signal) : Promise.resolve(null);
         }
         const template = loc.path ? (loc.path.includes('{') ? loc.path : `${loc.path.replace(/\/+$/, '')}/{name}`) : '{name}';
-        return this.firstFound(fillTemplate(template, info), this._extensions, (path) => this._get(loc, path));
+        return this.firstFound(fillTemplate(template, info), this._extensions, (path) => this._get(loc, path, info.signal));
     }
 
-    private _get(loc: GitHubLocation, path: string): Promise<string | null> {
+    private _get(loc: GitHubLocation, path: string, signal?: AbortSignal): Promise<string | null> {
         const encoded = path.split('/').map(encodeURIComponent).join('/');
         if (this._token) {
             const url = `https://api.github.com/repos/${loc.owner}/${loc.repo}/contents/${encoded}${loc.ref ? `?ref=${encodeURIComponent(loc.ref)}` : ''}`;
@@ -114,9 +114,9 @@ export class GitHubImportResolver extends BaseImportResolver<GitHubImportResolve
                 Accept: 'application/vnd.github.raw',
                 Authorization: `Bearer ${this._token}`,
                 'X-GitHub-Api-Version': '2022-11-28',
-            });
+            }, signal);
         }
-        return fetchText(this._fetch, `https://raw.githubusercontent.com/${loc.owner}/${loc.repo}/${loc.ref ?? 'HEAD'}/${encoded}`);
+        return fetchText(this._fetch, `https://raw.githubusercontent.com/${loc.owner}/${loc.repo}/${loc.ref ?? 'HEAD'}/${encoded}`, undefined, signal);
     }
 }
 

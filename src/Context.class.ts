@@ -2,6 +2,7 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { IProvider, ISymbolInfo } from './marketData/IProvider';
+import type { SourceMode } from './security/SourceMode';
 import { PineArray } from './namespaces/array/array.index';
 import { PineMap } from './namespaces/map/map.index';
 import { PineMatrix } from './namespaces/matrix/matrix.index';
@@ -9,8 +10,10 @@ import { PineMatrixObject } from './namespaces/matrix/PineMatrixObject';
 import { Barstate } from './namespaces/Barstate';
 import { Session } from './namespaces/Session';
 import { Core, NAHelper, AlertHelper } from './namespaces/Core';
+import type { AlertEvent } from './namespaces/alertEvents';
 import { PineColor } from './namespaces/color/PineColor';
-import { TimeHelper, TimeComponentHelper, EXTRACTORS, getDatePartsInTimezone } from './namespaces/Time';
+import { TimeHelper, TimeComponentHelper, EXTRACTORS } from './namespaces/Time';
+import { tradingDayOf } from './namespaces/tradingPeriod';
 import { Input } from './namespaces/input/input.index';
 import PineMath from './namespaces/math/math.index';
 import { PineRequest } from './namespaces/request/request.index';
@@ -39,7 +42,9 @@ import { receiverMatchesMethod } from './namespaces/methodDispatch';
 import { BUILTIN_METHOD_NAMES } from './transpiler/settings';
 import { PineRuntimeError } from './errors/PineRuntimeError';
 import type { IImportResolver } from './imports/IImportResolver';
+import { ExecutionBudget } from './security/ExecutionBudget';
 import type { IndicatorOptions } from './types/PineTypes';
+import type { IPineInput } from './Indicator/types';
 import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
 import { DRAWING_PARAMS } from './namespaces/drawingParams';
 import { withNamedArgs } from './namespaces/namedArgs';
@@ -74,16 +79,23 @@ export class Context {
     public dataVersion: number = 0; // Incremented when market data changes (streaming mode)
 
     public __maxLoops: number = 500000;
+    public readonly executionBudget: ExecutionBudget;
     public NA: any = NaN;
 
     /** Runtime warnings (OOB access, etc.) — non-blocking, script continues. */
     public warnings: { message: string; method?: string; bar: number }[] = [];
 
-    /** Alert events emitted by alert() and alertcondition() calls. */
-    public alerts: { type: string; id: string; message: string; title?: string; freq?: string; bar_index: number; time: number }[] = [];
+    /** Alert events emitted by alert() and alertcondition() calls, and by strategy order fills. */
+    public alerts: AlertEvent[] = [];
 
     /** Alert mode: 'realtime' = only fire on live bars (TV behavior), 'all' = fire on every bar (backtest). */
     public _alertMode: 'realtime' | 'all' = 'realtime';
+
+    /** First realtime bar (barstate.isrealtime); `length` when no loaded bar receives live data. */
+    public _realtimeFromIdx?: number;
+
+    /** Input declarations of the running Pine source, read lazily (the default strategy alert message lists them). */
+    public _inputsMeta?: () => IPineInput[];
 
     /** The strategy broker trades on the tick grid (see PineTS.setFillsOnTickGrid). */
     public _fillsOnTickGrid: boolean = false;
@@ -156,6 +168,8 @@ export class Context {
     public timeframe: string = '';
     /** `//@version=` of the running Pine Script source; null for PineTS syntax. */
     public pineVersion: number | null = null;
+    /** Trust decision from the primary run, inherited by secondary requests. */
+    public sourceMode: SourceMode = 'nativePine';
     public limit: number;
     public sDate: number;
     public eDate: number;
@@ -184,6 +198,7 @@ export class Context {
         eDate,
         fullContext,
         inputs,
+        executionBudget,
     }: {
         marketData: any;
         source: IProvider | any[];
@@ -194,6 +209,7 @@ export class Context {
         eDate?: number;
         fullContext?: Context;
         inputs?: Record<string, any>;
+        executionBudget?: ExecutionBudget;
     }) {
         this.marketData = marketData;
         this.source = source;
@@ -203,7 +219,8 @@ export class Context {
         this.sDate = sDate;
         this.eDate = eDate;
         this.fullContext = fullContext || this;
-        this.inputs = inputs || {};
+        this.executionBudget = executionBudget ?? fullContext?.executionBudget ?? new ExecutionBudget();
+        this.inputs = Object.assign(Object.create(null), inputs || {});
         // console.log('Context initialized with inputs keys:', Object.keys(this.inputs));
         // Initialize core functions
         const core = new Core(this);
@@ -300,16 +317,21 @@ export class Context {
                 return NaN;
             },
             get time_tradingday() {
-                // TradingView returns 00:00 UTC of the trading day the bar belongs to.
-                // For daily+ timeframes on 24/7 markets, this equals the bar's close date
-                // (i.e. the date the bar settles / completes).
+                // 00:00 UTC of the trading day holding the bar's last moment: the bar's own day on
+                // intraday and daily bars, the last day of the week on a weekly bar.
                 const closeTime = Series.from(_this.data.closeTime).get(0);
                 if (isNaN(closeTime)) return NaN;
-                const timezone = _this.pine?.syminfo?.timezone || 'UTC';
-                const parts = getDatePartsInTimezone(closeTime, timezone);
-                return Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0);
+                const syminfo = _this.pine?.syminfo;
+                return tradingDayOf(closeTime - 1, syminfo?.timezone || 'UTC', syminfo?.session);
             },
             get inputs() {
+                // Native Pine can reference this legacy builtin directly, bypassing
+                // input.* resolution. Never expose caller-owned host objects there.
+                for (const value of Object.values(_this.inputs)) {
+                    if (value !== null && value !== undefined && !['string', 'number', 'boolean'].includes(typeof value)) {
+                        throw new TypeError('Pine inputs require primitive override values');
+                    }
+                }
                 return _this.inputs;
             },
             log: new Log(this),
@@ -823,7 +845,8 @@ export class Context {
      * @returns the current value of the param
      */
     param(source, index, name?: string) {
-        if (typeof source === 'string') return source;
+        // A named param records a history series: `str.tostring(close)[1]` is the previous bar's string.
+        if (typeof source === 'string' && name === undefined) return source;
         if (source instanceof Series) {
             if (index) {
                 const view = new Series(source.data, source.offset + index);
@@ -849,6 +872,31 @@ export class Context {
             return this.typedSeries(this.params[name], source, index || 0);
         }
     }
+
+    /**
+     * A function parameter whose history the body reads (`s[1]`), as its own series at the call site
+     * (`key`): one value per bar the function runs, so `s[1]` is the value of the previous call. A
+     * second call on the same bar (a loop, a live bar computed again) replaces that bar's value.
+     * Collections and objects keep their reference.
+     */
+    callParam(value: any, key: string) {
+        const v = value instanceof Series ? value.get(0) : value;
+        if (v !== null && typeof v === 'object') return value;
+        let state = this.callParams.get(key);
+        if (!state) {
+            state = { idx: -1, data: [] };
+            this.callParams.set(key, state);
+        }
+        if (this.idx !== state.idx) {
+            state.data.push(v);
+            state.idx = this.idx;
+        } else state.data[state.data.length - 1] = v;
+        const series = this.typedSeries(state.data, v);
+        if (value instanceof Series && value.beforeStart !== undefined) series.beforeStart = value.beforeStart;
+        return series;
+    }
+
+    private callParams = new Map<string, { idx: number; data: any[] }>();
 
     /**
      * Access a series value with Pine Script semantics (reverse order)
@@ -1025,6 +1073,11 @@ export class Context {
         throw new PineRuntimeError(message);
     }
 
+    /** Called by the final loop-instrumentation pass, including initializer IIFEs. */
+    public chargeLoopIteration(): void {
+        this.executionBudget.chargeLoopIteration();
+    }
+
     public drawingOrNa(receiver: any) {
         const isNa = receiver === null || receiver === undefined || (typeof receiver === 'number' && isNaN(receiver));
         return isNa ? NA_DRAWING : receiver;
@@ -1037,6 +1090,7 @@ export class Context {
      * @param args - Arguments to pass to the function
      */
     public call(fn: Function, id: string, ...args: any[]) {
+        this.executionBudget.enterFunctionCall();
         this.pushId(id);
         try {
             const result = fn(...args);
@@ -1045,6 +1099,7 @@ export class Context {
             return result === undefined ? NaN : result;
         } finally {
             this.popId();
+            this.executionBudget.leaveFunctionCall();
         }
     }
 

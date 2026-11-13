@@ -70,7 +70,7 @@ describe('Technical Analysis - Volatility & Range', () => {
             return { tr, manualTR };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const part = result.tr ? result.tr.reverse().slice(0, 10) : [];
         const manualPart = result.manualTR ? result.manualTR.reverse().slice(0, 10) : [];
 
@@ -103,7 +103,7 @@ describe('Technical Analysis - Volatility & Range', () => {
             return { tr };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let tr_plotdata = plots['tr']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -152,7 +152,7 @@ describe('Technical Analysis - Volatility & Range', () => {
             return { upper, middle, lower };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let upper_plotdata = plots['upper']?.data;
         let middle_plotdata = plots['middle']?.data;
@@ -214,7 +214,7 @@ describe('Technical Analysis - Volatility & Range', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -269,7 +269,7 @@ describe('Technical Analysis - Volatility & Range', () => {
             return { pineMiddle, pineUpper, pineLower };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -326,7 +326,7 @@ describe('Technical Analysis - Volatility & Range', () => {
             return { pineMiddle, pineUpper, pineLower };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2019-05-20').getTime();
@@ -383,7 +383,7 @@ describe('Technical Analysis - Volatility & Range', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -431,7 +431,7 @@ describe('Technical Analysis - Volatility & Range', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -479,7 +479,7 @@ describe('Technical Analysis - Volatility & Range', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();

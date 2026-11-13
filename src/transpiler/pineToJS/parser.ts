@@ -39,6 +39,7 @@ import {
 } from './ast';
 import { NAMESPACE_COLLISION_NAMES } from '../settings';
 import { readImportStatement } from './imports';
+import { BUILTIN_PARAMS } from './builtinParams';
 
 const TYPE_QUALIFIERS = ['const', 'simple', 'series'];
 
@@ -61,6 +62,10 @@ export class Parser {
     private loopValueCounter: number = 0;
     // Counter for the flags of `once` blocks.
     private onceCounter: number = 0;
+    // User functions / methods by name: true when they end with a `once` structure (no value), null for
+    // an overload set mixing both.
+    private voidFunctions: Map<string, boolean | null> = new Map();
+    private voidMethods: Map<string, boolean | null> = new Map();
     // Tuple size returned by user functions whose last statement is a tuple
     // (`f(a) => [a, a * 2]`); null when the name is overloaded with other shapes.
     private functionTupleArity: Map<string, number | null> = new Map();
@@ -71,9 +76,12 @@ export class Parser {
     private tupleLiteralStart: WeakMap<object, Token> = new WeakMap();
     // Numbers each range loop's direction variable.
     private forLoopCount = 0;
-    constructor(tokens: Token[]) {
+    // Pine version of the source (`//@version=N`); null when unknown.
+    private version: number | null;
+    constructor(tokens: Token[], options: { version?: number | null } = {}) {
         this.tokens = tokens;
         this.pos = 0;
+        this.version = options.version ?? null;
     }
 
     // Utility methods
@@ -358,6 +366,7 @@ export class Parser {
             this.skipNewlines();
         }
 
+        this.rejectVoidCallValues(body);
         return new Program(body);
     }
 
@@ -493,7 +502,113 @@ export class Parser {
         const sequence = new BlockStatement([decl, guard]);
         // Not a scope: the flag belongs to the enclosing block.
         (sequence as any)._sequence = true;
+        (sequence as any)._once = true;
         return sequence;
+    }
+
+    /**
+     * `once` where a value is expected (`x = once c`, `txt += once c`, `plot(once c)`): a `once`
+     * structure returns no value, so TradingView rejects it. Only the shapes that cannot be the
+     * variable `once` are caught: an operand right after it, or an empty condition opening a block
+     * right after an assignment operator.
+     */
+    private rejectOnceAsValue(): void {
+        const token = this.peek();
+        if (token.type !== TokenType.IDENTIFIER || token.value !== 'once') return;
+        const next = this.peek(1);
+        const prev = this.tokens[this.pos - 1];
+        const operand =
+            !next.wrapped &&
+            (next.type === TokenType.IDENTIFIER ||
+                next.type === TokenType.NUMBER ||
+                next.type === TokenType.STRING ||
+                next.type === TokenType.BOOLEAN ||
+                (next.type === TokenType.KEYWORD && next.value === 'not'));
+        const emptyAfterAssignment =
+            prev?.type === TokenType.OPERATOR && Parser.ASSIGNMENT_OPERATORS.has(prev.value) && this.isOnceStatement();
+        if (operand || emptyAfterAssignment) {
+            throw new Error(
+                'A `once` statement cannot return a value or be assigned to a variable. Convert the statement to an equivalent ' +
+                    `\`if\` or \`switch\` structure to return a usable result. at ${this.startOf(token)}`
+            );
+        }
+    }
+
+    private static readonly ASSIGNMENT_OPERATORS = new Set(['=', ':=', '+=', '-=', '*=', '/=', '%=']);
+
+    /** True when a function body ends with a `once` structure, or with a call to a function that does. */
+    private endsWithOnce(body: BlockStatement): boolean {
+        const last = body.body[body.body.length - 1];
+        if (last?._once) return true;
+        const value = last?.type === 'ReturnStatement' ? last.argument : last?.type === 'ExpressionStatement' ? last.expression : null;
+        return value?.type === 'CallExpression' && this.isVoidCall(value);
+    }
+
+    private isVoidCall(call: any): boolean {
+        const callee = call.callee;
+        if (callee?.type === 'Identifier') {
+            // A method can also be called with function syntax: `m(x)`.
+            const name = callee.name;
+            return this.voidFunctions.has(name) ? this.voidFunctions.get(name) === true : this.voidMethods.get(name) === true;
+        }
+        if (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier') {
+            return this.voidMethods.get(callee.property.name) === true;
+        }
+        return false;
+    }
+
+    /** Record whether a function / method declaration returns no value; an overload set that mixes both is left unchecked. */
+    private recordVoidFunction(map: Map<string, boolean | null>, name: string, body: BlockStatement): void {
+        const isVoid = this.endsWithOnce(body);
+        map.set(name, map.has(name) && map.get(name) !== isVoid ? null : isVoid);
+    }
+
+    /**
+     * A call to a function that ends with a `once` structure has no value: TradingView accepts it only as
+     * a statement of its own (or as the last statement of another function, which then has no value either).
+     */
+    private rejectVoidCallValues(node: any, parent: any = null): void {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) {
+            for (const child of node) this.rejectVoidCallValues(child, parent);
+            return;
+        }
+        if (node.type === 'CallExpression' && this.isVoidCall(node) && parent?.type !== 'ExpressionStatement' && parent?.type !== 'ReturnStatement') {
+            throw this.voidValueError(node, parent);
+        }
+        for (const key of Object.keys(node)) {
+            if (key.startsWith('_') || key === 'type') continue;
+            this.rejectVoidCallValues(node[key], node);
+        }
+    }
+
+    /** TradingView's error for the value of a void call, which depends on where the value is used. */
+    private voidValueError(call: any, parent: any): Error {
+        const callee = call.callee.type === 'Identifier' ? call.callee : call.callee.property;
+        const name = (callee.name as string).replace(/_var$/, '');
+        const callPos = callee._pos ?? call.callee.object?._pos;
+        const at = (pos: string | undefined) => (pos ? ` at ${pos}` : '');
+        const arg = `"call "${name}" (void)". An argument of "void" type was used.`;
+        switch (parent?.type) {
+            case 'VariableDeclarator':
+                return new Error(`Void expression cannot be assigned to a variable${at(parent.id?._pos ?? callPos)}`);
+            case 'AssignmentExpression':
+                return new Error(`Void expression cannot be assigned to a variable${at(parent.left?._pos ?? callPos)}`);
+            case 'BinaryExpression':
+            case 'LogicalExpression':
+                return new Error(`Cannot call "operator ${parent.operator}" with argument "expr${parent.left === call ? 0 : 1}"=${arg}${at(callPos)}`);
+            case 'UnaryExpression':
+                return new Error(`Cannot call "operator ${parent.operator}" with argument "expr0"=${arg}${at(callPos)}`);
+            case 'CallExpression': {
+                const fn = this.dottedName(parent.callee);
+                const index = parent.arguments.indexOf(call);
+                const params = fn !== null ? this.functionParamNames.get(fn) ?? BUILTIN_PARAMS[fn]?.[0] : undefined;
+                const param = index >= 0 ? params?.[index] : undefined;
+                return new Error(`Cannot call "${fn ?? 'function'}" with argument ${param ? `"${param}"=` : ''}${arg}${at(callPos)}`);
+            }
+            default:
+                return new Error(`Void expression cannot be used as a value: "${name}()" ends with a \`once\` statement and returns no value.${at(callPos)}`);
+        }
     }
 
     // Parse statement
@@ -1229,6 +1344,7 @@ export class Parser {
         const arity = returned?.type === 'ArrayExpression' ? returned.elements.length : this.tupleArityOf(returned) ?? null;
         this.functionTupleArity.set(name, this.functionTupleArity.has(name) && this.functionTupleArity.get(name) !== arity ? null : arity);
         this.functionParamNames.set(name, this.functionParamNames.has(name) ? null : [...paramFrame]);
+        this.recordVoidFunction(this.voidFunctions, name, body);
 
         return new FunctionDeclaration(id, params, body, returnType);
     }
@@ -1341,6 +1457,7 @@ export class Parser {
         const id = new Identifier(name);
         if (returnType) id.returnType = returnType;
         id.isMethod = true; // Mark as method
+        this.recordVoidFunction(this.voidMethods, name, body);
 
         return new FunctionDeclaration(id, params, body, returnType);
     }
@@ -1401,22 +1518,28 @@ export class Parser {
     }
 
     /**
-     * Give a trailing loop a value: Pine yields whatever the loop body's last statement
-     * produced on its final iteration, or na when the body never ran (or the final
-     * iteration skipped it). Captures that into a temp reset at the top of each iteration
-     * and returns the temp's name, or null when the loop body has no value.
+     * Give a trailing loop a value: Pine yields what the body's last statement produced on the
+     * last iteration that reached the end of the body (na if none did). An iteration cut short
+     * by `break` / `continue` keeps the previous value: `for i = 0 to 10` / `if i == 3 => break` /
+     * `i * 100.0` is 200. Each iteration writes its own temp, copied to the loop's value as the
+     * body's final statement, which an early exit skips. Returns the value's name, or null when
+     * the loop body has no value.
      */
     private _captureLoopValue(statements: any[]): string | null {
         const loop = statements[statements.length - 1];
         if (loop.body?.type !== 'BlockStatement' || loop.body.body.length === 0) return null;
 
-        const tmp = `__loopValue_${this.loopValueCounter++}`;
+        const n = this.loopValueCounter++;
+        const tmp = `__loopValue_${n}`;
+        const iter = `__loopIter_${n}`;
         const na = () => new Identifier('na');
-        const assignTmp = (value: any) => new ExpressionStatement(new AssignmentExpression('=', new Identifier(tmp), value));
+        const assign = (name: string) => (value: any) => new ExpressionStatement(new AssignmentExpression('=', new Identifier(name), value));
 
-        if (!this._emitLastValue(loop.body.body, assignTmp)) return null;
-        loop.body.body.unshift(assignTmp(na()));
-        statements.splice(statements.length - 1, 0, new VariableDeclaration([new VariableDeclarator(new Identifier(tmp), na())], VariableDeclarationKind.LET));
+        if (!this._emitLastValue(loop.body.body, assign(iter))) return null;
+        loop.body.body.unshift(assign(iter)(na()));
+        loop.body.body.push(assign(tmp)(new Identifier(iter)));
+        const declare = (name: string) => new VariableDeclaration([new VariableDeclarator(new Identifier(name), na())], VariableDeclarationKind.LET);
+        statements.splice(statements.length - 1, 0, declare(tmp), declare(iter));
         return tmp;
     }
 
@@ -1717,19 +1840,32 @@ export class Parser {
             // Build for loop with runtime direction detection.
             // Pine Script: `for i = start to end [by step]`
             // Direction is fixed when the loop starts (start <= end → increment, else
-            // decrement); `end` is re-read each iteration. Re-reading `start` for the
-            // direction would flip `for i = array.size(a) - 1 to 0` once the body
-            // removes an element.
-            // Generated: for (let i = start, up = i <= end; up ? i <= end : i >= end; up ? i++ : i--)
-            const directionCheck = new Identifier(`__for_up${this.forLoopCount++}`);
-            const init = new VariableDeclaration(
-                [new VariableDeclarator(loopVar, start), new VariableDeclarator(directionCheck, new BinaryExpression('<=', loopVar, end))],
-                VariableDeclarationKind.LET
-            );
+            // decrement). Re-reading `start` for the direction would flip
+            // `for i = array.size(a) - 1 to 0` once the body removes an element.
+            // TradingView reads `step` once at loop entry. `end` is read once too up to
+            // v5; from v6 on it is re-read before every iteration, so assigning the bound
+            // variable in the body changes how many iterations run.
+            // Generated (v5): for (let i = start, end_ = end, up = i <= end_, step_ = step;
+            //                      up ? i <= end_ : i >= end_; up ? i += step_ : i -= step_)
+            const loopId = this.forLoopCount++;
+            const directionCheck = new Identifier(`__for_up${loopId}`);
+            const declarators = [new VariableDeclarator(loopVar, start)];
+            let bound = end;
+            if (this.version !== null && this.version < 6) {
+                bound = new Identifier(`__for_end${loopId}`);
+                declarators.push(new VariableDeclarator(bound, end));
+            }
+            declarators.push(new VariableDeclarator(directionCheck, new BinaryExpression('<=', loopVar, bound)));
+            let stepValue = step;
+            if (step) {
+                stepValue = new Identifier(`__for_step${loopId}`);
+                declarators.push(new VariableDeclarator(stepValue, step));
+            }
+            const init = new VariableDeclaration(declarators, VariableDeclarationKind.LET);
             const test = new ConditionalExpression(
                 directionCheck,
-                new BinaryExpression('<=', loopVar, end),
-                new BinaryExpression('>=', loopVar, end)
+                new BinaryExpression('<=', loopVar, bound),
+                new BinaryExpression('>=', loopVar, bound)
             );
 
             let update;
@@ -1737,8 +1873,8 @@ export class Parser {
                 // with step: start <= end ? i += step : i -= step
                 update = new ConditionalExpression(
                     directionCheck,
-                    new AssignmentExpression('+=', loopVar, step),
-                    new AssignmentExpression('-=', loopVar, step)
+                    new AssignmentExpression('+=', loopVar, stepValue),
+                    new AssignmentExpression('-=', loopVar, stepValue)
                 );
             } else {
                 // no step: start <= end ? i++ : i--
@@ -1890,6 +2026,12 @@ export class Parser {
         const init = this.parseExpression();
 
         this.assertNotTupleLiteral(init);
+        if (init?.type === 'CallExpression' && this.isVoidCall(init)) {
+            throw new Error(
+                `Cannot assign a variable to a tuple. The right side must be a function call or structure ("if", "switch", "for", "while") ` +
+                    `returning a tuple with the same number of elements. at ${this.startOf(open)}`
+            );
+        }
         const arity = this.tupleArityOf(init);
         if (arity !== undefined && arity !== elements.length) {
             throw new Error(
@@ -2249,6 +2391,7 @@ export class Parser {
         // values — `switch method`, `type + 1` — already arrive as IDENTIFIER
         // tokens: the lexer only keeps them as keywords in declaration position.
         if (this.match(TokenType.IDENTIFIER)) {
+            this.rejectOnceAsValue();
             const id = this.advance();
             let name = id.value;
             if (

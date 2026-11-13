@@ -14,7 +14,7 @@ describe('TA Stress Tests', () => {
 
                 const sma_large = ta.sma(close, 500);
                 plotchar(sma_large, 'sma_large');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['sma_large']).toBeDefined();
             expect(plots['sma_large'].data.length).toBeGreaterThan(0);
@@ -34,7 +34,7 @@ describe('TA Stress Tests', () => {
                 const sma1 = ta.sma(close, 1);
                 plotchar(sma1, 'sma1');
                 plotchar(close, 'close');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['sma1']).toBeDefined();
             expect(plots['close']).toBeDefined();
@@ -59,7 +59,7 @@ describe('TA Stress Tests', () => {
                 plotchar(ema1, 'ema1');
                 plotchar(ema2, 'ema2');
                 plotchar(ema3, 'ema3');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['ema1']).toBeDefined();
             expect(plots['ema2']).toBeDefined();
@@ -98,7 +98,7 @@ describe('TA Stress Tests', () => {
 
                 const rsi = ta.rsi(close, 14);
                 plotchar(rsi, 'rsi');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['rsi']).toBeDefined();
 
@@ -127,7 +127,7 @@ describe('TA Stress Tests', () => {
 
                 const atr = ta.atr(14);
                 plotchar(atr, 'atr');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['atr']).toBeDefined();
 
@@ -154,7 +154,7 @@ describe('TA Stress Tests', () => {
                 plotchar(basis, 'basis');
                 plotchar(upper, 'upper');
                 plotchar(lower, 'lower');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['basis']).toBeDefined();
             expect(plots['upper']).toBeDefined();
@@ -197,7 +197,7 @@ describe('TA Stress Tests', () => {
 
                 plotchar(ema_fast, 'ema_fast');
                 plotchar(ema_slow, 'ema_slow');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['ema_fast']).toBeDefined();
             expect(plots['ema_slow']).toBeDefined();
@@ -228,7 +228,7 @@ describe('TA Stress Tests', () => {
                 const sum20 = ta.sma(volume, 20) * 20; // Sum of last 20 periods
 
                 plotchar(sum20, 'sum20');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['sum20']).toBeDefined();
             expect(plots['sum20'].data.length).toBeGreaterThan(0);
@@ -252,7 +252,7 @@ describe('TA Stress Tests', () => {
 
                 const ph = ta.pivothigh(high, 5, 5);
                 plotchar(ph, 'pivothigh');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['pivothigh']).toBeDefined();
 
@@ -269,7 +269,7 @@ describe('TA Stress Tests', () => {
 
                 const pl = ta.pivotlow(low, 5, 5);
                 plotchar(pl, 'pivotlow');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['pivotlow']).toBeDefined();
 
@@ -291,7 +291,7 @@ describe('TA Stress Tests', () => {
 
                 plotchar(chg1, 'chg1');
                 plotchar(chg10, 'chg10');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['chg1']).toBeDefined();
             expect(plots['chg10']).toBeDefined();
@@ -313,7 +313,7 @@ describe('TA Stress Tests', () => {
                 const prev = close;
 
                 plotchar(chg, 'change');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['change']).toBeDefined();
             expect(plots['change'].data.length).toBeGreaterThan(0);
@@ -339,7 +339,7 @@ describe('TA Stress Tests', () => {
 
                 plotchar(stdev, 'stdev');
                 plotchar(stdev_from_var, 'stdev_from_var');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
             expect(plots['stdev']).toBeDefined();
             expect(plots['stdev_from_var']).toBeDefined();

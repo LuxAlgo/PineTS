@@ -153,7 +153,7 @@ const sourceCode = (context) => {
     return { tr1, tr2, tr3, tr4 };
 };
 
-const { result } = await pineTS.run(sourceCode);
+const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 ### With Optional Parameters

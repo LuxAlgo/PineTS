@@ -10,7 +10,7 @@ describe('PLOT Namespace', () => {
             const p1 = plot(close, 'SMA');
             const p2 = plot(open, 'SMA'); // Same title, different callsite
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // First plot uses title "SMA" as key, second gets "SMA#1"
         expect(plots['SMA']).toBeDefined();
@@ -43,7 +43,7 @@ describe('PLOT Namespace', () => {
             plot(open, 'Line');
             plot(high, 'Line');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Should produce: "Line", "Line#1", "Line#2"
         expect(plots['Line']).toBeDefined();
@@ -66,7 +66,7 @@ describe('PLOT Namespace', () => {
             plot(close, 'Close');
             plot(open, 'Open');
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Each plot should be keyed by its title (no collision)
         expect(plots['Close']).toBeDefined();
@@ -83,7 +83,7 @@ describe('PLOT Namespace', () => {
             var p2 = plot(open, 'Lower');
             fill(p1, p2, color.new(color.blue, 80));
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Both plots should exist
         expect(plots['Upper']).toBeDefined();
@@ -106,7 +106,7 @@ describe('PLOT Namespace', () => {
             var h2 = hline(30, 'Oversold');
             fill(h1, h2, color.new(color.green, 90));
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Both hlines should exist as plots (hline delegates to plot.any)
         expect(plots['Overbought']).toBeDefined();
@@ -129,7 +129,7 @@ describe('PLOT Namespace', () => {
             var p2 = plot(open, 'Band'); // Same title
             fill(p1, p2, color.new(color.red, 80));
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // First plot uses "Band", second gets "Band#1"
         expect(plots['Band']).toBeDefined();
@@ -159,7 +159,7 @@ describe('PLOT Namespace', () => {
         const { plots } = await pineTS.run((context) => {
             plot(close - open, 'Hist', { style: plot.style_histogram, histbase: 50, color: color.blue });
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['Hist']).toBeDefined();
         expect(plots['Hist'].options).toBeDefined();
@@ -173,7 +173,7 @@ describe('PLOT Namespace', () => {
         const { plots } = await pineTS.run((context) => {
             plot(close - open, 'ZeroBase', { style: plot.style_histogram, histbase: 0 });
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['ZeroBase']).toBeDefined();
         expect(plots['ZeroBase'].options).toBeDefined();
@@ -192,7 +192,7 @@ describe('PLOT Namespace', () => {
             var hasP2 = p2 !== undefined && p2 !== null;
 
             return { hasP1, hasP2 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.hasP1[0]).toBe(true);
         expect(result.hasP2[0]).toBe(true);

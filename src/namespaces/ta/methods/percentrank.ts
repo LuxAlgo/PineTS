@@ -3,6 +3,7 @@
 import { Series } from '../../../Series';
 import { CarryHistory, SortedTail } from '../utils/history';
 import { upperBound } from '../utils/windows';
+import { chargeTaWork } from '../utils/assertTaLength';
 
 const isNa = (v: any) => v === null || v === undefined || Number.isNaN(v);
 
@@ -26,10 +27,10 @@ export function percentrank(context: any) {
         let count = 0;
         if (_callId) {
             if (!context.taState) context.taState = {};
-            const state = (context.taState[_callId] ??= { carry: new CarryHistory(), prev: new SortedTail() });
+            const state = (context.taState[_callId] ??= { carry: new CarryHistory(0, undefined, true, context.executionBudget), prev: new SortedTail(context.executionBudget) });
             const carry: CarryHistory = state.carry;
             const prev: SortedTail = state.prev;
-            carry.push(context.idx, currentValue, length, series);
+            carry.push(context.idx, currentValue, length, series, context.executionBudget);
             if (carry.newBar) prev.commit();
             else prev.rollback();
             prev.sync(carry.h, length, 1);
@@ -39,6 +40,7 @@ export function percentrank(context: any) {
             return NaN;
         } else if (currentValue !== null && currentValue !== undefined) {
             for (let i = 1; i <= length; i++) {
+                chargeTaWork(context, 1, 'ta.percentrank');
                 const val = series.get(i);
                 if (val !== null && val !== undefined && val <= currentValue) count++;
             }

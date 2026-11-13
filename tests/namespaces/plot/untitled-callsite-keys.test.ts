@@ -53,7 +53,7 @@ bgcolor(close < open ? color.blue : na, force_overlay=true)
         expect(bg1.data[0].options.color).toMatch(/^#4caf50/i); // bar 0 is up → green
         expect(bg1.data[1].value).toBeFalsy();
         expect(bg2.data[1].options.color).toMatch(/^#2962ff/i); // bar 1 is down → blue
-        expect(bars[0].data[1].options.color).toMatch(/^#f23645/i);
+        expect(bars[0].data[1].options.color).toMatch(/^#ff5252/i); // v5 color.red
     });
 
     it('titled bgcolor() / barcolor() keep their title as the key', async () => {

@@ -14,6 +14,6 @@ export function slice(context: any) {
         if (from < 0 || from >= size) outOfBounds(from, size, 'array.slice');
         if (to < 0 || to > size) outOfBounds(to, size, 'array.slice');
         if (from > to) throw new PineRuntimeError("Index 'from' should be less than index 'to'.", 'array.slice');
-        return new PineArrayObject(createSliceView(id.array, from, to - from), id.type, context);
+        return new PineArrayObject(createSliceView(id.array, from, to - from, context), id.type, context);
     };
 }

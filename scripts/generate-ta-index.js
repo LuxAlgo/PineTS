@@ -55,6 +55,8 @@ ${getterImports}
 
 ${methodImports}
 
+import { wrapTaLengthPolicy } from './lengthPolicy';
+
 ${gettersObjStr}
 
 ${methodsObjStr}
@@ -80,7 +82,7 @@ ${
     
     // Install methods
     Object.entries(methods).forEach(([name, factory]) => {
-      this[name] = factory(context);
+      this[name] = wrapTaLengthPolicy(name, factory(context));
     });
   }
 }

@@ -62,7 +62,7 @@ export function buildKeyedProxy(
     seedValues?: Record<string, unknown>,
     keyNoun: string = 'key',
 ): BuildKeyedProxyResult {
-    const values: Record<string, unknown> = {};
+    const values: Record<string, unknown> = Object.create(null);
     const entryByKey = new Map<string, KeyedSchemaEntry>();
 
     // Canonical keys first (they win over any alias), values seeded under them.

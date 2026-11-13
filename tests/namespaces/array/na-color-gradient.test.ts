@@ -28,7 +28,7 @@ array.set(rowCols, 0, color.new(c, 50))
 plot(na(array.get(rowCols, 0)) ? 1 : 0, "cellIsNa")
 plot(color.t(array.get(rowCols, 0)), "cellT")
 plot(na(sc) ? 1 : 0, "scIsNa")
-        `);
+        `, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const cellIsNa = plots['cellIsNa'].data;
         expect(cellIsNa.length).toBeGreaterThan(0);
@@ -48,7 +48,7 @@ indicator("repro na literal")
 rowCols = array.new_color(2, na)
 array.set(rowCols, 0, na)
 plot(na(array.get(rowCols, 0)) ? 1 : 0, "cellIsNa")
-        `);
+        `, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const data = plots['cellIsNa'].data;
         expect(data.length).toBeGreaterThan(0);
@@ -87,7 +87,7 @@ plot(na(array.get(rowCols, 0)) ? 1 : 0, "cellIsNa")
             const pushed = array.get(arrPush, 0);
 
             return { gradientIsNa, scIsNa, pushed };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // First bar: EMA is na → the gradient is transparent black, not na.
         expect(result.scIsNa[0]).toBe(true);
@@ -107,7 +107,7 @@ plot(na(array.get(rowCols, 0)) ? 1 : 0, "cellIsNa")
             const cellIsNa = na(array.get(arr, 0));
 
             return { cellIsNa };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.cellIsNa.every((v: boolean) => v === true)).toBe(true);
     });

@@ -10,6 +10,10 @@ permalink: /architecture/namespaces/ta/
 
 This directory contains the implementation of Pine Script's `ta.*` namespace functions. These functions are designed to replicate Pine Script's behavior in a JavaScript environment, with a strong focus on **incremental calculation** and **Series compatibility**.
 
+## Runtime length policy
+
+Window and period arguments must be finite safe integers from 1 through 5,000. The `ta` namespace validates them before invoking a method; the window helpers also check lengths before allocation or iteration. `ta.change`, `ta.mom`, and `ta.roc` retain their zero-bar offset, while pivot left/right arguments may be zero if the combined span (`left + right + 1`) is at most 5,000. Invalid or excessive public arguments raise `PineRuntimeError` with the relevant `ta.*` method. Native scans and retained buffers consume the run's shared execution budget, including on changing series lengths and repeated same-bar evaluations.
+
 ## Architecture Overview
 
 Each TA function is implemented as a factory function that takes the execution `context` and returns the actual calculation function. This closure pattern allows functions to access the global state and other context methods efficiently.
@@ -83,7 +87,8 @@ state.prevEma = ema;
 Functions over the last `length` values use the helpers of `src/namespaces/ta/utils/windows.ts` and `utils/nonNaWindow.ts`, so a bar costs the same whatever the length. Never copy a window array per bar (`[...state.window]`, `unshift`): that alone makes a function O(length) per bar.
 
 - **Committed / tentative**: a window keeps the values committed on the previous bar plus the change of the current call, applied only when the next bar starts. A bar evaluated again (live bar, or a second call with the same key) starts from the same committed window.
-- **`CallWindow`** (`ExtremeWindow`, `WeightedWindow`, `SortedWindow`): the values of the function's calls, with the backfill from the source history for a short window (a call inside an `if` or on the last bar only). `push` is O(1); a backfill or a smaller length rebuilds the window. Running values the caller keeps go in `agg` / `tAgg`. With `carry`, a bar on which the call did not run repeats the last call's value.
+- **`CallWindow`** (`ExtremeWindow`, `WeightedWindow`, `SortedWindow`): the values of the function's calls. Only a window that grew past the calls it kept (a series length that increased) is completed from the source history. `push` is O(1); such a completion or a smaller length rebuilds the window. Running values the caller keeps go in `agg` / `tAgg`. With `carry`, a bar on which the call did not run repeats the last call's value.
+- **No history before the first call**: as on TradingView, a function first called on a later bar (inside an `if`, or on the last bar only) starts from its own calls: `ta.sma(close, 20)` first called on bar 19 is na until its 20th call, and called only on the last bar it is na. The highest family covers the calls made so far, and `ta.linreg` / `ta.rci` read 0 for the slots before the first call (`tests/namespaces/ta/ta-late-first-call-wide.test.ts`).
 - **`nonNaWindow`**: the last `length` non-na values of the calls with their running sum, optionally kept sorted (`'sorted'`) or counted (`'counts'`).
 - **`RecentExtreme`**: the highest / lowest of the calls made within the last `length` bars.
 

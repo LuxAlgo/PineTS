@@ -10,7 +10,7 @@ describe('Array Stack & Queue Operations', () => {
                 const { array } = context.pine;
                 let a = array.new_float(5, 0);
                 array.insert(a, 1, 'invalid_type');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         } catch (error) {
             expect(error).toBeInstanceOf(Error);
             expect(error.message).toContain('array.insert');
@@ -21,7 +21,7 @@ describe('Array Stack & Queue Operations', () => {
                 const { array } = context.pine;
                 let a = array.new_float(5, 0);
                 array.push(a, 'invalid_type');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         } catch (error) {
             expect(error).toBeInstanceOf(Error);
             expect(error.message).toContain('array.push');
@@ -32,7 +32,7 @@ describe('Array Stack & Queue Operations', () => {
                 const { array } = context.pine;
                 let a = array.new_float(5, 0);
                 array.set(a, 1, 'invalid_type');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         } catch (error) {
             expect(error).toBeInstanceOf(Error);
             expect(error.message).toContain('array.set');
@@ -43,7 +43,7 @@ describe('Array Stack & Queue Operations', () => {
                 const { array } = context.pine;
                 let a = array.new_float(5, 0);
                 array.unshift(a, 'invalid_type');
-            });
+            }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         } catch (error) {
             expect(error).toBeInstanceOf(Error);
             expect(error.message).toContain('array.unshift');
@@ -74,7 +74,7 @@ describe('Array Stack & Queue Operations', () => {
             return { pop, rem, res };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -140,7 +140,7 @@ describe('Array Stack & Queue Operations', () => {
             return { pop, rem, res };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {

@@ -31,7 +31,7 @@ describe('Array.get Bounds Checking', () => {
             return { val, val2 };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.val)).toBe(100);   // -1 -> last element
@@ -50,7 +50,7 @@ describe('Array.get Bounds Checking', () => {
             return { oob };
         };
 
-        await expect(pineTS.run(sourceCode)).rejects.toThrow(PineRuntimeError);
+        await expect(pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
     });
 
     it('should throw PineRuntimeError for index >= array length', async () => {
@@ -65,7 +65,7 @@ describe('Array.get Bounds Checking', () => {
             return { val_at_length };
         };
 
-        await expect(pineTS.run(sourceCode)).rejects.toThrow(/out of bounds/);
+        await expect(pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(/out of bounds/);
     });
 
     it('should return correct value for valid index', async () => {
@@ -86,7 +86,7 @@ describe('Array.get Bounds Checking', () => {
             return { first, mid, last_val };
         };
 
-        const { result } = await pineTS.run(sourceCode);
+        const { result } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
 
         expect(last(result.first)).toBe(10);
@@ -106,7 +106,7 @@ describe('Array.get Bounds Checking', () => {
             return { val };
         };
 
-        await expect(pineTS.run(sourceCode)).rejects.toThrow(/out of bounds/);
+        await expect(pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(/out of bounds/);
     });
 
     it('should include method name and index in the runtime error', async () => {
@@ -120,7 +120,7 @@ describe('Array.get Bounds Checking', () => {
 
         let caught: unknown;
         try {
-            await pineTS.run(sourceCode);
+            await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         } catch (err) {
             caught = err;
         }

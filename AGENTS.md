@@ -53,24 +53,25 @@ Before making changes, familiarize yourself with the architecture:
 
 ### 1. Input Types: Pine Script vs PineTS Syntax
 
-**CRITICAL**: PineTS accepts TWO different input formats. Understanding the difference is essential.
+**CRITICAL**: PineTS accepts two input formats, but `run()` accepts only versioned Pine Script by default. Markerless PineTS JavaScript and JavaScript functions require an explicit trusted-source opt-in.
 
 #### Detection Logic
 
 ```
-Input Source
+Input Source (`run()` defaults to `sourceMode: 'nativePine'`)
     │
-    ├─ Is Function? ──────────────────→ Convert to string, treat as PineTS
+    ├─ JavaScript Function? ──────────→ Reject by default; requires `trustedJavaScript`
     │
-    └─ Is String?
+    └─ String?
            │
-           ├─ Has //@version=X marker?
-           │       │
-           │       ├─ X >= 5 ──────────→ Pine Script → pineToJS pipeline
+           ├─ //@version=X marker?
+           │       ├─ X >= 5 ──────────→ Pine Script → pineToJS → verified execution
            │       └─ X < 5 ───────────→ Error (unsupported)
            │
-           └─ No version marker ───────→ PineTS syntax (use as-is)
+           └─ No version marker ───────→ Reject by default; PineTS syntax requires `trustedJavaScript`
 ```
+
+Pass `{ sourceMode: 'trustedJavaScript' }` explicitly for first-party JavaScript. It executes with host privileges; versioned Pine Script still follows the verified native-Pine path.
 
 #### Pine Script v5+ (Native TradingView Syntax)
 
@@ -87,7 +88,7 @@ plot(slow, "Slow EMA")
 
 #### PineTS Syntax (JavaScript-like)
 
-No version marker. Uses JavaScript syntax with the `$` context object.
+No version marker. Uses JavaScript syntax with the `$` context object and requires `sourceMode: 'trustedJavaScript'` when passed to `run()`.
 
 ```javascript
 ($) => {
@@ -107,14 +108,14 @@ No version marker. Uses JavaScript syntax with the `$` context object.
 
 #### JavaScript Function (Direct)
 
-Functions are converted to string and treated as PineTS syntax.
+With explicit `sourceMode: 'trustedJavaScript'`, functions are converted to strings and treated as PineTS syntax. Without that option, `run()` rejects them.
 
 ```javascript
-pineTS.run(($) => {
+await pineTS.run(($) => {
     const { close } = $.data;
     const { ta } = $.pine;
     return ta.sma(close, 20);
-});
+}, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 ```
 
 ### 2. Transpiler Pipeline
@@ -404,7 +405,7 @@ describe('ta.myfunc', () => {
             const r = ta.myfunc(close, 14);
             plotchar(r, 'r');
             return { r };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const data = plots['r'].data;
         expect(data.length).toBeGreaterThan(0);
@@ -514,7 +515,7 @@ pineTS.run(`
 `);
 ```
 
-**Fix**: Use either Pine Script (with `//@version=5`) OR PineTS syntax (with `($) => {}`), never both.
+**Fix**: Use either Pine Script (with `//@version=5`) or PineTS syntax (with `($) => {}` and explicit `sourceMode: 'trustedJavaScript'`), never both.
 
 ## Transpiler Rules
 

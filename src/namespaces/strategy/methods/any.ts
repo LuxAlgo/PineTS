@@ -2,6 +2,7 @@
 // Copyright (C) 2026 LuxAlgo
 
 import { parseStrategyOptions, initializeStrategy } from '../utils';
+import { validateDrawingOptions } from '../../drawingPolicy';
 
 /**
  * Declares a strategy and initializes strategy state
@@ -17,7 +18,9 @@ export function any(context: any) {
         } else {
             // Update config if called again (though this shouldn't happen normally).
             // User .prop overrides re-apply on top so the same layer order holds across calls.
-            context.strategy.config = { ...context.strategy.config, ...options, ...(context._propOverrides ?? {}) };
+            const config = { ...context.strategy.config, ...options, ...(context._propOverrides ?? {}) };
+            validateDrawingOptions(config);
+            context.strategy.config = config;
         }
 
         return context.strategy.config;

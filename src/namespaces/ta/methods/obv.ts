@@ -46,10 +46,10 @@ export function obv(context: any) {
         // Get previous close
         const close1 = context.get(context.data.close, 1);
 
-        // First bar (no previous close): OBV starts at 0
+        // First bar (no previous close): the change is na, so OBV is na; the sum starts at 0
         if (isNaN(close1)) {
             state.tentativeOBV = 0;
-            return context.precision(0);
+            return NaN;
         }
 
         // Use committed OBV as previous OBV

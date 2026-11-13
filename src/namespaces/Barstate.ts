@@ -20,15 +20,18 @@ export class Barstate {
     }
 
     public get ishistory() {
-        // Use context.length (total bar count) instead of incrementally-built
-        // context.data.close.data.length, which only has bars 0..idx during
-        // execution and would always equal idx+1 (making ishistory always false).
-        return this.context.idx < this.context.length - 1;
+        return !this.isrealtime;
     }
 
+    // Realtime bars start at the last loaded bar when it receives live data (not closed yet, market open),
+    // and include every bar that arrives with live updates — also the execution that closes a bar after the
+    // next one has arrived. With the market closed, or a historical range, no bar is realtime.
     public get isrealtime() {
-        // Use context.length for same reason as ishistory above.
-        return this.context.idx === this.context.length - 1;
+        const from = this.context._realtimeFromIdx;
+        if (from !== undefined) return this.context.idx >= from;
+        // Use context.length (total bar count) instead of the incrementally-built
+        // context.data series, which only hold bars 0..idx during execution.
+        return this.context.idx === this.context.length - 1 && !this.isconfirmed;
     }
 
     public get isconfirmed() {

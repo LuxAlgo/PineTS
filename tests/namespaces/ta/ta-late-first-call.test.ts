@@ -2,21 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { PineTS, Provider } from 'index';
 
 /**
- * TA Functions — Series Backfill in Conditional and Single-Call Contexts
+ * TA Functions — calls first made on a later bar (conditional blocks, barstate.islast)
  *
- * Verifies that all 13 window-based TA functions correctly backfill their
- * rolling window from the source series when called in contexts where the
- * per-callsite call count is low (conditional blocks, barstate.islast).
+ * As on TradingView, a window function has no history before its first call: it sees only the values
+ * of its own calls. Called from a later bar on, most functions are na until they have been called
+ * `length` times (`length + 1` for ta.roc / ta.change); ta.highest / ta.lowest cover the calls made so
+ * far, and ta.linreg reads 0 for the slots before its first call.
  *
- * The context.idx fallback ensures that when the chart has enough historical
- * bars (context.idx >= length-1), the window is filled from the source
- * series regardless of callCount. This enables correct results in:
- *   - Conditional blocks (function called on subset of bars)
- *   - barstate.islast (function called exactly once)
- *
- * Expected data sourced from TradingView (BTCUSDC, Weekly, 2025).
+ * Expected data sourced from TradingView (BTCUSDC, Weekly, 2025): the conditional values below are
+ * TradingView's output for PINE_CODE's conditional block.
  */
-describe('TA Functions - Series Backfill in Conditional and Single-Call Contexts', () => {
+describe('TA Functions - calls first made on a later bar', () => {
     // TradingView reference data (BTCUSDC Weekly)
     // 10 bars from 2025-04-07 to 2025-06-09
     // Conditional block starts at 2025-04-01 (first bar: Apr 7)
@@ -39,29 +35,22 @@ describe('TA Functions - Series Backfill in Conditional and Single-Call Contexts
         alma: [81093.283, 83624.001, 88391.133, 92804.356, 98092.476, 103739.441, 107119.001, 107343.024, 106168.232, 105730.13],
     };
 
-    // ── PineTS expected: conditional values ────────────────────────────
-    // With context.idx backfill, all functions get their window filled from
-    // the source series on the very first call (context.idx >> length).
-    // Calls 0-3: PineTS backfills → values match TV_TOP (TV itself returns
-    //   NaN for most functions here, but PineTS diverges intentionally to
-    //   support barstate.islast).
-    // Calls 4+: rolling window is naturally full → values match TV exactly.
-    const PINETS_COND = {
-        // All period-5 functions: backfill from call 0, values = TV_TOP
-        sma:  TV_TOP.sma,
-        std:  TV_TOP.std,
-        var_: TV_TOP.var_,
-        dev:  TV_TOP.dev,
-        wma:  TV_TOP.wma,
-        cci:  TV_TOP.cci,
-        med:  TV_TOP.med,
-        alma: TV_TOP.alma,
-        hi:   TV_TOP.hi,
-        lo:   TV_TOP.lo,
-        lr:   TV_TOP.lr,
-        // roc/change need length+1 values; context.idx >= length triggers backfill
-        roc:  TV_TOP.roc,
-        chg:  TV_TOP.chg,
+    // ── TV expected: conditional values (first call on 2025-04-07) ─────
+    const N = NaN;
+    const TV_COND = {
+        sma:  [N, N, N, N, 92220.552, 96771.086, 101546.688, 103931.572, 106233.078, 106528.338],
+        hi:   [83737.17, 85179.99, 93777.59, 94280.01, 104128, 106489.84, 109058, 109058, 109058, 109058],
+        lo:   [83737.17, 83737.17, 83737.17, 83737.17, 83737.17, 85179.99, 93777.59, 94280.01, 104128, 105604.3],
+        std:  [N, N, N, N, 7348.338, 7721.377, 6335.317, 5082.336, 1609.845, 1302.775],
+        var_: [N, N, N, N, 53998067.179, 59619669.467, 40136244.837, 25830136.582, 2591600.349, 1697223.559],
+        dev:  [N, N, N, N, 6209.578, 6830.267, 6014.31, 3860.625, 1232.674, 1011.865],
+        wma:  [N, N, N, N, 95545.997, 100302.427, 104398.065, 105783.172, 106401.828, 106192.235],
+        lr:   [50242.302, 84602.862, 107085.984, 111115.04, 102196.888, 107365.108, 110100.818, 109486.372, 106739.328, 105520.03],
+        cci:  [N, N, N, N, 127.84, 94.86, 83.26, 30.573, -24.096, -60.88],
+        med:  [N, N, N, N, 93777.59, 94280.01, 104128, 105702.01, 105787.54, 105787.54],
+        roc:  [N, N, N, N, N, 27.172, 28.032, 12.716, 12.206, 1.418],
+        chg:  [N, N, N, N, N, 22752.67, 23878.01, 11924.42, 11507.53, 1476.3],
+        alma: [N, N, N, N, 98092.476, 103739.441, 107119.001, 107343.024, 106168.232, 105730.13],
     };
 
     const PINE_CODE = `
@@ -195,26 +184,7 @@ plot(_alma_cond, "alma_cond")
         const smaTopVals = extract('sma_top');
         expect(smaTopVals.length, 'should have 10 weekly bars in window').toBe(10);
 
-        // ── Test 1: All functions return values from call 0 (context.idx backfill) ──
-        // With context.idx >= length-1 (chart has enough bars), all functions
-        // backfill their window from the source series on the very first call.
-        for (const fn of FUNCS) {
-            const vals = extract(PLOT_NAMES[fn].cond);
-            expect(isNaN(vals[0]), `${fn}_cond[0] should NOT be NaN (backfilled from series)`).toBe(false);
-        }
-
-        // ── Test 2: Conditional matches top-level from call 0 ─────
-        // With context.idx backfill, all functions get their window filled
-        // from the source series immediately, so values match top-level.
-        for (const fn of FUNCS) {
-            const topVals = extract(PLOT_NAMES[fn].top);
-            const condVals = extract(PLOT_NAMES[fn].cond);
-            for (let i = 0; i < 10; i++) {
-                approxEqual(condVals[i], topVals[i], `${fn} convergence [${i}]`);
-            }
-        }
-
-        // ── Test 3: Top-level values match TV reference data ───────
+        // ── Top-level values match TV reference data ───────
         for (const fn of FUNCS) {
             const topVals = extract(PLOT_NAMES[fn].top);
             const tvTop = TV_TOP[fn];
@@ -223,30 +193,22 @@ plot(_alma_cond, "alma_cond")
             }
         }
 
-        // ── Test 4: Conditional values match expected reference data ──
-        // Calls 0-3 (period-5) / 0-4 (roc/chg): PineTS returns backfilled
-        // values that match TV_TOP, but TV itself returns NaN here.
-        // We skip these early calls and only compare from the point where
-        // both PineTS conditional and TV conditional agree (window naturally full).
+        // ── Conditional values match TV, warm-up included ──
         for (const fn of FUNCS) {
             const condVals = extract(PLOT_NAMES[fn].cond);
-            const expected = PINETS_COND[fn];
-            const startIdx = (fn === 'roc' || fn === 'chg') ? 5 : 4;
-            for (let i = startIdx; i < 10; i++) {
-                approxEqual(condVals[i], expected[i], `${fn}_cond[${i}] vs expected`);
+            for (let i = 0; i < 10; i++) {
+                approxEqual(condVals[i], TV_COND[fn][i], `${fn}_cond[${i}] vs TV`);
             }
         }
     }, 60000);
 
     /**
-     * Single-call backfill: TA functions inside barstate.islast
-     *
-     * When a TA function is called ONLY inside barstate.islast, it is invoked
-     * exactly once (callCount=1). The context.idx fallback ensures the window
-     * is filled from the source series when the chart has enough historical
-     * bars (context.idx >= length-1), so all functions return valid values.
+     * TA functions inside barstate.islast: each is called once. As on TradingView (ta.sma(close, 20)
+     * called only on the last bar is na), the averages and spreads are na; ta.highest / ta.lowest are
+     * that one value; ta.linreg reads 0 for the slots before its call, 0.6 x close for length 5 (TV:
+     * first call 50,242.302 at close 83,737.17).
      */
-    it('single-call context produces valid values for all TA functions', async () => {
+    it('a call made on the last bar only sees that call', async () => {
         const pineTS = new PineTS(
             Provider.Mock, 'BTCUSDC', 'W', null,
             new Date('2018-12-10').getTime(),
@@ -330,50 +292,19 @@ plot(_lo_top, "lo_top")
 plot(_lo_last, "lo_last")
 `;
 
-        const { plots } = await pineTS.run(code);
-
-        // All functions that use the callCount-based backfill pattern
-        const FUNCS_TO_TEST = [
-            { name: 'sma',  top: 'sma_top',  last: 'sma_last' },
-            { name: 'stdev', top: 'std_top',  last: 'std_last' },
-            { name: 'variance', top: 'var_top', last: 'var_last' },
-            { name: 'dev',  top: 'dev_top',  last: 'dev_last' },
-            { name: 'wma',  top: 'wma_top',  last: 'wma_last' },
-            { name: 'cci',  top: 'cci_top',  last: 'cci_last' },
-            { name: 'median', top: 'med_top', last: 'med_last' },
-            { name: 'alma', top: 'alma_top', last: 'alma_last' },
-            { name: 'linreg', top: 'lr_top',  last: 'lr_last' },
-            { name: 'roc',  top: 'roc_top',  last: 'roc_last' },
-            { name: 'change', top: 'chg_top', last: 'chg_last' },
-            // Already fixed:
-            { name: 'highest', top: 'hi_top', last: 'hi_last' },
-            { name: 'lowest',  top: 'lo_top', last: 'lo_last' },
-        ];
+        const { plots } = await pineTS.run(code + 'plot(close, "close")\n');
 
         const lastIdx = plots['sma_top'].data.length - 1;
+        const at = (name: string) => plots[name].data[lastIdx].value;
+        const close = at('close');
 
-        for (const fn of FUNCS_TO_TEST) {
-            const topData = plots[fn.top]?.data;
-            const lastData = plots[fn.last]?.data;
-
-            expect(topData, `${fn.name}: top plot should exist`).toBeDefined();
-            expect(lastData, `${fn.name}: last plot should exist`).toBeDefined();
-
-            const topVal = topData[lastIdx].value;
-            const lastVal = lastData[lastIdx].value;
-
-            // Top-level should always have a value on the last bar
-            expect(isNaN(topVal), `${fn.name}_top should not be NaN on last bar`).toBe(false);
-
-            // barstate.islast value should NOT be NaN (context.idx backfill)
-            expect(isNaN(lastVal), `${fn.name}_last should not be NaN on last bar`).toBe(false);
-
-            // barstate.islast value should match top-level
-            const relErr = Math.abs(lastVal - topVal) / Math.abs(topVal);
-            expect(
-                relErr,
-                `${fn.name}: last (${lastVal}) should match top (${topVal}), relErr=${relErr}`
-            ).toBeLessThan(5e-4);
+        for (const name of ['sma', 'std', 'var', 'dev', 'wma', 'cci', 'med', 'alma', 'roc', 'chg']) {
+            // the top-level call has its full window; the single call has none
+            expect(isNaN(at(`${name}_top`)), `${name}_top should not be na on the last bar`).toBe(false);
+            expect(isNaN(at(`${name}_last`)), `${name}_last should be na after one call`).toBe(true);
         }
+        expect(at('hi_last')).toBe(close);
+        expect(at('lo_last')).toBe(close);
+        approxEqual(at('lr_last'), 0.6 * close, 'lr_last');
     }, 60000);
 });

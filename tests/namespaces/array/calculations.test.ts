@@ -21,7 +21,7 @@ describe('Array Calculations & Statistics', () => {
                 variance,
                 variance_biased,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const part_avg = result.avg.reverse().slice(0, 5);
         const part_variance = result.variance.reverse().slice(0, 5);
@@ -56,7 +56,7 @@ describe('Array Calculations & Statistics', () => {
                 variance,
                 variance_biased,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const part_avg = result.avg.reverse().slice(0, 5);
         const part_variance = result.variance.reverse().slice(0, 5);
@@ -91,7 +91,7 @@ describe('Array Calculations & Statistics', () => {
                 stdev,
                 stdev_biased,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const part_sum = result.sum;
         const part_stdev = result.stdev;
@@ -135,7 +135,7 @@ describe('Array Calculations & Statistics', () => {
                 stdev,
                 stdev_biased,
             };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const part_sum = result.sum;
         const part_stdev = result.stdev;
@@ -178,7 +178,7 @@ describe('Array Calculations & Statistics', () => {
             return { median, mode, standardize };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -233,7 +233,7 @@ describe('Array Calculations & Statistics', () => {
             return { a, stdev };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -287,7 +287,7 @@ describe('Array Calculations & Statistics', () => {
             return { a, avg };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -343,7 +343,7 @@ describe('Array Calculations & Statistics', () => {
             return { a, variance, variance_unbiased };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -402,7 +402,7 @@ describe('Array Calculations & Statistics', () => {
             return { a, b, covariance, covariance_unbiased };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -459,7 +459,7 @@ describe('Array Calculations & Statistics', () => {
             return { a, range };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -514,7 +514,7 @@ describe('Array Calculations & Statistics', () => {
             return { a, percentrank };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -569,7 +569,7 @@ describe('Array Calculations & Statistics', () => {
             return { a, percentile_linear_interpolation };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {
@@ -624,7 +624,7 @@ describe('Array Calculations & Statistics', () => {
             return { a, percentile_nearest_rank };
         };
 
-        const { result, data } = await pineTS.run(sourceCode);
+        const { result, data } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let plotdata_str = '';
         for (let i = 0; i < data.openTime.data.length; i++) {

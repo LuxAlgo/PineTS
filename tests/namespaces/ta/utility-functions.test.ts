@@ -17,7 +17,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { cum };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let cum_plotdata = plots['cum']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -64,7 +64,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();
@@ -122,7 +122,7 @@ describe('Technical Analysis - Volume Indicators', () => {
             return { res };
         };
 
-        const { result, plots } = await pineTS.run(sourceCode);
+        const { result, plots } = await pineTS.run(sourceCode, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         let _plotdata = plots['plot']?.data;
         const startDate = new Date('2018-12-10').getTime();

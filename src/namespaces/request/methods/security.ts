@@ -9,6 +9,7 @@ import { findLTFContextIdx } from '../utils/findLTFContextIdx';
 import { runSecondary } from '../utils/runSecondary';
 import { parseArgsForPineParams } from '../../utils';
 import { trackRequestContext, MAX_CALC_BARS } from '../../limits';
+import { PineRuntimeError } from '../../../errors/PineRuntimeError';
 
 // Pine signature (v5/v6):
 //   request.security(symbol, timeframe, expression, gaps, lookahead, ignore_invalid_symbol, currency, calc_bars_count)
@@ -324,7 +325,8 @@ export function security(context: any) {
 
         // Pass calc_bars_count as `periods` so the secondary fetches that many bars
         // ending at secEDate — gives the script the historical depth it asked for.
-        const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate);
+        const pineTS = new PineTS(context.source, _symbol, _timeframe, _calc_bars_count, adjustedSDate, secEDate,
+            { executionBudget: context.executionBudget });
 
         // Mark as secondary context to prevent infinite recursion
         pineTS.markAsSecondary(context);
@@ -335,6 +337,9 @@ export function security(context: any) {
             // script — see runSecondary.
             secContext = await runSecondary(context, pineTS, _expression_name);
         } catch (error) {
+            // `ignore_invalid_symbol` only changes symbol-lookup failures;
+            // resource/cancellation/runtime-policy failures must halt the run.
+            if (error instanceof PineRuntimeError) throw error;
             // The data source couldn't provide the requested series. As on
             // TradingView the script stops with the error, unless the call
             // passes ignore_invalid_symbol = true: then the series is na.

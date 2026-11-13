@@ -18,7 +18,7 @@ describe('Streaming', () => {
             return { sma, ema, sum10, close, state };
         };
 
-        const iterator = pineTS.run(indicator, undefined, 10);
+        const iterator = pineTS.run(indicator, undefined, 10, { sourceMode: 'trustedJavaScript' });
 
         let iterations = {
             close: [],
@@ -111,7 +111,7 @@ describe('Streaming', () => {
             return { fast_ma, slow_ma, macd, signal, hist };
         };
 
-        const iterator = pineTS.run(indicator, undefined, 10);
+        const iterator = pineTS.run(indicator, undefined, 10, { sourceMode: 'trustedJavaScript' });
 
         let iterations = {
             close: [],

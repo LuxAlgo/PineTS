@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { Series } from '../../../Series';
+import { assertTaLength } from './assertTaLength';
+import type { ExecutionBudget } from '../../../security/ExecutionBudget';
 
 /**
  * Building blocks for the rolling windows of the ta functions: each one is updated in O(1)
@@ -161,9 +163,16 @@ export class ValueCounts {
     private byCount = new Map<number, number[]>();
     private maxCount = 0;
 
+    constructor(private readonly budget?: ExecutionBudget) {}
+
     add(v: number): void {
         const c = this.counts.get(v) || 0;
-        if (c > 0) sortedRemove(this.byCount.get(c)!, v);
+        const oldBucket = c > 0 ? this.byCount.get(c)! : null;
+        const nextBucket = this.byCount.get(c + 1);
+        this.budget?.chargeWork((oldBucket?.length ?? 0) + (nextBucket?.length ?? 0) + 1, 'ta.mode');
+        if (c > 0) {
+            sortedRemove(oldBucket!, v);
+        }
         this.counts.set(v, c + 1);
         let bucket = this.byCount.get(c + 1);
         if (!bucket) this.byCount.set(c + 1, (bucket = []));
@@ -175,10 +184,12 @@ export class ValueCounts {
     remove(v: number): void {
         const c = this.counts.get(v)!;
         const bucket = this.byCount.get(c)!;
+        const lowerBucket = c > 1 ? this.byCount.get(c - 1)! : null;
+        this.budget?.chargeWork(bucket.length + (lowerBucket?.length ?? 0) + (lowerBucket ? 1 : 0), 'ta.mode');
         sortedRemove(bucket, v);
         if (c > 1) {
             this.counts.set(v, c - 1);
-            sortedInsert(this.byCount.get(c - 1)!, v);
+            sortedInsert(lowerBucket!, v);
         } else {
             this.counts.delete(v);
         }
@@ -225,11 +236,10 @@ export const BACKFILL_FROM_SOURCE: PushOptions = {
  * committed on the previous bar is never copied; the current call's value is kept aside and only added
  * when the next bar starts, so a bar evaluated again (live bar) starts from the same window.
  *
- * `push` adds a value and drops the oldest beyond `cap`. A window still short of `cap` values, on a call
- * made once the function has been called `cap` times or the chart has `cap` bars, is completed by
- * `backfill` (reading the source history): a function called inside an `if` or only on the last bar
- * needs that. Such a call, like one with a `cap` smaller than the window, rebuilds the window
- * (O(cap)); every other call is O(1).
+ * `push` adds a value and drops the oldest beyond `cap`. A window still short of `cap` values once the
+ * function has been called `cap` times (its length grew) is completed by `backfill` (reading the source
+ * history). Such a call, like one with a `cap` smaller than the window, rebuilds the window (O(cap));
+ * every other call is O(1).
  *
  * With `carry`, the window holds one value per bar rather than per call: a bar on which the function
  * was not called (the call is in a local block that did not run) repeats the value of the last call.
@@ -291,10 +301,13 @@ export class CallWindow {
 
     /** Tentatively adds `x` for the current call, dropping the oldest values beyond `cap`. */
     push(idx: number, x: any, cap: number, opts: PushOptions = NO_OPTIONS, src?: any): void {
+        assertTaLength(cap, 'ta.window');
         const calls = this.calls + 1;
         this.tCalls = calls;
         const n = this.ring.size;
-        const fill = !!opts.backfill && Math.min(n + 1, cap) < cap && (calls >= cap || idx >= cap - 1);
+        // Only a window that held its calls and is now too short (a series length that grew) reads the
+        // source; a function first called on a later bar starts from its calls alone, as on TradingView.
+        const fill = !!opts.backfill && Math.min(n + 1, cap) < cap && calls >= cap;
         if (n <= cap && !fill) {
             const evict = n + 1 > cap;
             if (evict && opts.dropped) opts.dropped(this.ring.oldest(), this);
@@ -324,6 +337,7 @@ export class CallWindow {
 
     /** Sets the current call's window to `newestFirst` (a rebuild from the source history). */
     set(newestFirst: any[], cap: number): void {
+        assertTaLength(cap, 'ta.window');
         this.tCalls = this.calls + 1;
         this.t = { rebuilt: true, values: newestFirst, cap };
     }

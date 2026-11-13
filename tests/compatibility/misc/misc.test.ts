@@ -32,7 +32,7 @@ describe('MISC Namespace', () => {
                     cc_minus_oo,
                     cc_plus_oo,
                 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Filter results for the date range 2025-10-01 to 2025-11-20
         const sDate = new Date('2025-10-01').getTime();

@@ -35,7 +35,7 @@ plot(b)
 `;
         let caught: unknown;
         try {
-            await newPineTS().run(script);
+            await newPineTS().run(script, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         } catch (err) {
             caught = err;
         }
@@ -52,7 +52,7 @@ plot(b)
             const arr = array.new_float(3, 100);
             return array.get(arr, 3);
         };
-        await expect(newPineTS().run(code)).rejects.toThrow(PineRuntimeError);
+        await expect(newPineTS().run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
     });
 
     it('array.get with negative index beyond -size throws', async () => {
@@ -61,7 +61,7 @@ plot(b)
             const arr = array.new_float(3, 100);
             return array.get(arr, -4);
         };
-        await expect(newPineTS().run(code)).rejects.toThrow(PineRuntimeError);
+        await expect(newPineTS().run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
     });
 
     it('array.set out of bounds throws', async () => {
@@ -70,7 +70,7 @@ plot(b)
             const arr = array.new_float(3, 100);
             array.set(arr, 5, 42);
         };
-        await expect(newPineTS().run(code)).rejects.toThrow(PineRuntimeError);
+        await expect(newPineTS().run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
     });
 
     it('array.insert beyond size throws', async () => {
@@ -79,7 +79,7 @@ plot(b)
             const arr = array.new_float(3, 100);
             array.insert(arr, 5, 42);
         };
-        await expect(newPineTS().run(code)).rejects.toThrow(PineRuntimeError);
+        await expect(newPineTS().run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
     });
 
     it('array.remove out of bounds throws', async () => {
@@ -88,7 +88,7 @@ plot(b)
             const arr = array.new_float(3, 100);
             return array.remove(arr, 5);
         };
-        await expect(newPineTS().run(code)).rejects.toThrow(PineRuntimeError);
+        await expect(newPineTS().run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
     });
 
     it('matrix.get out of bounds throws', async () => {
@@ -97,7 +97,7 @@ plot(b)
             const m = matrix.new(3, 3, 0);
             return matrix.get(m, 5, 0);
         };
-        await expect(newPineTS().run(code)).rejects.toThrow(PineRuntimeError);
+        await expect(newPineTS().run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
     });
 
     it('matrix.set out of bounds throws', async () => {
@@ -106,7 +106,7 @@ plot(b)
             const m = matrix.new(3, 3, 0);
             matrix.set(m, 0, 5, 1);
         };
-        await expect(newPineTS().run(code)).rejects.toThrow(PineRuntimeError);
+        await expect(newPineTS().run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
     });
 
     it('matrix.row / matrix.col out of bounds throw', async () => {
@@ -120,8 +120,8 @@ plot(b)
             const m = matrix.new(3, 3, 0);
             return matrix.col(m, 5);
         };
-        await expect(newPineTS().run(rowCode)).rejects.toThrow(PineRuntimeError);
-        await expect(newPineTS().run(colCode)).rejects.toThrow(PineRuntimeError);
+        await expect(newPineTS().run(rowCode, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
+        await expect(newPineTS().run(colCode, undefined, undefined, { sourceMode: 'trustedJavaScript' })).rejects.toThrow(PineRuntimeError);
     });
 
     it('valid access still works (no throw)', async () => {
@@ -134,7 +134,7 @@ plot(b)
             const m = matrix.get(mat, 1, 1);
             return { a, neg, m };
         };
-        const { result } = await newPineTS().run(code);
+        const { result } = await newPineTS().run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const last = (arr: any[]) => arr[arr.length - 1];
         expect(last(result.a)).toBe(100);
         expect(last(result.neg)).toBe(100);

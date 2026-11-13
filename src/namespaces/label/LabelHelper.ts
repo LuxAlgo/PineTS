@@ -7,6 +7,7 @@ import { ChartPointObject } from '../chart/ChartPointObject';
 import { resolvePoint } from '../chart/resolvePoint';
 import { NAHelper } from '../Core';
 import { silentInSecondary } from '../silentInSecondary';
+import { consumeDrawingCreation, DrawingStore, validateDrawingMaximum } from '../drawingPolicy';
 
 //prettier-ignore
 const LABEL_NEW_SIGNATURES = [
@@ -25,7 +26,7 @@ const LABEL_NEW_ARGS_TYPES = {
 };
 
 export class LabelHelper {
-    private _labels: LabelObject[] = [];
+    private _labels = new DrawingStore<LabelObject>();
 
     constructor(private context: any) {}
 
@@ -46,11 +47,7 @@ export class LabelHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
-        // Compact out deleted labels — keeps the backing array bounded to the
-        // active set (RC3). Transparent to output; rollbackFromBar filters by
-        // _createdAtBar, orthogonal to _deleted.
-        this._labels = this._labels.filter(lbl => !lbl._deleted);
-        const allPlotData = this._labels.map(lbl => lbl.toPlotData());
+        const allPlotData = this._labels.values().map(lbl => lbl.toPlotData());
 
         // Split force_overlay objects into a separate overlay plot (renders on main chart pane)
         const regular = allPlotData.filter((l: any) => !l.force_overlay);
@@ -115,6 +112,8 @@ export class LabelHelper {
         force_overlay: boolean = false,
         text_formatting: string = 'none',
     ): LabelObject {
+        const maximum = this._maximum();
+        consumeDrawingCreation(this.context, 'label.new');
         // Resolve any Series/function values to scalars for label properties
         const lbl = new LabelObject(
             x, y,
@@ -133,25 +132,12 @@ export class LabelHelper {
         );
         lbl._helper = this;
         lbl._createdAtBar = this.context.idx;
-        this._labels.push(lbl);
-        this._enforceMaxCount();
+        this._labels.add(lbl, maximum);
         return lbl;
     }
 
-    private _enforceMaxCount(): void {
-        const maxCount = this.context.indicator?.max_labels_count ?? 50;
-        const active = this._labels.filter(l => !l._deleted);
-        if (active.length > maxCount) {
-            const toRemove = active.length - maxCount;
-            let removed = 0;
-            for (const l of this._labels) {
-                if (removed >= toRemove) break;
-                if (!l._deleted) {
-                    l._deleted = true;
-                    removed++;
-                }
-            }
-        }
+    private _maximum(): number {
+        return validateDrawingMaximum('max_labels_count', this.context.indicator?.max_labels_count ?? this.context.strategy?.config?.max_labels_count ?? 50);
     }
 
     // label.new() — explicit Pine Script factory method
@@ -313,23 +299,24 @@ export class LabelHelper {
     @silentInSecondary
     copy(id: LabelObject): LabelObject | undefined {
         if (!id) return undefined;
+        const maximum = this._maximum();
+        consumeDrawingCreation(this.context, 'label.copy');
         const lbl = id._clone();
         lbl._helper = this;
         lbl._createdAtBar = this.context.idx;
-        this._labels.push(lbl);
-        this._enforceMaxCount();
+        this._labels.add(lbl, maximum);
         return lbl;
     }
 
     @silentInSecondary
     delete(id: LabelObject): void {
-        if (id) id._deleted = true;
+        if (id) this._labels.delete(id);
     }
 
     // --- Property: all active labels ---
 
     get all(): LabelObject[] {
-        return this._labels.filter((l) => !l._deleted);
+        return this._labels.values();
     }
 
     /**
@@ -337,7 +324,7 @@ export class LabelHelper {
      * Called during streaming rollback to prevent accumulation.
      */
     rollbackFromBar(barIdx: number): void {
-        this._labels = this._labels.filter((l) => l._createdAtBar < barIdx);
+        this._labels.rollbackFromBar(barIdx);
         this.syncToPlot();
     }
 

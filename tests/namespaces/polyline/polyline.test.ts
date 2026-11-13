@@ -21,7 +21,7 @@ describe('POLYLINE Namespace', () => {
             var pl_line_width = pl.line_width;
             var pl_line_style = pl.line_style;
             return { pl_curved, pl_closed, pl_xloc, pl_line_color, pl_line_width, pl_line_style };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.pl_curved[0]).toBe(false);
         expect(result.pl_closed[0]).toBe(false);
@@ -56,7 +56,7 @@ describe('POLYLINE Namespace', () => {
             var pl_line_style = pl.line_style;
             var pl_line_width = pl.line_width;
             return { pl_curved, pl_closed, pl_line_color, pl_fill_color, pl_line_style, pl_line_width };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.pl_curved[0]).toBe(true);
         expect(result.pl_closed[0]).toBe(true);
@@ -77,7 +77,7 @@ describe('POLYLINE Namespace', () => {
             polyline.new(pts, { line_color: na });
             polyline.new(pts, { line_color: color(na) });
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         const polylines = plots['__polylines__'].data[0].value;
         expect(polylines[0].line_color).toBeNaN();
@@ -97,7 +97,7 @@ describe('POLYLINE Namespace', () => {
             var firstPrice = pl.points[0].price;
             var lastPrice = pl.points[2].price;
             return { pointCount, firstPrice, lastPrice };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.pointCount[0]).toBe(3);
         expect(result.firstPrice[0]).toBe(50000);
@@ -118,7 +118,7 @@ describe('POLYLINE Namespace', () => {
             var deletedFlag = pl._deleted;
             var countAfter = polyline.all.length;
             return { deletedFlag, countBefore, countAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.deletedFlag[0]).toBe(true);
         expect(result.countBefore[0]).toBe(1);
@@ -137,7 +137,7 @@ describe('POLYLINE Namespace', () => {
             polyline.delete(pl2);
             var afterDeleteCount = polyline.all.length;
             return { totalCount, afterDeleteCount };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.totalCount[0]).toBe(2);
         expect(result.afterDeleteCount[0]).toBe(1);
@@ -157,7 +157,7 @@ describe('POLYLINE Namespace', () => {
             var deletedFlag = pl._deleted;
             var countAfter = polyline.all.length;
             return { deletedFlag, countBefore, countAfter };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.deletedFlag[0]).toBe(true);
         expect(result.countBefore[0]).toBe(1);
@@ -175,7 +175,7 @@ describe('POLYLINE Namespace', () => {
             );
             polyline.new(pts, { line_color: '#5b9cf6' });
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(plots['__polylines__']).toBeDefined();
         expect(plots['__polylines__'].data.length).toBeGreaterThan(0);
@@ -200,7 +200,7 @@ describe('POLYLINE Namespace', () => {
             polyline.new(pts1, { line_color: color.red });
             polyline.new(pts2, { line_color: color.blue });
             return {};
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // There should be exactly 1 data entry containing all polylines
         expect(plots['__polylines__'].data.length).toBe(1);

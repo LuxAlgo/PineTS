@@ -32,7 +32,7 @@ describe('Alert System', () => {
                 alert.any('Price crossed!', alert.freq_all);
             };
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // In realtime mode, only the last bar fires
             expect(ctx.alerts.length).toBe(1);
             expect(ctx.alerts[0].type).toBe('alert');
@@ -40,16 +40,16 @@ describe('Alert System', () => {
             expect(ctx.alerts[0].bar_index).toBe(ctx.marketData.length - 1);
         });
 
-        it('should not fire alerts on historical bars', async () => {
+        it('should not fire alerts on the bars before the last one', async () => {
             const pineTS = new PineTS(Provider.Mock, 'BTCUSDC', 'D', null, startDate, endDate);
             const code = (context: any) => {
                 const { alert, barstate } = context.pine;
-                if (barstate.ishistory) {
+                if (!barstate.islast) {
                     alert.any('historical alert');
                 }
             };
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(ctx.alerts.length).toBe(0);
         });
     });
@@ -63,7 +63,7 @@ describe('Alert System', () => {
                 alert.any('tick', alert.freq_all);
             };
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(ctx.alerts.length).toBe(ctx.marketData.length);
             expect(ctx.alerts[0].message).toBe('tick');
         });
@@ -78,7 +78,7 @@ describe('Alert System', () => {
                 alert.any('second', alert.freq_once_per_bar);
             };
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // Two alerts per bar (one per callsite)
             expect(ctx.alerts.length).toBe(ctx.marketData.length * 2);
             // Verify callsite IDs are distinct
@@ -100,7 +100,7 @@ describe('Alert System', () => {
                 alert.any('msg2');
             };
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // Both fire (different callsites), each once per bar
             expect(ctx.alerts.length).toBe(ctx.marketData.length * 2);
         });
@@ -116,7 +116,7 @@ describe('Alert System', () => {
                 plotchar(alert.freq_once_per_bar_close === 'once_per_bar_close' ? 1 : 0, 'opbc');
             };
 
-            const { plots } = await pineTS.run(code);
+            const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(plots['all'].data[0].value).toBe(1);
             expect(plots['opb'].data[0].value).toBe(1);
             expect(plots['opbc'].data[0].value).toBe(1);
@@ -138,7 +138,7 @@ if close < open
 plot(close)
             `;
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // Alerts from conditional branches get stable IDs
             const idsA = ctx.alerts.filter((a: any) => a.message === 'A').map((a: any) => a.id);
             const idsB = ctx.alerts.filter((a: any) => a.message === 'B').map((a: any) => a.id);
@@ -167,7 +167,7 @@ if close > open
 plot(close)
             `;
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             const alwaysAlerts = ctx.alerts.filter((a: any) => a.message === 'Always');
             const condAlerts = ctx.alerts.filter((a: any) => a.message === 'Conditional');
 
@@ -197,7 +197,7 @@ if close > open
 plot(close)
             `;
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // Should have some alerts (on bullish bars)
             expect(ctx.alerts.length).toBeGreaterThan(0);
             expect(ctx.alerts[0].type).toBe('alert');
@@ -216,7 +216,7 @@ plot(close)
                 alertcondition(true, 'Test Alert', 'Condition met!');
             };
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(ctx.alerts.length).toBe(1);
             expect(ctx.alerts[0].type).toBe('alertcondition');
             expect(ctx.alerts[0].title).toBe('Test Alert');
@@ -230,7 +230,7 @@ plot(close)
                 alertcondition(false, 'Test Alert', 'Should not fire');
             };
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(ctx.alerts.length).toBe(0);
         });
 
@@ -242,7 +242,7 @@ plot(close)
                 alertcondition(true, 'Always', 'Every bar');
             };
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(ctx.alerts.length).toBe(ctx.marketData.length);
         });
 
@@ -255,7 +255,7 @@ plot(close)
                 alertcondition(true, 'Cond B', 'Second');
             };
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             // Two alertconditions, each fires once per bar
             expect(ctx.alerts.length).toBe(ctx.marketData.length * 2);
 
@@ -278,7 +278,7 @@ alertcondition(close > open, "Bullish", "Green bar!")
 plot(close)
             `;
 
-            const ctx = await pineTS.run(code);
+            const ctx = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
             expect(ctx.alerts.length).toBeGreaterThan(0);
             expect(ctx.alerts[0].type).toBe('alertcondition');
             expect(ctx.alerts[0].title).toBe('Bullish');
@@ -298,7 +298,7 @@ plot(close)
 
             const alerts: any[] = [];
             await new Promise<void>((resolve, reject) => {
-                const stream = pineTS.stream(code, { live: false });
+                const stream = pineTS.stream(code, { live: false , sourceMode: 'trustedJavaScript'});
                 const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
 
                 stream.on('data', () => {
@@ -336,7 +336,7 @@ plot(close)
             let dataCount = 0;
 
             await new Promise<void>((resolve, reject) => {
-                const stream = pineTS.stream(code, { live: false });
+                const stream = pineTS.stream(code, { live: false , sourceMode: 'trustedJavaScript'});
                 const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
 
                 stream.on('data', () => {
@@ -374,7 +374,7 @@ plot(close)
             const alerts: any[] = [];
 
             await new Promise<void>((resolve, reject) => {
-                const stream = pineTS.stream(code, { live: false });
+                const stream = pineTS.stream(code, { live: false , sourceMode: 'trustedJavaScript'});
                 const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
 
                 stream.on('data', () => {
@@ -414,7 +414,7 @@ plot(close)
 
             await new Promise<void>((resolve, reject) => {
                 // Use pageSize smaller than data to get multiple ticks
-                const stream = pineTS.stream(code, { live: false, pageSize: 3 });
+                const stream = pineTS.stream(code, { live: false, pageSize: 3 , sourceMode: 'trustedJavaScript'});
                 const timeout = setTimeout(() => reject(new Error('Timeout')), 5000);
                 let currentTickAlerts = 0;
 
@@ -477,7 +477,8 @@ plot(close)
         it('alertcondition with named arguments out of order and title skipped', async () => {
             const { alerts, upBars } = await run(`alertcondition(message = "msg", condition = cond)`);
             expect(alerts.map((a: any) => a.bar_index)).toEqual(upBars);
-            expect(alerts.every((a: any) => a.title === '' && a.message === 'msg')).toBe(true);
+            // Without a title argument the condition is named "Alert" (Pine User Manual, Alerts).
+            expect(alerts.every((a: any) => a.title === 'Alert' && a.message === 'msg')).toBe(true);
         });
 
         it('alertcondition with a named false condition never fires', async () => {

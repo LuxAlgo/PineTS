@@ -5,9 +5,10 @@ import { PolylineObject } from './PolylineObject';
 import { ChartPointObject } from '../chart/ChartPointObject';
 import { NAHelper } from '../Core';
 import { silentInSecondary } from '../silentInSecondary';
+import { consumeDrawingCreation, DrawingStore, validateDrawingMaximum } from '../drawingPolicy';
 
 export class PolylineHelper {
-    private _polylines: PolylineObject[] = [];
+    private _polylines = new DrawingStore<PolylineObject>();
 
     constructor(private context: any) {}
 
@@ -31,12 +32,9 @@ export class PolylineHelper {
         // Same aggregation pattern as lines and linefills — prevents sparse array
         // collisions when multiple objects share the same timestamp.
         const time = this.context.marketData[0]?.openTime || 0;
-        // Compact out deleted polylines — bounded array (RC3), transparent output;
-        // rollbackFromBar filters by _createdAtBar, orthogonal to _deleted.
-        this._polylines = this._polylines.filter(pl => !pl._deleted);
         this.context.plots['__polylines__'].data = [{
             time,
-            value: this._polylines.map(pl => pl.toPlotData()),
+            value: this._polylines.values().map(pl => pl.toPlotData()),
             options: { style: 'drawing_polyline' },
         }];
     }
@@ -88,6 +86,8 @@ export class PolylineHelper {
     //   3. Positional arguments: polyline.new(pts, true, false, ...)
     @silentInSecondary
     new(...args: any[]): PolylineObject {
+        const maximum = validateDrawingMaximum('max_polylines_count', this.context.indicator?.max_polylines_count ?? this.context.strategy?.config?.max_polylines_count ?? 50);
+        consumeDrawingCreation(this.context, 'polyline.new');
         let points: any;
         let curved: any = false;
         let closed: any = false;
@@ -160,26 +160,10 @@ export class PolylineHelper {
             this._resolve(line_width) || 1,
             this._resolve(force_overlay) ?? false,
         );
+        pl._helper = this;
         pl._createdAtBar = this.context.idx;
-        this._polylines.push(pl);
-        this._enforceMaxCount();
+        this._polylines.add(pl, maximum);
         return pl;
-    }
-
-    private _enforceMaxCount(): void {
-        const maxCount = this.context.indicator?.max_polylines_count ?? 50;
-        const active = this._polylines.filter(p => !p._deleted);
-        if (active.length > maxCount) {
-            const toRemove = active.length - maxCount;
-            let removed = 0;
-            for (const p of this._polylines) {
-                if (removed >= toRemove) break;
-                if (!p._deleted) {
-                    p._deleted = true;
-                    removed++;
-                }
-            }
-        }
     }
 
     // polyline() direct call — mapped via NAMESPACES_LIKE → polyline.any()
@@ -204,12 +188,12 @@ export class PolylineHelper {
     // polyline.delete(id) → void
     @silentInSecondary
     delete(id: PolylineObject): void {
-        if (id) id._deleted = true;
+        if (id) this._polylines.delete(id);
     }
 
     // polyline.all — all active polyline objects
     get all(): PolylineObject[] {
-        return this._polylines.filter((pl) => !pl._deleted);
+        return this._polylines.values();
     }
 
     /**
@@ -217,7 +201,7 @@ export class PolylineHelper {
      * Called during streaming rollback to prevent accumulation.
      */
     rollbackFromBar(barIdx: number): void {
-        this._polylines = this._polylines.filter((pl) => pl._createdAtBar < barIdx);
+        this._polylines.rollbackFromBar(barIdx);
         this.syncToPlot();
     }
 }

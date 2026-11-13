@@ -2,6 +2,7 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { assertMatrixDimensions, chargeCollectionWork } from '../../collectionCapacity';
 
 export function kron(context: Context) {
     return (id: PineMatrixObject, id2: PineMatrixObject) => {
@@ -13,6 +14,7 @@ export function kron(context: Context) {
         const rows = r1 * r2;
         const cols = c1 * c2;
 
+        chargeCollectionWork(context, assertMatrixDimensions(rows, cols, 'matrix.kron'), 'matrix.kron');
         const newMatrix = new PineMatrixObject(rows, cols, NaN, context);
 
         for (let i = 0; i < r1; i++) {

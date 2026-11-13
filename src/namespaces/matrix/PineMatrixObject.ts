@@ -52,9 +52,11 @@ import { trace as trace_factory } from './methods/trace';
 import { transpose as transpose_factory } from './methods/transpose';
 import { spreadNamedArgs } from '../namedArgs';
 import { MATRIX_PARAMS } from '../collectionParams';
+import { assertMatrixDimensions, chargeCollectionAllocation } from '../collectionCapacity';
+import { guardMatrix } from './capacity';
 
 export class PineMatrixObject {
-    public matrix: any[][];
+    private _matrix: any[][];
     private _add_col: any;
     private _add_row: any;
     private _avg: any;
@@ -110,12 +112,15 @@ export class PineMatrixObject {
         initialValue: any = NaN,
         public context: any
     ) {
-        this.matrix = [];
+        const size = assertMatrixDimensions(rows, cols, 'matrix.new');
+        chargeCollectionAllocation(context, size, 'matrix.new');
+        const matrix: any[][] = [];
         if (rows > 0 && cols > 0) {
             for (let i = 0; i < rows; i++) {
-                this.matrix.push(Array(cols).fill(initialValue));
+                matrix.push(Array(cols).fill(initialValue));
             }
         }
+        this._matrix = guardMatrix(matrix, context, false);
         this._add_col = add_col_factory(this.context);
         this._add_row = add_row_factory(this.context);
         this._avg = avg_factory(this.context);
@@ -165,6 +170,9 @@ export class PineMatrixObject {
         this._trace = trace_factory(this.context);
         this._transpose = transpose_factory(this.context);
     }
+
+    get matrix(): any[][] { return this._matrix; }
+    set matrix(value: any[][]) { this._matrix = guardMatrix(value, this.context, true); }
 
     toString(): string {
         let result = '';

@@ -5,9 +5,12 @@ import { LineObject } from '../line/LineObject';
 import { LinefillObject } from './LinefillObject';
 import { NAHelper } from '../Core';
 import { silentInSecondary } from '../silentInSecondary';
+import { consumeDrawingCreation, DrawingStore, validateDrawingMaximum } from '../drawingPolicy';
 
 export class LinefillHelper {
-    private _linefills: LinefillObject[] = [];
+    private _linefills = new DrawingStore<LinefillObject>();
+    private _pairs = new Map<string, LinefillObject>();
+    private _byLine = new Map<LineObject, Set<LinefillObject>>();
 
     constructor(private context: any) {}
 
@@ -28,10 +31,10 @@ export class LinefillHelper {
     public syncToPlot() {
         this._ensurePlotsEntry();
         const time = this.context.marketData[0]?.openTime || 0;
-        // Compact out deleted linefills — bounded array (RC3), transparent output;
-        // rollbackFromBar filters by _createdAtBar, orthogonal to _deleted.
-        this._linefills = this._linefills.filter(lf => !lf._deleted);
-        const allPlotData = this._linefills.map(lf => lf.toPlotData());
+        for (const fill of this._pairs.values()) {
+            if (fill._deleted) this._unindex(fill);
+        }
+        const allPlotData = this._linefills.values().map(lf => lf.toPlotData());
 
         // Split force_overlay linefills into a separate overlay plot
         const regular = allPlotData.filter((lf: any) => !lf.force_overlay);
@@ -97,6 +100,7 @@ export class LinefillHelper {
     // every bar without explicitly deleting the old fill.
     @silentInSecondary
     new(line1: LineObject, line2: LineObject, color: any): LinefillObject | null {
+        const maximum = validateDrawingMaximum('max_lines_count', this.context.indicator?.max_lines_count ?? this.context.strategy?.config?.max_lines_count ?? 50);
         // Resolve thunks: in `var` UDT declarations, line.new() calls are hoisted
         // as thunks (functions). Resolve them here so LinefillObject stores actual
         // LineObjects, not unresolved functions.
@@ -110,40 +114,51 @@ export class LinefillHelper {
             ? color.color : color;
         const resolvedColor = this._resolveColor(rawColor);
 
-        // Deduplicate: replace existing linefill between the same line pair
-        if (resolvedLine1 && resolvedLine2) {
-            const id1 = resolvedLine1.id;
-            const id2 = resolvedLine2.id;
-            for (const existing of this._linefills) {
-                if (existing._deleted) continue;
-                const eid1 = existing.line1?.id;
-                const eid2 = existing.line2?.id;
-                if ((eid1 === id1 && eid2 === id2) || (eid1 === id2 && eid2 === id1)) {
-                    // Update existing linefill in-place
-                    existing.color = resolvedColor;
-                    existing._createdAtBar = this.context.idx;
-                    return existing;
-                }
-            }
+        // TradingView replaces the fill for an unordered line pair. Indexing
+        // the pair avoids a full scan on every same-bar creation.
+        const pair = this._pairKey(resolvedLine1, resolvedLine2);
+        const existing = this._pairs.get(pair);
+        if (existing && !existing._deleted) {
+            existing.color = resolvedColor;
+            existing._createdAtBar = this.context.idx;
+            return existing;
+        }
+        if (existing) {
+            this._linefills.delete(existing);
+            this._unindex(existing);
         }
 
+        consumeDrawingCreation(this.context, 'linefill.new');
         const lf = new LinefillObject(resolvedLine1, resolvedLine2, resolvedColor);
+        lf._helper = this;
         lf._createdAtBar = this.context.idx;
-        this._linefills.push(lf);
-        this._enforceMaxCount();
+        const evicted = this._linefills.add(lf, maximum);
+        if (evicted) this._unindex(evicted);
+        this._index(lf);
         return lf;
     }
 
-    // Linefills share the max_lines_count limit; the oldest are deleted first.
-    private _enforceMaxCount(): void {
-        const maxCount = this.context.indicator?.max_lines_count ?? 50;
-        let excess = this._linefills.filter((lf) => !lf._deleted).length - maxCount;
-        for (const lf of this._linefills) {
-            if (excess <= 0) break;
-            if (!lf._deleted) {
-                lf._deleted = true;
-                excess--;
-            }
+    private _pairKey(line1: LineObject, line2: LineObject): string {
+        return line1.id < line2.id ? `${line1.id}:${line2.id}` : `${line2.id}:${line1.id}`;
+    }
+
+    private _index(fill: LinefillObject): void {
+        this._pairs.set(this._pairKey(fill.line1, fill.line2), fill);
+        for (const line of [fill.line1, fill.line2]) {
+            let fills = this._byLine.get(line);
+            if (!fills) this._byLine.set(line, fills = new Set());
+            fills.add(fill);
+        }
+    }
+
+    private _unindex(fill: LinefillObject): void {
+        const pair = this._pairKey(fill.line1, fill.line2);
+        if (this._pairs.get(pair) === fill) this._pairs.delete(pair);
+        for (const line of [fill.line1, fill.line2]) {
+            const fills = this._byLine.get(line);
+            if (!fills) continue;
+            fills.delete(fill);
+            if (fills.size === 0) this._byLine.delete(line);
         }
     }
 
@@ -183,19 +198,19 @@ export class LinefillHelper {
     // linefill.delete(id) → void
     @silentInSecondary
     delete(id: LinefillObject): void {
-        if (id) id._deleted = true;
+        if (!id) return;
+        this._linefills.delete(id);
+        this._unindex(id);
     }
 
     // Called by line.delete: the linefills of a deleted line are deleted with it.
     deleteForLine(line: LineObject): void {
-        for (const lf of this._linefills) {
-            if (!lf._deleted && (lf.line1 === line || lf.line2 === line)) lf._deleted = true;
-        }
+        for (const fill of Array.from(this._byLine.get(line) ?? [])) this.delete(fill);
     }
 
     // linefill.all — all active linefill objects
     get all(): LinefillObject[] {
-        return this._linefills.filter((lf) => !lf._deleted);
+        return this._linefills.values();
     }
 
     /**
@@ -203,7 +218,10 @@ export class LinefillHelper {
      * Called during streaming rollback to prevent accumulation.
      */
     rollbackFromBar(barIdx: number): void {
-        this._linefills = this._linefills.filter((lf) => lf._createdAtBar < barIdx);
+        for (const fill of this._linefills.values()) {
+            if (fill._createdAtBar >= barIdx) this._unindex(fill);
+        }
+        this._linefills.rollbackFromBar(barIdx);
         this.syncToPlot();
     }
 }

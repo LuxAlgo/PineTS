@@ -32,7 +32,7 @@ describe('time component history access (hour[1], dayofweek[1], ...)', () => {
             let h = hour;
             let h1 = hour[1];
             return { t, h, h1 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.t.length).toBeGreaterThan(24);
         expect(result.h1[0]).toBeNaN();
@@ -51,7 +51,7 @@ describe('time component history access (hour[1], dayofweek[1], ...)', () => {
             const { hour } = $.pine;
             let changed = hour != hour[1] ? 1 : 0;
             return { changed };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Bar 0: hour[1] is na → comparison is na → falsy
         expect(result.changed[0]).toBe(0);
@@ -66,7 +66,7 @@ describe('time component history access (hour[1], dayofweek[1], ...)', () => {
             let t = time;
             let d1 = dayofweek[1];
             return { t, d1 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.d1[0]).toBeNaN();
         for (let i = 1; i < result.t.length; i++) {
@@ -80,7 +80,7 @@ describe('time component history access (hour[1], dayofweek[1], ...)', () => {
             let t = time;
             let dayChanged = dayofweek != dayofweek[1] ? 1 : 0;
             return { t, dayChanged };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.dayChanged[0]).toBe(0); // na comparison on bar 0
         let fired = 0;
@@ -101,7 +101,7 @@ bool dayChanged = dayofweek != dayofweek[1]
 plot(dayChanged ? 1 : 0, "dc")
 plot(time, "t")
 `;
-        const { plots } = await pineTS.run(code);
+        const { plots } = await pineTS.run(code, undefined, undefined, { sourceMode: 'trustedJavaScript' });
         const dc = plots['dc'].data;
         const t = plots['t'].data;
 
@@ -118,7 +118,7 @@ plot(time, "t")
             const { ta } = $.pine;
             let c = ta.change(hour);
             return { c };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // On hourly bars, hour changes by 1 every bar (or -23 at midnight)
         for (let i = 1; i < result.c.length; i++) {
@@ -133,7 +133,7 @@ plot(time, "t")
             // 2024-01-01 00:00 UTC is a Monday; in New York it's still Sunday evening
             let dNY = dayofweek(1704067200000, 'America/New_York');
             return { mon, dNY };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.mon[0]).toBe(2);
         expect(result.dNY[0]).toBe(1); // Sunday in New York
@@ -160,7 +160,7 @@ describe('time component history on daily bars (month/year/dayofmonth)', () => {
             let y1 = year[1];
             let dom1 = dayofmonth[1];
             return { t, m1, y1, dom1 };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         expect(result.m1[0]).toBeNaN();
         expect(result.y1[0]).toBeNaN();
@@ -179,7 +179,7 @@ describe('time component history on daily bars (month/year/dayofmonth)', () => {
             let t = time;
             let yearChanged = year != year[1] ? 1 : 0;
             return { t, yearChanged };
-        });
+        }, undefined, undefined, { sourceMode: 'trustedJavaScript' });
 
         // Sanity: the data must actually span two calendar years
         expect(new Date(result.t[0]).getUTCFullYear()).toBe(2024);
