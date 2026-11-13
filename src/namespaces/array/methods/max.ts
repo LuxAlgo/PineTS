@@ -2,10 +2,12 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { isNa, outOfBounds } from '../utils';
+import { arrayStore } from '../capacity';
 
 export function max(context: any) {
     return (id: PineArrayObject, nth: number = 0): number => {
-        const arr = id.array;
+        const plain = arrayStore(id);
+        const arr = plain;
         const size = arr.length;
         if (size === 0) return context.NA;
         if (isNa(nth)) nth = 0;

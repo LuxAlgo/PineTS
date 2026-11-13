@@ -2,9 +2,11 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { elementMatcher } from '../utils';
+import { arrayStore } from '../capacity';
 
 export function indexof(context: any) {
     return (id: PineArrayObject, value: any): number => {
-        return id.array.findIndex(elementMatcher(id, value));
+        const plain = arrayStore(id);
+        return plain.findIndex(elementMatcher(id, value));
     };
 }

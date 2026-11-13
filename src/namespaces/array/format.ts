@@ -5,6 +5,7 @@ import { formatFloat, javaDoubleToString } from '../numberFormat';
 import { assertStringLength, MAX_STRING_CODE_UNITS } from '../limits';
 import { PineRuntimeError } from '../../errors/PineRuntimeError';
 import { PineArrayObject } from './PineArrayObject';
+import { arrayStore } from './capacity';
 
 const MAX_NESTED_ARRAY_DEPTH = 256;
 
@@ -63,7 +64,8 @@ function renderArrayText(
     }
     ancestors.add(arr);
     try {
-        const values = arr.array;
+        // Read-only: the store, not the guard behind `.array`.
+        const values = arrayStore(arr);
         // The refs and separators are charged before any element list is populated.
         let length = (wrap ? 2 : 0) + Math.max(0, values.length - 1) * separator.length;
         assertBoundedLength(length, maxLength, method);

@@ -2,16 +2,18 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 export function is_zero(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
         if (rows === 0) return true; // Empty matrix is zero? Debatable, but let's say yes or false. Pine: true if all elements zero. No elements -> vacuously true? Or false? Let's check docs or assume true.
-        const cols = id.matrix[0].length;
+        const cols = idRows[0].length;
         
         for (let i = 0; i < rows; i++) {
             for (let j = 0; j < cols; j++) {
-                if (id.matrix[i][j] !== 0) return false;
+                if (idRows[i][j] !== 0) return false;
             }
         }
         return true;

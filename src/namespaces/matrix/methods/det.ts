@@ -2,6 +2,7 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 // Simple determinant calculation using Gaussian elimination
 function determinant(matrix: number[][]): number {
@@ -40,11 +41,12 @@ function determinant(matrix: number[][]): number {
 
 export function det(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
-        const cols = rows > 0 ? id.matrix[0].length : 0;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
+        const cols = rows > 0 ? idRows[0].length : 0;
         if (rows !== cols) return NaN;
         
-        return determinant(id.matrix);
+        return determinant(idRows);
     };
 }
 

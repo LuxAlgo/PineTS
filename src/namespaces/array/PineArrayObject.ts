@@ -49,7 +49,7 @@ import { spreadNamedArgs } from '../namedArgs';
 import { ARRAY_PARAMS } from '../collectionParams';
 import { boundedArrayText } from './format';
 import { MAX_STRING_CODE_UNITS } from '../limits';
-import { guardArray } from './capacity';
+import { ARRAY_STORE, adoptArray, guardArray } from './capacity';
 
 export enum PineArrayType {
     any = '',
@@ -66,7 +66,10 @@ export enum PineArrayType {
 }
 
 export class PineArrayObject {
-    private _array: any[];
+    // What the built-ins operate on, under a symbol no script can name (see capacity.ts).
+    private [ARRAY_STORE]: any[];
+    // The guard handed to outside code through `array`, built on first use.
+    private _array: any[] | undefined;
     private _abs: any;
     private _avg: any;
     private _binary_search: any;
@@ -112,7 +115,8 @@ export class PineArrayObject {
     private _variance: any;
 
     constructor(array: any[], public type: PineArrayType, public context: any) {
-        this._array = guardArray(array, context);
+        this[ARRAY_STORE] = adoptArray(array, context);
+        this._array = undefined;
         this._abs = abs_factory(this.context);
         this._avg = avg_factory(this.context);
         this._binary_search = binary_search_factory(this.context);
@@ -158,12 +162,15 @@ export class PineArrayObject {
         this._variance = variance_factory(this.context);
     }
 
-    get array(): any[] { return this._array; }
-    set array(value: any[]) { this._array = guardArray(value, this.context); }
+    get array(): any[] { return (this._array ??= guardArray(this[ARRAY_STORE], this.context)); }
+    set array(value: any[]) {
+        this[ARRAY_STORE] = adoptArray(value, this.context);
+        this._array = undefined;
+    }
 
     // Element count for JavaScript callers (PineTS syntax: `line.all.length`); Pine uses size().
     get length(): number {
-        return this.array.length;
+        return this[ARRAY_STORE].length;
     }
 
     toString(): string {
@@ -174,7 +181,7 @@ export class PineArrayObject {
     }
 
     [Symbol.iterator]() {
-        return this.array[Symbol.iterator]();
+        return this[ARRAY_STORE][Symbol.iterator]();
     }
 
     abs(...args: any[]) {

@@ -21,8 +21,11 @@ export function validateDrawingMaximum(name: DrawingMaximumName, value: unknown)
     return value;
 }
 
+const DRAWING_MAXIMUM_NAMES = Object.keys(DECLARED_DRAWING_MAXIMA) as DrawingMaximumName[];
+
+/** Runs on every bar (the `indicator()` / `strategy()` declaration is part of the script body). */
 export function validateDrawingOptions(options: Record<string, unknown>): void {
-    for (const name of Object.keys(DECLARED_DRAWING_MAXIMA) as DrawingMaximumName[]) {
+    for (const name of DRAWING_MAXIMUM_NAMES) {
         validateDrawingMaximum(name, options[name]);
     }
 }
@@ -79,6 +82,8 @@ export class DrawingStore<T extends { _deleted: boolean; _createdAtBar: number }
     }
 
     values(): T[] {
+        // Every helper syncs its drawings on every bar; most scripts have none of a given kind.
+        if (this.active.size === 0) return [];
         // Also tolerate a trusted JavaScript caller that assigned `_deleted`
         // directly, without going through the Pine drawing.delete() API.
         this.compactDeleted();
@@ -86,6 +91,7 @@ export class DrawingStore<T extends { _deleted: boolean; _createdAtBar: number }
     }
 
     compactDeleted(): void {
+        if (this.active.size === 0) return;
         for (const item of this.active.keys()) {
             if (item._deleted) this.active.delete(item);
         }

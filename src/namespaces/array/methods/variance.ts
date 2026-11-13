@@ -2,13 +2,15 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { Context } from '../../../Context.class';
+import { arrayStore } from '../capacity';
 
 export function variance(context: Context) {
     return (id: PineArrayObject, biased: boolean = true): number => {
+        const plain = arrayStore(id);
         // Inline Naive Avg to match legacy behavior for variance calculation
         let sum = 0;
         let count = 0;
-        for (const item of id.array) {
+        for (const item of plain) {
             const val = Number(item);
             if (!isNaN(val) && val !== null && val !== undefined) {
                 sum += val;
@@ -21,7 +23,7 @@ export function variance(context: Context) {
 
         // Two-Pass Variance Calculation
         let sumSqDiff = 0;
-        for (const item of id.array) {
+        for (const item of plain) {
             const val = Number(item);
             if (!isNaN(val) && val !== null && val !== undefined) {
                 sumSqDiff += (val - mean) * (val - mean);

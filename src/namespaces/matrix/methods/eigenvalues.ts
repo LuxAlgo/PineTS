@@ -4,6 +4,7 @@ import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
 import { PineArrayObject } from '../../array/PineArrayObject';
 import { inferValueType } from '@pinets/namespaces/array/utils';
+import { matrixStore } from '../capacity';
 
 // Simplified eigenvalue algorithm (QR algorithm placeholder)
 // For now, only 2x2 is implemented reliably for demonstration.
@@ -32,14 +33,15 @@ function calculateEigenvalues(matrix: number[][]): number[] {
 
 export function eigenvalues(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
-        const cols = rows > 0 ? id.matrix[0].length : 0;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
+        const cols = rows > 0 ? idRows[0].length : 0;
         if (rows !== cols) {
-            const anyType = inferValueType(id.matrix[0][0]);
+            const anyType = inferValueType(idRows[0][0]);
             return new PineArrayObject([], anyType as any, context);
         }
 
-        const vals = calculateEigenvalues(id.matrix);
+        const vals = calculateEigenvalues(idRows);
         const valueType = inferValueType(vals[0]);
         return new PineArrayObject(vals, valueType as any, context);
     };

@@ -2,12 +2,14 @@
 
 import { PineMatrixObject } from '../PineMatrixObject';
 import { Context } from '../../../Context.class';
+import { matrixStore } from '../capacity';
 
 export function is_square(context: Context) {
     return (id: PineMatrixObject) => {
-        const rows = id.matrix.length;
+        const idRows = matrixStore(id);
+        const rows = idRows.length;
         if (rows === 0) return false;
-        const cols = id.matrix[0].length;
+        const cols = idRows[0].length;
         return rows === cols;
     };
 }

@@ -46,6 +46,8 @@ import { ExecutionBudget } from './security/ExecutionBudget';
 import type { IndicatorOptions } from './types/PineTypes';
 import type { IPineInput } from './Indicator/types';
 import { PineArrayObject, PineArrayType } from './namespaces/array/PineArrayObject';
+import { arrayStore } from './namespaces/array/capacity';
+import { matrixStore } from './namespaces/matrix/capacity';
 import { DRAWING_PARAMS } from './namespaces/drawingParams';
 import { withNamedArgs } from './namespaces/namedArgs';
 
@@ -963,6 +965,9 @@ export class Context {
      */
     iter(source: any): any {
         if (source == null) return [];
+        // A Pine array is only read here, by the `for … of` that consumes the result: iterate its
+        // store rather than the guard behind `.array`, whose Proxy slows every element read.
+        if (source instanceof PineArrayObject) return arrayStore(source);
         // PineArrayObject wraps the underlying JS array as `.array`
         if (Array.isArray(source.array)) return source.array;
         // PineMapObject wraps a JS Map as `.map` — iterating yields [key, value]
@@ -974,7 +979,7 @@ export class Context {
 
     /** A matrix iterates its rows, each a copy as returned by `matrix.row()`. */
     private _matrixRows(m: PineMatrixObject): PineArrayObject[] {
-        return m.matrix.map((_, i) => m.row(i));
+        return matrixStore(m).map((_, i) => m.row(i));
     }
 
     /**
@@ -986,6 +991,7 @@ export class Context {
      */
     entries(source: any): IterableIterator<[any, any]> {
         if (source == null) return [].entries();
+        if (source instanceof PineArrayObject) return arrayStore(source).entries();
         if (Array.isArray(source.array)) return source.array.entries();
         if (source.map instanceof Map) return source.map.entries();
         if (source instanceof PineMatrixObject) return this._matrixRows(source).entries();

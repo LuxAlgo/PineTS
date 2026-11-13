@@ -1,9 +1,11 @@
 import { PineArrayObject } from '../PineArrayObject';
 import { sortValueReader } from '../utils';
+import { arrayStore } from '../capacity';
 
 export function binary_search_leftmost(context: any) {
     return (id: PineArrayObject, value: any, sort_field?: string | number): number => {
-        const array = id.array;
+        const plain = arrayStore(id);
+        const array = plain;
         const key = sortValueReader(array, sort_field) ?? ((v: any) => v);
         let low = 0;
         let high = array.length;

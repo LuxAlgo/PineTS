@@ -2,12 +2,14 @@
 
 import { PineArrayObject } from '../PineArrayObject';
 import { checkPercentage, isNa } from '../utils';
+import { arrayStore } from '../capacity';
 
 export function percentile_nearest_rank(context: any) {
     return (id: PineArrayObject, percentage: number): number => {
+        const plain = arrayStore(id);
         if (isNa(percentage)) return NaN;
         checkPercentage(percentage, 'array.percentile_nearest_rank');
-        const array = id.array;
+        const array = plain;
         const totalCount = array.length;
         if (totalCount === 0) return NaN;
 
