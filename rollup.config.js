@@ -17,7 +17,6 @@ const LicenseHeader = `
 
 import json from '@rollup/plugin-json';
 import esbuild from 'rollup-plugin-esbuild';
-import sourcemaps from 'rollup-plugin-sourcemaps';
 import { typescriptPaths } from 'rollup-plugin-typescript-paths';
 import commonjs from '@rollup/plugin-commonjs';
 import resolve from '@rollup/plugin-node-resolve';
@@ -59,7 +58,6 @@ const CJSConfigDev = {
             treeShaking: false,
             target: 'node18',
         }),
-        sourcemaps(),
     ],
 };
 
@@ -137,7 +135,6 @@ const BrowserConfigDev = {
             target: 'es2020',
         }),
 
-        sourcemaps(),
     ],
 };
 
@@ -170,7 +167,6 @@ const ESConfigDev = {
             treeShaking: false,
         }),
 
-        sourcemaps(),
     ],
 };
 
@@ -203,7 +199,6 @@ const ESBrowserConfigDev = {
             treeShaking: false,
             target: 'es2020',
         }),
-        sourcemaps(),
     ],
 };
 
@@ -237,7 +232,6 @@ const CJSConfigProd = {
             treeShaking: true,
             target: 'node18',
         }),
-        sourcemaps(),
     ],
 };
 
@@ -273,7 +267,6 @@ const BrowserConfigProd = {
             target: 'es2020',
         }),
 
-        sourcemaps(),
     ],
 };
 
@@ -305,7 +298,6 @@ const ESConfigProd = {
             minify: true,
             treeShaking: true,
         }),
-        sourcemaps(),
     ],
 };
 
@@ -338,7 +330,6 @@ const ESBrowserConfigProd = {
             treeShaking: true,
             target: 'es2020',
         }),
-        sourcemaps(),
     ],
 };
 
